@@ -1,21 +1,32 @@
 #include "ui.hpp"
-
-void	UI::init(GLFWwindow* window) {
+#include <iostream>
+void	UI::init(GLFWwindow* window)
+{
 	// Initialize ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	this->io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable; // Enable Docking
+	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
 
 	// Setup ImGui style
 	ImGui::StyleColorsDark();
 
+	ImGuiStyle& style = ImGui::GetStyle();
+	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+	{
+		style.WindowRounding = 0.0f;
+		style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+	}
+
 	// Setup platform/renderer bindings
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
-	ImGui_ImplOpenGL3_Init("#version 150");
+	ImGui_ImplOpenGL3_Init("#version 330");
 }
 
-void	UI::render() {
+void	UI::render()
+{
 	// Start the ImGui frame
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
@@ -27,15 +38,23 @@ void	UI::render() {
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 	ImGui::End();
 
+	ImGui::ShowDemoWindow();
+
 	// Render ImGui
 	ImGui::Render();
 }
 
-void	UI::shutdown() {
+void	UI::shutdown()
+{
 	// Shutdown platform/renderer bindings
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 
 	// Shutdown ImGui context
 	ImGui::DestroyContext();
+}
+
+const ImGuiIO&	UI::getIO() const
+{
+	return (io);
 }

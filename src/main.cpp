@@ -1,7 +1,8 @@
 #include <iostream>
 #include "app.hpp"
 
-int	main() {
+int	main(int, char**)
+{
 	try {
 		App	app;
 		app.run();
@@ -9,5 +10,4 @@ int	main() {
 		std::cerr << "An error occured: " << e.what() << std::endl;
 		return EXIT_FAILURE;
 	}
-	return EXIT_SUCCESS;
 }

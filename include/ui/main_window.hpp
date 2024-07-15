@@ -2,8 +2,10 @@
 
 #include "ui.hpp"
 #include <stdexcept>
+#include <iostream>
 
-class MainWindow {
+class MainWindow
+{
 	public:
 		MainWindow();
 		~MainWindow();
