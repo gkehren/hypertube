@@ -39,7 +39,7 @@ void	MainWindow::show()
 	ui.init(window);
 
 	static const ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-	while (!glfwWindowShouldClose(window))
+	while (!glfwWindowShouldClose(window) && !ui.shouldExit())
 	{
 		glfwPollEvents();
 		ui.render();
