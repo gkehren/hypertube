@@ -1,5 +1,5 @@
 #include "ui.hpp"
-#include <iostream>
+
 void	UI::init(GLFWwindow* window)
 {
 	// Initialize ImGui context
@@ -33,10 +33,12 @@ void	UI::render()
 	ImGui::NewFrame();
 
 	// Create ImGui windows and widgets
-	ImGui::Begin("Main Window");
-	ImGui::Text("Hello, world!");
-	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-	ImGui::End();
+	//{
+	//	ImGui::Begin("Main Window");
+	//	ImGui::Text("Hello, world!");
+	//	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+	//	ImGui::End();
+	//}
 
 	ImGui::ShowDemoWindow();
 

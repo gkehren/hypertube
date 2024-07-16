@@ -7,6 +7,9 @@ project(hypertube)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+add_compile_options(-g -Wall -Wformat)
+set(OpenGL_GL_PREFERENCE GLVND)
+
 # Find required packages
 find_package(Boost REQUIRED COMPONENTS system filesystem)
 find_package(LibtorrentRasterbar REQUIRED)
@@ -20,7 +23,7 @@ include_directories(src/imgui)
 include_directories(include include/app include/ui)
 
 # Source files
-file(GLOB IMGUI_SOURCES "src/app/imgui/*.cpp" "src/app/imgui/*.h")
+file(GLOB IMGUI_SOURCES "src/app/imgui/*.cpp")
 file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.hpp")
 
 # Executable
