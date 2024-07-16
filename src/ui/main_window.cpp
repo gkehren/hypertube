@@ -1,11 +1,14 @@
 #include "main_window.hpp"
+#include <stdexcept>
+#include <iostream>
 
 static void glfw_error_callback(int error, const char* description)
 {
 	std::cerr << "GLFW Error " << error << ": " << description << std::endl;
 }
 
-MainWindow::MainWindow()
+MainWindow::MainWindow(ConfigManager *configManager, TorrentManager *torrentManager)
+	: window(nullptr), configManager(configManager), torrentManager(torrentManager)
 {
 	glfwSetErrorCallback(glfw_error_callback);
 	if (!glfwInit())

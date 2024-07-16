@@ -8,7 +8,7 @@ void	UI::init(GLFWwindow* window)
 	this->io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable; // Enable Docking
-	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
+	//io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
 
 	// Setup ImGui style
 	ImGui::StyleColorsDark();
@@ -33,14 +33,14 @@ void	UI::render()
 	ImGui::NewFrame();
 
 	// Create ImGui windows and widgets
-	//{
-	//	ImGui::Begin("Main Window");
-	//	ImGui::Text("Hello, world!");
-	//	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-	//	ImGui::End();
-	//}
+	{
+		ImGui::Begin("Main Window");
+		ImGui::Text("Hello, world!");
+		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+		ImGui::End();
+	}
 
-	ImGui::ShowDemoWindow();
+	 //ImGui::ShowDemoWindow();
 
 	// Render ImGui
 	ImGui::Render();
