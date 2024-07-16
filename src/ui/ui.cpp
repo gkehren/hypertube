@@ -40,7 +40,7 @@ void	UI::render()
 		ImGui::End();
 	}
 
-	 //ImGui::ShowDemoWindow();
+	//ImGui::ShowDemoWindow();
 
 	// Render ImGui
 	ImGui::Render();

@@ -11,5 +11,4 @@ void	TorrentManager::addTorrent(const std::string& torrentPath)
 }
 
 void	TorrentManager::removeTorrent(const std::string& infoHash)
-{
-}
+{}

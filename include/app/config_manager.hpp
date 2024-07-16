@@ -12,7 +12,7 @@ class ConfigManager
 		void	save(const std::string& path);
 
 		json&	getConfig();
-	
+
 	private:
 		json	config;
 };

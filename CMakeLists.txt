@@ -29,7 +29,7 @@ include_directories(${json_SOURCE_DIR}/single_include/nlohmann/)
 
 # Find required packages
 find_package(Boost REQUIRED COMPONENTS system filesystem)
-find_package(LibtorrentRasterbar REQUIRED)
+find_package(LibtorrentRasterbar CONFIG REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(glfw3 REQUIRED CONFIG)
 
@@ -41,4 +41,4 @@ file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.hpp")
 add_executable(${PROJECT_NAME} ${SOURCES} ${IMGUI_SOURCES})
 
 # Link libraries
-target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} ${libtorrent_LIBRARIES} OpenGL::GL glfw)
+target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} PRIVATE LibtorrentRasterbar::torrent-rasterbar OpenGL::GL glfw)
