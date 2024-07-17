@@ -20,7 +20,12 @@ class UI
 
 		bool	exitRequested = false;
 
+		// Layout Management
 		void	saveLayout(const std::string &configFilePath);
 		void	loadLayout();
 		void	resetLayout();
+
+		// Modal Windows
+		void	addTorrentModal();
+		void	addMagnetTorrentModal();
 };

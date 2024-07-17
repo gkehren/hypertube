@@ -37,6 +37,8 @@ void	UI::render()
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
+	bool showMagnetTorrentPopup = false;
+
 	// Menu bar
 	if (ImGui::BeginMainMenuBar())
 	{
@@ -48,7 +50,7 @@ void	UI::render()
 			}
 			if (ImGui::MenuItem("Add a magnet link..."))
 			{
-				// TODO: Handle magnet link
+				showMagnetTorrentPopup = true;
 			}
 			ImGui::Separator();
 			if (ImGui::MenuItem("Preferences")) {}
@@ -89,6 +91,11 @@ void	UI::render()
 
 	ImGui::Begin("Torrent List");
 	ImGui::Text("Here will be the list of torrents.");
+	if (ImGui::Button("Add a magnet torrent...") || showMagnetTorrentPopup)
+	{
+		ImGui::OpenPopup("AddMangetTorrentPopup");
+	}
+	addMagnetTorrentModal();
 	ImGui::End();
 
 	ImGui::Begin("Torrent Details");
@@ -121,6 +128,8 @@ bool	UI::shouldExit() const
 	return (exitRequested);
 }
 
+
+// Layout Management
 void	UI::saveLayout(const std::string &configFilePath)
 {
 	size_t	size;
@@ -160,4 +169,36 @@ void	UI::loadLayout()
 void	UI::resetLayout()
 {
 	ImGui::LoadIniSettingsFromDisk("config/default_layout.ini");
+}
+
+
+// Modal Windows
+void	UI::addTorrentModal()
+{}
+
+void	UI::addMagnetTorrentModal()
+{
+	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+	if (ImGui::BeginPopupModal("AddMangetTorrentPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ImGui::Text("Enter the magnet link:");
+		ImGui::Separator();
+		static char buffer[256];
+		ImGui::InputText("##MagnetLink", buffer, IM_ARRAYSIZE(buffer));
+
+		if (ImGui::Button("OK", ImVec2(120, 0)))
+		{
+			// TODO: Handle magnet link
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SetItemDefaultFocus();
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel", ImVec2(120, 0)))
+		{
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
 }
