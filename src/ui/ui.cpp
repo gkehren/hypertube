@@ -89,14 +89,13 @@ void	UI::render()
 	ImGui::Text("Here will be the log.");
 	ImGui::End();
 
-	ImGui::Begin("Torrent List");
-	ImGui::Text("Here will be the list of torrents.");
-	if (ImGui::Button("Add a magnet torrent...") || showMagnetTorrentPopup)
+	if (showMagnetTorrentPopup)
 	{
 		ImGui::OpenPopup("AddMangetTorrentPopup");
 	}
 	addMagnetTorrentModal();
-	ImGui::End();
+
+	displayTorrentList();
 
 	ImGui::Begin("Torrent Details");
 	ImGui::Text("Here will be the details of the selected torrent.");
@@ -106,6 +105,60 @@ void	UI::render()
 
 	// Render ImGui
 	ImGui::Render();
+}
+
+static std::string	torrentStateToString(lt::torrent_status::state_t state)
+{
+	switch (state)
+	{
+		case lt::torrent_status::downloading_metadata:
+			return "Downloading metadata";
+		case lt::torrent_status::downloading:
+			return "Downloading";
+		case lt::torrent_status::finished:
+			return "Finished";
+		case lt::torrent_status::seeding:
+			return "Seeding";
+		case lt::torrent_status::checking_files:
+			return "Checking files";
+		case lt::torrent_status::checking_resume_data:
+			return "Checking resume data";
+		default:
+			return "Unknown";
+	}
+}
+
+void	UI::displayTorrentList()
+{
+	if (ImGui::Begin("Torrent List"))
+	{
+		if (ImGui::BeginTable("Torrents", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+		{
+			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn("Progress", ImGuiTableColumnFlags_WidthFixed);
+			ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed);
+			ImGui::TableHeadersRow();
+
+			if (getTorrentsCallback)
+			{
+				auto torrents = getTorrentsCallback();
+				for (const auto& [info_hash, handle] : torrents)
+				{
+					lt::torrent_status	status = handle.status();
+					ImGui::TableNextRow();
+					ImGui::TableNextColumn();
+					ImGui::Text("%s", status.name.c_str());
+					ImGui::TableNextColumn();
+					ImGui::ProgressBar(status.progress);
+					ImGui::TableNextColumn();
+					ImGui::Text("%s", torrentStateToString(status.state));
+				}
+			}
+			ImGui::EndTable();
+		}
+		ImGui::End();
+	}
+	
 }
 
 void	UI::shutdown()
@@ -185,12 +238,14 @@ void	UI::addMagnetTorrentModal()
 	{
 		ImGui::Text("Enter the magnet link:");
 		ImGui::Separator();
-		static char buffer[256];
+		static char buffer[4096];
 		ImGui::InputText("##MagnetLink", buffer, IM_ARRAYSIZE(buffer));
 
 		if (ImGui::Button("OK", ImVec2(120, 0)))
 		{
-			// TODO: Handle magnet link
+			if (addMagnetLinkCallback) {
+				addMagnetLinkCallback(buffer);
+			}
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SetItemDefaultFocus();
@@ -201,4 +256,15 @@ void	UI::addMagnetTorrentModal()
 		}
 		ImGui::EndPopup();
 	}
+}
+
+// Callbacks
+void	UI::setAddMagnetLinkCallback(std::function<void(const std::string&)> callback)
+{
+	this->addMagnetLinkCallback = callback;
+}
+
+void	UI::setGetTorrentsCallback(std::function<std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()> callback)
+{
+	this->getTorrentsCallback = callback;
 }

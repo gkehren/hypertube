@@ -4,7 +4,9 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <GLFW/glfw3.h>
+#include <functional>
 #include <string>
+#include "torrent_manager.hpp"
 
 class UI
 {
@@ -14,11 +16,15 @@ class UI
 		void			shutdown();
 		const ImGuiIO&	getIO() const;
 		bool			shouldExit() const;
+		void			setAddMagnetLinkCallback(std::function<void(const std::string&)> callback);
+		void			setGetTorrentsCallback(std::function<std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()> callback);
 
 	private:
 		ImGuiIO	io;
 
 		bool	exitRequested = false;
+
+		void	displayTorrentList();
 
 		// Layout Management
 		void	saveLayout(const std::string &configFilePath);
@@ -28,4 +34,8 @@ class UI
 		// Modal Windows
 		void	addTorrentModal();
 		void	addMagnetTorrentModal();
+
+		// Callbacks
+		std::function<void(const std::string&)>	addMagnetLinkCallback;
+		std::function<std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()>	getTorrentsCallback;
 };

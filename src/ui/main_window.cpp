@@ -26,6 +26,14 @@ MainWindow::MainWindow(ConfigManager *configManager, TorrentManager *torrentMana
 	}
 	glfwMakeContextCurrent(window);
 	glfwSwapInterval(1); // Enable vsync
+
+	// Initialize UI Callbacks
+	ui.setAddMagnetLinkCallback([this](const std::string& magnetUri) {
+		this->torrentManager->addMagnetTorrent(magnetUri);
+	});
+	ui.setGetTorrentsCallback([this]() -> std::unordered_map<lt::sha1_hash, lt::torrent_handle>& {
+		return this->torrentManager->getTorrents();
+	});
 }
 
 MainWindow::~MainWindow()
