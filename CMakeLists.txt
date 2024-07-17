@@ -60,5 +60,13 @@ file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.hpp")
 # Executable
 add_executable(${PROJECT_NAME} ${SOURCES} ${IMGUI_SOURCES})
 
+add_custom_command(
+	TARGET ${PROJECT_NAME} POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E copy_directory
+			${CMAKE_SOURCE_DIR}/config
+			$<TARGET_FILE_DIR:${PROJECT_NAME}>/config
+	COMMENT "Copying config directory to build directory"
+)
+
 # Link libraries
 target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} PRIVATE LibtorrentRasterbar::torrent-rasterbar OpenGL::GL glfw)

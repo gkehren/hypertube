@@ -1,4 +1,7 @@
 #include "ui.hpp"
+#include <filesystem>
+#include <fstream>
+#include <iostream>
 
 void	UI::init(GLFWwindow* window)
 {
@@ -34,25 +37,8 @@ void	UI::render()
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
-	// Setup DockSpace
-	ImGuiViewport* viewport = ImGui::GetMainViewport();
-	ImGui::SetNextWindowPos(viewport->Pos);
-	ImGui::SetNextWindowSize(viewport->Size);
-	ImGui::SetNextWindowViewport(viewport->ID);
-	ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
-	window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-	window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-	ImGui::Begin("DockSpace Demo", nullptr, window_flags);
-	ImGui::PopStyleVar(3);
-
-	// DockSpace
-	ImGui::DockSpace(ImGui::GetID("Dockspace"), ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
-
 	// Menu bar
-	if (ImGui::BeginMenuBar())
+	if (ImGui::BeginMainMenuBar())
 	{
 		if (ImGui::BeginMenu("File"))
 		{
@@ -75,20 +61,32 @@ void	UI::render()
 		}
 		if (ImGui::BeginMenu("View"))
 		{
-			if (ImGui::MenuItem("Torrent List")) {};
-			if (ImGui::MenuItem("Torrent Details")) {};
-			if (ImGui::MenuItem("Log")) {}
+			if (ImGui::MenuItem("Save layout"))
+				this->saveLayout("config/layout.ini");
+			if (ImGui::BeginMenu("Load layout"))
+			{
+				this->loadLayout();
+				ImGui::EndMenu();
+			}
+			if (ImGui::MenuItem("Reset layout"))
+				this->resetLayout();
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Help"))
 		{
-			if (ImGui::MenuItem("About")) {};
+			if (ImGui::MenuItem("About"))
+				ImGui::ShowAboutWindow();
 			ImGui::EndMenu();
 		}
-		ImGui::EndMenuBar();
+		ImGui::EndMainMenuBar();
 	}
 
-	// Example windows
+	ImGuiID dockspace_id = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+
+	ImGui::Begin("Log");
+	ImGui::Text("Here will be the log.");
+	ImGui::End();
+
 	ImGui::Begin("Torrent List");
 	ImGui::Text("Here will be the list of torrents.");
 	ImGui::End();
@@ -97,11 +95,7 @@ void	UI::render()
 	ImGui::Text("Here will be the details of the selected torrent.");
 	ImGui::End();
 
-	ImGui::Begin("Log");
-	ImGui::Text("Here will be the log.");
-	ImGui::End();
-
-	ImGui::End();
+	ImGui::ShowDemoWindow();
 
 	// Render ImGui
 	ImGui::Render();
@@ -125,4 +119,45 @@ const ImGuiIO&	UI::getIO() const
 bool	UI::shouldExit() const
 {
 	return (exitRequested);
+}
+
+void	UI::saveLayout(const std::string &configFilePath)
+{
+	size_t	size;
+	const char*	data = ImGui::SaveIniSettingsToMemory(&size);
+
+	std::ofstream file(configFilePath, std::ios::out | std::ios::binary);
+	if (file.is_open())
+	{
+		file.write(data, size);
+		file.close();
+	}
+
+	ImGui::MemFree((void*)data);
+}
+
+void	UI::loadLayout()
+{
+	const std::string configPath = "config";
+	if (!std::filesystem::exists(configPath))
+	{
+		std::cerr << "Config folder not found" << std::endl;
+		return;
+	}
+
+	for (const auto& entry : std::filesystem::directory_iterator(configPath))
+	{
+		if (entry.path().extension() == ".ini")
+		{
+			if (ImGui::MenuItem(entry.path().filename().string().c_str()))
+			{
+				ImGui::LoadIniSettingsFromDisk(entry.path().string().c_str());
+			}
+		}
+	}
+}
+
+void	UI::resetLayout()
+{
+	ImGui::LoadIniSettingsFromDisk("config/default_layout.ini");
 }
