@@ -1,6 +1,7 @@
 #include "ui.hpp"
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 
 void	UI::init(GLFWwindow* window)
@@ -128,37 +129,99 @@ static std::string	torrentStateToString(lt::torrent_status::state_t state)
 	}
 }
 
+static std::string	formatBytes(int64_t bytes, bool speed)
+{
+	const char*	units[] = { "B", "KB", "MB", "GB", "TB" };
+	int64_t		size = bytes;
+	int			unitIndex = 0;
+
+	while (size >= 1024 && unitIndex < sizeof(units) / sizeof(units[0]) - 1)
+	{
+		size /= 1024;
+		unitIndex++;
+	}
+	
+	std::ostringstream	oss;
+	oss << std::fixed << std::setprecision(2) << size << " " << units[unitIndex];
+	if (speed)
+		oss << "/s";
+	return oss.str();
+}
+
+static std::string	computeETA(lt::torrent_status* status)
+{
+	if (status->state == lt::torrent_status::downloading && status->download_payload_rate > 0)
+	{
+		int64_t		secondsLeft = (status->total_wanted - status->total_wanted_done) / status->download_payload_rate;
+		int64_t		minutesLeft = secondsLeft / 60;
+		int64_t		hoursLeft = minutesLeft / 60;
+		int64_t		daysLeft = hoursLeft / 24;
+
+		if (daysLeft > 0)
+			return std::to_string(daysLeft) + " days";
+		if (hoursLeft > 0)
+			return std::to_string(hoursLeft) + " hours";
+		if (minutesLeft > 0)
+			return std::to_string(minutesLeft) + " minutes";
+		return std::to_string(secondsLeft) + " seconds";
+	}
+	return "N/A";
+}
+
 void	UI::displayTorrentList()
 {
 	if (ImGui::Begin("Torrent List"))
 	{
-		if (ImGui::BeginTable("Torrents", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+		if (ImGui::BeginTable("Torrents", 9, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
 		{
+			ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed);
 			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableSetupColumn("Progress", ImGuiTableColumnFlags_WidthFixed);
-			ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed);
+			ImGui::TableSetupColumn("Size");
+			ImGui::TableSetupColumn("Progress");
+			ImGui::TableSetupColumn("Status");
+			ImGui::TableSetupColumn("Down Speed");
+			ImGui::TableSetupColumn("Up Speed");
+			ImGui::TableSetupColumn("ETA");
+			ImGui::TableSetupColumn("Seeds/Peers");
 			ImGui::TableHeadersRow();
 
 			if (getTorrentsCallback)
 			{
-				auto torrents = getTorrentsCallback();
+				auto& torrents = getTorrentsCallback();
 				for (const auto& [info_hash, handle] : torrents)
 				{
 					lt::torrent_status	status = handle.status();
+					ImGui::PushID(&handle);
 					ImGui::TableNextRow();
-					ImGui::TableNextColumn();
-					ImGui::Text("%s", status.name.c_str());
-					ImGui::TableNextColumn();
-					ImGui::ProgressBar(status.progress);
-					ImGui::TableNextColumn();
-					ImGui::Text("%s", torrentStateToString(status.state));
+					for (int col = 0; col < 9; col++)
+					{
+						ImGui::TableSetColumnIndex(col);
+						std::string	cell_text;
+
+						switch (col)
+						{
+                            case 0: cell_text = std::to_string(static_cast<int>(status.queue_position)); break;
+							case 1: cell_text = status.name; break;
+							case 2: cell_text = formatBytes(status.total_wanted, false); break;
+							case 3: ImGui::ProgressBar(status.progress); break;
+							case 4: cell_text = torrentStateToString(status.state); break;
+							case 5: cell_text = formatBytes(status.download_payload_rate, true); break;
+							case 6: cell_text = formatBytes(status.upload_payload_rate, true); break;
+							case 7: cell_text = computeETA(&status); break;
+							case 8: cell_text = std::to_string(status.num_seeds) + "/" + std::to_string(status.num_peers) + " (" + std::to_string(status.num_seeds / (float)status.num_peers) + ")"; break;
+						}
+						if (ImGui::Selectable(cell_text.c_str(), this->selectedTorrent == handle, ImGuiSelectableFlags_SpanAllColumns))
+						{
+							this->selectedTorrent = handle;
+						}
+					}
+					ImGui::PopID();
 				}
 			}
 			ImGui::EndTable();
 		}
 		ImGui::End();
 	}
-	
 }
 
 void	UI::shutdown()

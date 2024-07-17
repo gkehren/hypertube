@@ -22,7 +22,8 @@ class UI
 	private:
 		ImGuiIO	io;
 
-		bool	exitRequested = false;
+		bool				exitRequested = false;
+		lt::torrent_handle	selectedTorrent;
 
 		void	displayTorrentList();
 
