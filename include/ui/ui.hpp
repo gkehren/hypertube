@@ -26,6 +26,7 @@ class UI
 		lt::torrent_handle	selectedTorrent;
 
 		void	displayTorrentList();
+		void	displayTorrentDetails();
 
 		// Layout Management
 		void	saveLayout(const std::string &configFilePath);

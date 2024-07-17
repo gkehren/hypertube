@@ -97,10 +97,7 @@ void	UI::render()
 	addMagnetTorrentModal();
 
 	displayTorrentList();
-
-	ImGui::Begin("Torrent Details");
-	ImGui::Text("Here will be the details of the selected torrent.");
-	ImGui::End();
+	displayTorrentDetails();
 
 	ImGui::ShowDemoWindow();
 
@@ -210,10 +207,25 @@ void	UI::displayTorrentList()
 							case 7: cell_text = computeETA(&status); break;
 							case 8: cell_text = std::to_string(status.num_seeds) + "/" + std::to_string(status.num_peers) + " (" + std::to_string(status.num_seeds / (float)status.num_peers) + ")"; break;
 						}
-						if (ImGui::Selectable(cell_text.c_str(), this->selectedTorrent == handle, ImGuiSelectableFlags_SpanAllColumns))
+						if (ImGui::Selectable(cell_text.c_str(), this->selectedTorrent == handle, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap))
 						{
 							this->selectedTorrent = handle;
 						}
+					}
+					if (ImGui::BeginPopupContextItem("##context", ImGuiPopupFlags_MouseButtonRight))
+					{
+						ImGui::Text("Actions:");
+						ImGui::Text("%s", status.name.c_str());
+						ImGui::Separator();
+						if (ImGui::MenuItem("Pause"))
+							handle.pause();
+						if (ImGui::MenuItem("Resume"))
+							handle.resume();
+						if (ImGui::MenuItem("Remove"))
+						{
+							std::cout << "Removing torrent" << std::endl;
+						}
+						ImGui::EndPopup();
 					}
 					ImGui::PopID();
 				}
@@ -222,6 +234,28 @@ void	UI::displayTorrentList()
 		}
 		ImGui::End();
 	}
+}
+
+void	UI::displayTorrentDetails()
+{
+	ImGui::Begin("Torrent Details");
+	if (this->selectedTorrent.is_valid())
+	{
+		lt::torrent_status	status = this->selectedTorrent.status();
+		ImGui::Text("Name: %s", status.name.c_str());
+		ImGui::Text("Size: %s", formatBytes(status.total_wanted, false).c_str());
+		ImGui::Text("Progress: %.2f%%", status.progress * 100);
+		ImGui::Text("Status: %s", torrentStateToString(status.state).c_str());
+		ImGui::Text("Down Speed: %s", formatBytes(status.download_payload_rate, true).c_str());
+		ImGui::Text("Up Speed: %s", formatBytes(status.upload_payload_rate, true).c_str());
+		ImGui::Text("ETA: %s", computeETA(&status).c_str());
+		ImGui::Text("Seeds/Peers: %d/%d (%.2f)", status.num_seeds, status.num_peers, status.num_seeds / (float)status.num_peers);
+	}
+	else
+	{
+		ImGui::Text("No torrent selected");
+	}
+	ImGui::End();
 }
 
 void	UI::shutdown()
