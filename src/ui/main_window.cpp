@@ -28,14 +28,14 @@ MainWindow::MainWindow(ConfigManager *configManager, TorrentManager *torrentMana
 	glfwSwapInterval(1); // Enable vsync
 
 	// Initialize UI Callbacks
-	ui.setAddMagnetLinkCallback([this](const std::string& magnetUri) {
-		this->torrentManager->addMagnetTorrent(magnetUri);
-	});
 	ui.setGetTorrentsCallback([this]() -> std::unordered_map<lt::sha1_hash, lt::torrent_handle>& {
 		return this->torrentManager->getTorrents();
 	});
-	ui.setRemoveTorrentCallback([this](const lt::sha1_hash hash, RemoveTorrentType removeType) {
-		this->torrentManager->removeTorrent(hash, removeType);
+	ui.setAddMagnetLinkCallback([this](const std::string& magnetUri) -> Result {
+		return this->torrentManager->addMagnetTorrent(magnetUri);
+	});
+	ui.setRemoveTorrentCallback([this](const lt::sha1_hash hash, RemoveTorrentType removeType) -> Result {
+		return this->torrentManager->removeTorrent(hash, removeType);
 	});
 }
 

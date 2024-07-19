@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Result.hpp"
 #include <libtorrent/session.hpp>
 #include <libtorrent/torrent_info.hpp>
 #include <libtorrent/add_torrent_params.hpp>
@@ -19,9 +20,9 @@ typedef enum
 class TorrentManager
 {
 	public:
-		void	addTorrent(const std::string& torrentPath);
-		void	addMagnetTorrent(const std::string& magnetUri);
-		void	removeTorrent(const lt::sha1_hash hash, RemoveTorrentType removeType);
+		Result	addTorrent(const std::string& torrentPath);
+		Result	addMagnetTorrent(const std::string& magnetUri);
+		Result	removeTorrent(const lt::sha1_hash hash, RemoveTorrentType removeType);
 		std::unordered_map<lt::sha1_hash, lt::torrent_handle>&	getTorrents();
 
 	private:

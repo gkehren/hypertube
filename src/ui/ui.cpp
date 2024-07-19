@@ -99,6 +99,13 @@ void	UI::render()
 	displayTorrentList();
 	displayTorrentDetails();
 
+	if (this->showFailurePopup)
+	{
+		ImGui::OpenPopup("Failure");
+		this->showFailurePopup = false;
+	}
+	renderPopupFailure(this->failurePopupMessage);
+
 	ImGui::ShowDemoWindow();
 
 	// Render ImGui
@@ -248,6 +255,7 @@ void	UI::displayTorrentList()
 						ImGui::Separator();
 						if (ImGui::MenuItem("Copy Magnet URI"))
 						{
+							// TODO: magnet URI work with my program but not with other program (BitTorrent)
 							std::string magnetUri = "magnet:?xt=urn:btih:" + sha1HashToHex(info_hash);
 							ImGui::SetClipboardText(magnetUri.c_str());
 						}
@@ -285,20 +293,24 @@ void	UI::displayTorrentList()
 						ImGui::Separator();
 						if (ImGui::MenuItem("Remove"))
 						{
+							// TODO: Ask for confirmation modal before removing
 							removeTorrentCallback(info_hash, REMOVE_TORRENT);
 						}
 						if (ImGui::BeginMenu("Remove And"))
 						{
 							if (ImGui::MenuItem("Delete .torrent"))
 							{
+								// TODO: Ask for confirmation modal before removing
 								removeTorrentCallback(info_hash, REMOVE_TORRENT_FILES);
 							}
 							if (ImGui::MenuItem("Delete .torrent + Data"))
 							{
+								// TODO: Ask for confirmation modal before removing
 								removeTorrentCallback(info_hash, REMOVE_TORRENT_FILES_AND_DATA);
 							}
 							if (ImGui::MenuItem("Delete Data"))
 							{
+								// TODO: Ask for confirmation modal before removing
 								removeTorrentCallback(info_hash, REMOVE_TORRENT_DATA);
 							}
 							ImGui::EndMenu();
@@ -407,7 +419,6 @@ void	UI::resetLayout()
 	ImGui::LoadIniSettingsFromDisk("config/default_layout.ini");
 }
 
-
 // Modal Windows
 void	UI::addTorrentModal()
 {}
@@ -426,7 +437,12 @@ void	UI::addMagnetTorrentModal()
 		if (ImGui::Button("OK", ImVec2(120, 0)))
 		{
 			if (addMagnetLinkCallback) {
-				addMagnetLinkCallback(this->magnetLinkBuffer);
+				Result result = addMagnetLinkCallback(this->magnetLinkBuffer);
+				if (!result)
+				{
+					this->showFailurePopup = true;
+					this->failurePopupMessage = result.message;
+				}
 			}
 			memset(this->magnetLinkBuffer, 0, sizeof(this->magnetLinkBuffer));
 			ImGui::CloseCurrentPopup();
@@ -441,8 +457,32 @@ void	UI::addMagnetTorrentModal()
 	}
 }
 
+void	UI::renderPopupFailure(const std::string &message)
+{
+	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+	if (ImGui::BeginPopupModal("Failure", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ImGui::Text(message.c_str());
+		ImGui::Separator();
+
+		if (ImGui::Button("OK"))
+		{
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SetItemDefaultFocus();
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel", ImVec2(120, 0)))
+		{
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+}
+
 // Callbacks
-void	UI::setAddMagnetLinkCallback(std::function<void(const std::string&)> callback)
+void	UI::setAddMagnetLinkCallback(std::function<Result(const std::string&)> callback)
 {
 	this->addMagnetLinkCallback = callback;
 }
@@ -452,7 +492,7 @@ void	UI::setGetTorrentsCallback(std::function<std::unordered_map<lt::sha1_hash, 
 	this->getTorrentsCallback = callback;
 }
 
-void	UI::setRemoveTorrentCallback(std::function<void(const lt::sha1_hash, RemoveTorrentType)> callback)
+void	UI::setRemoveTorrentCallback(std::function<Result(const lt::sha1_hash, RemoveTorrentType)> callback)
 {
 	this->removeTorrentCallback = callback;
 }

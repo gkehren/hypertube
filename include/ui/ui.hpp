@@ -7,6 +7,7 @@
 #include <functional>
 #include <string>
 #include "torrent_manager.hpp"
+#include "Result.hpp"
 
 class UI
 {
@@ -16,9 +17,9 @@ class UI
 		void				shutdown();
 		const ImGuiIO&		getIO() const;
 		bool				shouldExit() const;
-		void				setAddMagnetLinkCallback(std::function<void(const std::string&)> callback);
+		void				setAddMagnetLinkCallback(std::function<Result(const std::string&)> callback);
 		void				setGetTorrentsCallback(std::function<std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()> callback);
-		void				setRemoveTorrentCallback(std::function<void(const lt::sha1_hash, RemoveTorrentType)> callback);
+		void				setRemoveTorrentCallback(std::function<Result(const lt::sha1_hash, RemoveTorrentType)> callback);
 
 	private:
 		ImGuiIO				io;
@@ -26,6 +27,8 @@ class UI
 
 		bool				exitRequested = false;
 		lt::torrent_handle	selectedTorrent;
+		bool				showFailurePopup = false;
+		std::string			failurePopupMessage;
 
 		void				displayTorrentList();
 		void				displayTorrentDetails();
@@ -38,9 +41,10 @@ class UI
 		// Modal Windows
 		void				addTorrentModal();
 		void				addMagnetTorrentModal();
+		void				renderPopupFailure(const std::string& message);
 
 		// Callbacks
-		std::function<void(const std::string&)>									addMagnetLinkCallback;
+		std::function<Result(const std::string&)>									addMagnetLinkCallback;
 		std::function<std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()>	getTorrentsCallback;
-		std::function<void(const lt::sha1_hash, RemoveTorrentType)>				removeTorrentCallback;
+		std::function<Result(const lt::sha1_hash, RemoveTorrentType)>				removeTorrentCallback;
 };
