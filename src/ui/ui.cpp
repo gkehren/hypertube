@@ -92,7 +92,7 @@ void	UI::render()
 
 	if (showMagnetTorrentPopup)
 	{
-		ImGui::OpenPopup("AddMangetTorrentPopup");
+		ImGui::OpenPopup("Add Magnet Torrent");
 	}
 	addMagnetTorrentModal();
 
@@ -413,18 +413,18 @@ void	UI::addMagnetTorrentModal()
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-	if (ImGui::BeginPopupModal("AddMangetTorrentPopup", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	if (ImGui::BeginPopupModal("Add Magnet Torrent", NULL, ImGuiWindowFlags_AlwaysAutoResize))
 	{
 		ImGui::Text("Enter the magnet link:");
 		ImGui::Separator();
-		static char buffer[4096];
-		ImGui::InputText("##MagnetLink", buffer, IM_ARRAYSIZE(buffer));
+		ImGui::InputText("##MagnetLink", this->magnetLinkBuffer, IM_ARRAYSIZE(this->magnetLinkBuffer));
 
 		if (ImGui::Button("OK", ImVec2(120, 0)))
 		{
 			if (addMagnetLinkCallback) {
-				addMagnetLinkCallback(buffer);
+				addMagnetLinkCallback(this->magnetLinkBuffer);
 			}
+			memset(this->magnetLinkBuffer, 0, sizeof(this->magnetLinkBuffer));
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SetItemDefaultFocus();

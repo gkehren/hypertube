@@ -12,13 +12,20 @@ void	TorrentManager::addTorrent(const std::string& torrentPath)
 
 void	TorrentManager::addMagnetTorrent(const std::string& magnetUri)
 {
-	std::cout << "Adding magnet torrent: " << magnetUri << std::endl;
-	lt::add_torrent_params	params = lt::parse_magnet_uri(magnetUri);
-	params.save_path = "./downloads";
-	lt::torrent_handle	handle = this->session.add_torrent(params);
-	this->torrents[handle.info_hash()] = handle;
+	try
+	{
+		std::cout << "Adding magnet torrent: " << magnetUri << std::endl;
+		lt::add_torrent_params	params = lt::parse_magnet_uri(magnetUri);
+		params.save_path = "./downloads";
+		lt::torrent_handle	handle = this->session.add_torrent(params);
+		this->torrents[handle.info_hash()] = handle;
 
-	std::cout << "Added magnet torrent: " << handle.status().name << std::endl;
+		std::cout << "Added magnet torrent: " << handle.status().name << std::endl;
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << "Failed to add magnet torrent: " << e.what() << std::endl;
+	}
 }
 
 void	TorrentManager::removeTorrent(const std::string& infoHash)

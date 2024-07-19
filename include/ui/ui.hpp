@@ -11,31 +11,32 @@
 class UI
 {
 	public:
-		void			init(GLFWwindow* window);
-		void			render();
-		void			shutdown();
-		const ImGuiIO&	getIO() const;
-		bool			shouldExit() const;
-		void			setAddMagnetLinkCallback(std::function<void(const std::string&)> callback);
-		void			setGetTorrentsCallback(std::function<std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()> callback);
+		void				init(GLFWwindow* window);
+		void				render();
+		void				shutdown();
+		const ImGuiIO&		getIO() const;
+		bool				shouldExit() const;
+		void				setAddMagnetLinkCallback(std::function<void(const std::string&)> callback);
+		void				setGetTorrentsCallback(std::function<std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()> callback);
 
 	private:
-		ImGuiIO	io;
+		ImGuiIO				io;
+		char				magnetLinkBuffer[4096] = { 0 };
 
 		bool				exitRequested = false;
 		lt::torrent_handle	selectedTorrent;
 
-		void	displayTorrentList();
-		void	displayTorrentDetails();
+		void				displayTorrentList();
+		void				displayTorrentDetails();
 
 		// Layout Management
-		void	saveLayout(const std::string &configFilePath);
-		void	loadLayout();
-		void	resetLayout();
+		void				saveLayout(const std::string &configFilePath);
+		void				loadLayout();
+		void				resetLayout();
 
 		// Modal Windows
-		void	addTorrentModal();
-		void	addMagnetTorrentModal();
+		void				addTorrentModal();
+		void				addMagnetTorrentModal();
 
 		// Callbacks
 		std::function<void(const std::string&)>	addMagnetLinkCallback;
