@@ -18,7 +18,7 @@ MainWindow::MainWindow(ConfigManager *configManager, TorrentManager *torrentMana
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	window = glfwCreateWindow(1280, 720, "Hypertube", nullptr, nullptr);
+	window = glfwCreateWindow(1440, 720, "Hypertube", nullptr, nullptr);
 	if (!window)
 	{
 		throw std::runtime_error("Failed to create GLFW window");
@@ -33,6 +33,9 @@ MainWindow::MainWindow(ConfigManager *configManager, TorrentManager *torrentMana
 	});
 	ui.setGetTorrentsCallback([this]() -> std::unordered_map<lt::sha1_hash, lt::torrent_handle>& {
 		return this->torrentManager->getTorrents();
+	});
+	ui.setRemoveTorrentCallback([this](const lt::sha1_hash hash, RemoveTorrentType removeType) {
+		this->torrentManager->removeTorrent(hash, removeType);
 	});
 }
 

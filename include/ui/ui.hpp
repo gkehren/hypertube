@@ -18,6 +18,7 @@ class UI
 		bool				shouldExit() const;
 		void				setAddMagnetLinkCallback(std::function<void(const std::string&)> callback);
 		void				setGetTorrentsCallback(std::function<std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()> callback);
+		void				setRemoveTorrentCallback(std::function<void(const lt::sha1_hash, RemoveTorrentType)> callback);
 
 	private:
 		ImGuiIO				io;
@@ -39,6 +40,7 @@ class UI
 		void				addMagnetTorrentModal();
 
 		// Callbacks
-		std::function<void(const std::string&)>	addMagnetLinkCallback;
+		std::function<void(const std::string&)>									addMagnetLinkCallback;
 		std::function<std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()>	getTorrentsCallback;
+		std::function<void(const lt::sha1_hash, RemoveTorrentType)>				removeTorrentCallback;
 };

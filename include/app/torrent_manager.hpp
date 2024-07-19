@@ -8,12 +8,20 @@
 #include <string>
 #include <unordered_map>
 
+typedef enum
+{
+	REMOVE_TORRENT,
+	REMOVE_TORRENT_FILES,
+	REMOVE_TORRENT_DATA,
+	REMOVE_TORRENT_FILES_AND_DATA
+} RemoveTorrentType;
+
 class TorrentManager
 {
 	public:
 		void	addTorrent(const std::string& torrentPath);
 		void	addMagnetTorrent(const std::string& magnetUri);
-		void	removeTorrent(const std::string& infoHash);
+		void	removeTorrent(const lt::sha1_hash hash, RemoveTorrentType removeType);
 		std::unordered_map<lt::sha1_hash, lt::torrent_handle>&	getTorrents();
 
 	private:

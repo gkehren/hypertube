@@ -28,13 +28,19 @@ void	TorrentManager::addMagnetTorrent(const std::string& magnetUri)
 	}
 }
 
-void	TorrentManager::removeTorrent(const std::string& infoHash)
+void	TorrentManager::removeTorrent(const lt::sha1_hash hash, RemoveTorrentType removeType)
 {
-	lt::sha1_hash	hash = lt::sha1_hash(infoHash);
 	auto it = this->torrents.find(hash);
 	if (it != this->torrents.end())
 	{
-		this->session.remove_torrent(it->second);
+		if (removeType == REMOVE_TORRENT_FILES || removeType == REMOVE_TORRENT_FILES_AND_DATA)
+		{
+			// TODO: Remove .torrent file (if it exists)
+		}
+		if (removeType == REMOVE_TORRENT_DATA || removeType == REMOVE_TORRENT_FILES_AND_DATA)
+			this->session.remove_torrent(it->second, lt::session::delete_files);
+		else
+			this->session.remove_torrent(it->second);
 		this->torrents.erase(it);
 	}
 }

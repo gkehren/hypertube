@@ -285,18 +285,22 @@ void	UI::displayTorrentList()
 						ImGui::Separator();
 						if (ImGui::MenuItem("Remove"))
 						{
-							std::cout << "Removing torrent" << std::endl;
-							handle.pause();
-							torrents.erase(info_hash);
+							removeTorrentCallback(info_hash, REMOVE_TORRENT);
 						}
 						if (ImGui::BeginMenu("Remove And"))
 						{
 							if (ImGui::MenuItem("Delete .torrent"))
-							{}
+							{
+								removeTorrentCallback(info_hash, REMOVE_TORRENT_FILES);
+							}
 							if (ImGui::MenuItem("Delete .torrent + Data"))
-							{}
+							{
+								removeTorrentCallback(info_hash, REMOVE_TORRENT_FILES_AND_DATA);
+							}
 							if (ImGui::MenuItem("Delete Data"))
-							{}
+							{
+								removeTorrentCallback(info_hash, REMOVE_TORRENT_DATA);
+							}
 							ImGui::EndMenu();
 						}
 						ImGui::Separator();
@@ -446,4 +450,9 @@ void	UI::setAddMagnetLinkCallback(std::function<void(const std::string&)> callba
 void	UI::setGetTorrentsCallback(std::function<std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()> callback)
 {
 	this->getTorrentsCallback = callback;
+}
+
+void	UI::setRemoveTorrentCallback(std::function<void(const lt::sha1_hash, RemoveTorrentType)> callback)
+{
+	this->removeTorrentCallback = callback;
 }
