@@ -105,8 +105,10 @@ void	UI::render()
 	ImGui::Render();
 }
 
-static std::string	torrentStateToString(lt::torrent_status::state_t state)
+static std::string	torrentStateToString(lt::torrent_status::state_t state, lt::torrent_flags_t flags)
 {
+	if (flags & lt::torrent_flags::paused)
+		return "Paused";
 	switch (state)
 	{
 		case lt::torrent_status::downloading_metadata:
@@ -165,6 +167,22 @@ static std::string	computeETA(lt::torrent_status* status)
 	return "N/A";
 }
 
+static std::string sha1HashToHex(const lt::sha1_hash& hash)
+{
+    const char* hexChars = "0123456789ABCDEF";
+    constexpr std::size_t hashSize = lt::sha1_hash::size();
+    std::string hexString(hashSize * 2, ' ');
+
+    for (std::size_t i = 0; i < hashSize; ++i)
+    {
+        const unsigned char byte = hash[i];
+        hexString[i * 2] = hexChars[byte >> 4];
+        hexString[i * 2 + 1] = hexChars[byte & 0x0F];
+    }
+
+    return hexString;
+}
+
 void	UI::displayTorrentList()
 {
 	if (ImGui::Begin("Torrent List"))
@@ -201,7 +219,7 @@ void	UI::displayTorrentList()
 							case 1: cell_text = status.name; break;
 							case 2: cell_text = formatBytes(status.total_wanted, false); break;
 							case 3: ImGui::ProgressBar(status.progress); break;
-							case 4: cell_text = torrentStateToString(status.state); break;
+							case 4: cell_text = torrentStateToString(status.state, handle.flags()); break;
 							case 5: cell_text = formatBytes(status.download_payload_rate, true); break;
 							case 6: cell_text = formatBytes(status.upload_payload_rate, true); break;
 							case 7: cell_text = computeETA(&status); break;
@@ -214,17 +232,81 @@ void	UI::displayTorrentList()
 					}
 					if (ImGui::BeginPopupContextItem("##context", ImGuiPopupFlags_MouseButtonRight))
 					{
-						ImGui::Text("Actions:");
-						ImGui::Text("%s", status.name.c_str());
+						if (ImGui::MenuItem("Open", nullptr, false))
+						{}
+						if (ImGui::MenuItem("Open Containing Folder"))
+						{
+							#ifdef _WIN32
+							std::string command = "explorer.exe \"" + status.save_path + "\"";
+							#elif __APPLE__
+							std::string command = "open \"" + status.save_path + "\"";
+							#elif __linux__
+							std::string command = "xdg-open \"" + status.save_path + "\"";
+							#endif
+							system(command.c_str());
+						}
 						ImGui::Separator();
-						if (ImGui::MenuItem("Pause"))
-							handle.pause();
-						if (ImGui::MenuItem("Resume"))
+						if (ImGui::MenuItem("Copy Magnet URI"))
+						{
+							std::string magnetUri = "magnet:?xt=urn:btih:" + sha1HashToHex(info_hash);
+							ImGui::SetClipboardText(magnetUri.c_str());
+						}
+						ImGui::Separator();
+						if (ImGui::MenuItem("Force Start"))
+						{
+							handle.force_recheck();
 							handle.resume();
+						}
+						if (ImGui::MenuItem("Start"))
+						{
+							handle.resume();
+						}
+						if (ImGui::MenuItem("Pause"))
+						{
+							if (handle.flags() & lt::torrent_flags::paused)
+								handle.resume();
+							else
+								handle.pause();
+						}
+						if (ImGui::MenuItem("Stop"))
+						{
+							handle.pause();
+							handle.force_recheck();
+						}
+						ImGui::Separator();
+						if (ImGui::MenuItem("Move Up Queue"))
+						{
+							handle.queue_position_up();
+						}
+						if (ImGui::MenuItem("Move Down Queue"))
+						{
+							handle.queue_position_down();
+						}
+						ImGui::Separator();
 						if (ImGui::MenuItem("Remove"))
 						{
 							std::cout << "Removing torrent" << std::endl;
+							handle.pause();
+							torrents.erase(info_hash);
 						}
+						if (ImGui::BeginMenu("Remove And"))
+						{
+							if (ImGui::MenuItem("Delete .torrent"))
+							{}
+							if (ImGui::MenuItem("Delete .torrent + Data"))
+							{}
+							if (ImGui::MenuItem("Delete Data"))
+							{}
+							ImGui::EndMenu();
+						}
+						ImGui::Separator();
+						if (ImGui::MenuItem("Update Tracker"))
+						{
+							handle.force_reannounce();
+						}
+						ImGui::Separator();
+						if (ImGui::MenuItem("Properties"))
+						{}
 						ImGui::EndPopup();
 					}
 					ImGui::PopID();
@@ -245,7 +327,7 @@ void	UI::displayTorrentDetails()
 		ImGui::Text("Name: %s", status.name.c_str());
 		ImGui::Text("Size: %s", formatBytes(status.total_wanted, false).c_str());
 		ImGui::Text("Progress: %.2f%%", status.progress * 100);
-		ImGui::Text("Status: %s", torrentStateToString(status.state).c_str());
+		ImGui::Text("Status: %s", torrentStateToString(status.state, this->selectedTorrent.flags()).c_str());
 		ImGui::Text("Down Speed: %s", formatBytes(status.download_payload_rate, true).c_str());
 		ImGui::Text("Up Speed: %s", formatBytes(status.upload_payload_rate, true).c_str());
 		ImGui::Text("ETA: %s", computeETA(&status).c_str());

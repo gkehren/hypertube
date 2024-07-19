@@ -4,6 +4,7 @@
 #include <libtorrent/torrent_info.hpp>
 #include <libtorrent/add_torrent_params.hpp>
 #include <libtorrent/magnet_uri.hpp>
+#include <libtorrent/sha1_hash.hpp>
 #include <string>
 #include <unordered_map>
 
