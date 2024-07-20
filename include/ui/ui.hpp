@@ -52,9 +52,10 @@ class UI
 		void				addTorrentModal();
 		void				addMagnetTorrentModal();
 		void				renderPopupFailure(const std::string& message);
+		void				removeTorrentModal();
 
 		// Callbacks
-		std::function<Result(const std::string&)>									addMagnetLinkCallback;
+		std::function<Result(const std::string&)>										addMagnetLinkCallback;
 		std::function<const std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()>	getTorrentsCallback;
-		std::function<Result(const lt::sha1_hash, RemoveTorrentType)>				removeTorrentCallback;
+		std::function<Result(const lt::sha1_hash, RemoveTorrentType)>					removeTorrentCallback;
 };

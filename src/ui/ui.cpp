@@ -45,18 +45,18 @@ void	UI::render()
 	{
 		if (ImGui::BeginMenu("File"))
 		{
-			if (ImGui::MenuItem("Add a torrent..."))
+			if (ImGui::MenuItem("Add a torrent...", "CTRL+O"))
 			{
 				// TODO: Handle torrent file
 			}
-			if (ImGui::MenuItem("Add a magnet link..."))
+			if (ImGui::MenuItem("Add a magnet link...", "CTRL+U"))
 			{
 				showMagnetTorrentPopup = true;
 			}
 			ImGui::Separator();
-			if (ImGui::MenuItem("Preferences")) {}
+			if (ImGui::MenuItem("Preferences", "CTRL+P")) {}
 			ImGui::Separator();
-			if (ImGui::MenuItem("Exit"))
+			if (ImGui::MenuItem("Exit", "ALT+F4"))
 			{
 				this->exitRequested = true;
 			}
@@ -99,20 +99,11 @@ void	UI::render()
 	displayTorrentList();
 	displayTorrentDetails();
 
-	// TODO: Ask for confirmation modal before removing torrent
-	for (const auto& removalInfo : this->torrentsToRemove)
+	if (this->torrentsToRemove.size() > 0)
 	{
-		if (removeTorrentCallback)
-		{
-			Result result = removeTorrentCallback(removalInfo.hash, removalInfo.removeType);
-			if (!result)
-			{
-				this->showFailurePopup = true;
-				this->failurePopupMessage = result.message;
-			}
-		}
+		ImGui::OpenPopup("Remove Torrent");
 	}
-	this->torrentsToRemove.clear();
+	removeTorrentModal();
 
 	if (this->showFailurePopup)
 	{
@@ -254,7 +245,7 @@ void	UI::displayTorrentList()
 					}
 					if (ImGui::BeginPopupContextItem("##context", ImGuiPopupFlags_MouseButtonRight))
 					{
-						if (ImGui::MenuItem("Open", nullptr, false))
+						if (ImGui::MenuItem("Open"))
 						{}
 						if (ImGui::MenuItem("Open Containing Folder"))
 						{
@@ -490,6 +481,44 @@ void	UI::renderPopupFailure(const std::string &message)
 		ImGui::SameLine();
 		if (ImGui::Button("Cancel", ImVec2(120, 0)))
 		{
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+}
+
+void	UI::removeTorrentModal()
+{
+	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+	if (ImGui::BeginPopupModal("Remove Torrent", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ImGui::Text("Are you sure you want to remove the selected torrent?");
+		ImGui::Separator();
+
+		if (ImGui::Button("OK", ImVec2(120, 0)))
+		{
+			for (const auto& removalInfo : this->torrentsToRemove)
+			{
+				if (removeTorrentCallback)
+				{
+					Result result = removeTorrentCallback(removalInfo.hash, removalInfo.removeType);
+					if (!result)
+					{
+						this->showFailurePopup = true;
+						this->failurePopupMessage = result.message;
+					}
+				}
+			}
+			this->torrentsToRemove.clear();
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SetItemDefaultFocus();
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel", ImVec2(120, 0)))
+		{
+			this->torrentsToRemove.clear();
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
