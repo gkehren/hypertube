@@ -228,7 +228,7 @@ void	UI::displayTorrentList()
 
 						switch (col)
 						{
-							case 0: cell_text = std::to_string(static_cast<int>(status.queue_position)); break;
+							case 0: cell_text = std::to_string(static_cast<int>(status.queue_position) + 1); break;
 							case 1: cell_text = status.name; break;
 							case 2: cell_text = formatBytes(status.total_wanted, false); break;
 							case 3: ImGui::ProgressBar(status.progress); break;
@@ -238,10 +238,14 @@ void	UI::displayTorrentList()
 							case 7: cell_text = computeETA(&status); break;
 							case 8: cell_text = std::to_string(status.num_seeds) + "/" + std::to_string(status.num_peers) + " (" + std::to_string(status.num_seeds / (float)status.num_peers) + ")"; break;
 						}
-						if (ImGui::Selectable(cell_text.c_str(), this->selectedTorrent == handle, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap))
+						if (col != 3)
 						{
-							this->selectedTorrent = handle;
+							if (ImGui::Selectable(cell_text.c_str(), this->selectedTorrent == handle, ImGuiSelectableFlags_SpanAllColumns))
+							{
+								this->selectedTorrent = handle;
+							}
 						}
+						ImGui::SameLine();
 					}
 					if (ImGui::BeginPopupContextItem("##context", ImGuiPopupFlags_MouseButtonRight))
 					{
