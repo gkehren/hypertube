@@ -9,6 +9,15 @@
 #include "torrent_manager.hpp"
 #include "Result.hpp"
 
+struct	TorrentRemovalInfo
+{
+	lt::sha1_hash		hash;
+	RemoveTorrentType	removeType;
+
+	TorrentRemovalInfo(const lt::sha1_hash& hash, RemoveTorrentType removeType)
+		: hash(hash), removeType(removeType) {}
+};
+
 class UI
 {
 	public:
@@ -18,7 +27,7 @@ class UI
 		const ImGuiIO&		getIO() const;
 		bool				shouldExit() const;
 		void				setAddMagnetLinkCallback(std::function<Result(const std::string&)> callback);
-		void				setGetTorrentsCallback(std::function<std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()> callback);
+		void				setGetTorrentsCallback(std::function<const std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()> callback);
 		void				setRemoveTorrentCallback(std::function<Result(const lt::sha1_hash, RemoveTorrentType)> callback);
 
 	private:
@@ -29,6 +38,7 @@ class UI
 		lt::torrent_handle	selectedTorrent;
 		bool				showFailurePopup = false;
 		std::string			failurePopupMessage;
+		std::vector<TorrentRemovalInfo>	torrentsToRemove;
 
 		void				displayTorrentList();
 		void				displayTorrentDetails();
@@ -45,6 +55,6 @@ class UI
 
 		// Callbacks
 		std::function<Result(const std::string&)>									addMagnetLinkCallback;
-		std::function<std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()>	getTorrentsCallback;
+		std::function<const std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()>	getTorrentsCallback;
 		std::function<Result(const lt::sha1_hash, RemoveTorrentType)>				removeTorrentCallback;
 };

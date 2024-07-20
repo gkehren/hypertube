@@ -28,7 +28,7 @@ MainWindow::MainWindow(ConfigManager *configManager, TorrentManager *torrentMana
 	glfwSwapInterval(1); // Enable vsync
 
 	// Initialize UI Callbacks
-	ui.setGetTorrentsCallback([this]() -> std::unordered_map<lt::sha1_hash, lt::torrent_handle>& {
+	ui.setGetTorrentsCallback([this]() -> const std::unordered_map<lt::sha1_hash, lt::torrent_handle>& {
 		return this->torrentManager->getTorrents();
 	});
 	ui.setAddMagnetLinkCallback([this](const std::string& magnetUri) -> Result {
@@ -47,6 +47,7 @@ MainWindow::~MainWindow()
 
 void	MainWindow::show()
 {
+	(void)configManager;
 	ui.init(window);
 
 	static const ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);

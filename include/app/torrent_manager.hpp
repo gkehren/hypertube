@@ -23,7 +23,7 @@ class TorrentManager
 		Result	addTorrent(const std::string& torrentPath);
 		Result	addMagnetTorrent(const std::string& magnetUri);
 		Result	removeTorrent(const lt::sha1_hash hash, RemoveTorrentType removeType);
-		std::unordered_map<lt::sha1_hash, lt::torrent_handle>&	getTorrents();
+		const std::unordered_map<lt::sha1_hash, lt::torrent_handle>&	getTorrents() const;
 
 	private:
 		lt::session	session;

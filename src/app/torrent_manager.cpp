@@ -61,7 +61,7 @@ Result	TorrentManager::removeTorrent(const lt::sha1_hash hash, RemoveTorrentType
 	}
 }
 
-std::unordered_map<lt::sha1_hash, lt::torrent_handle>&	TorrentManager::getTorrents()
+const std::unordered_map<lt::sha1_hash, lt::torrent_handle>& TorrentManager::getTorrents() const
 {
-	return (this->torrents);
+	return this->torrents;
 }

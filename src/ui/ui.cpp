@@ -84,7 +84,7 @@ void	UI::render()
 		ImGui::EndMainMenuBar();
 	}
 
-	ImGuiID dockspace_id = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+	ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
 
 	ImGui::Begin("Log");
 	ImGui::Text("Here will be the log.");
@@ -98,6 +98,21 @@ void	UI::render()
 
 	displayTorrentList();
 	displayTorrentDetails();
+
+	// TODO: Ask for confirmation modal before removing torrent
+	for (const auto& removalInfo : this->torrentsToRemove)
+	{
+		if (removeTorrentCallback)
+		{
+			Result result = removeTorrentCallback(removalInfo.hash, removalInfo.removeType);
+			if (!result)
+			{
+				this->showFailurePopup = true;
+				this->failurePopupMessage = result.message;
+			}
+		}
+	}
+	this->torrentsToRemove.clear();
 
 	if (this->showFailurePopup)
 	{
@@ -135,18 +150,18 @@ static std::string	torrentStateToString(lt::torrent_status::state_t state, lt::t
 	}
 }
 
-static std::string	formatBytes(int64_t bytes, bool speed)
+static std::string	formatBytes(size_t bytes, bool speed)
 {
 	const char*	units[] = { "B", "KB", "MB", "GB", "TB" };
-	int64_t		size = bytes;
-	int			unitIndex = 0;
+	size_t		size = bytes;
+	size_t		unitIndex = 0;
 
 	while (size >= 1024 && unitIndex < sizeof(units) / sizeof(units[0]) - 1)
 	{
 		size /= 1024;
 		unitIndex++;
 	}
-	
+
 	std::ostringstream	oss;
 	oss << std::fixed << std::setprecision(2) << size << " " << units[unitIndex];
 	if (speed)
@@ -176,18 +191,18 @@ static std::string	computeETA(lt::torrent_status* status)
 
 static std::string sha1HashToHex(const lt::sha1_hash& hash)
 {
-    const char* hexChars = "0123456789ABCDEF";
-    constexpr std::size_t hashSize = lt::sha1_hash::size();
-    std::string hexString(hashSize * 2, ' ');
+	const char* hexChars = "0123456789ABCDEF";
+	constexpr std::size_t hashSize = lt::sha1_hash::size();
+	std::string hexString(hashSize * 2, ' ');
 
-    for (std::size_t i = 0; i < hashSize; ++i)
-    {
-        const unsigned char byte = hash[i];
-        hexString[i * 2] = hexChars[byte >> 4];
-        hexString[i * 2 + 1] = hexChars[byte & 0x0F];
-    }
+	for (std::size_t i = 0; i < hashSize; ++i)
+	{
+		const unsigned char byte = hash[i];
+		hexString[i * 2] = hexChars[byte >> 4];
+		hexString[i * 2 + 1] = hexChars[byte & 0x0F];
+	}
 
-    return hexString;
+	return hexString;
 }
 
 void	UI::displayTorrentList()
@@ -222,7 +237,7 @@ void	UI::displayTorrentList()
 
 						switch (col)
 						{
-                            case 0: cell_text = std::to_string(static_cast<int>(status.queue_position)); break;
+							case 0: cell_text = std::to_string(static_cast<int>(status.queue_position)); break;
 							case 1: cell_text = status.name; break;
 							case 2: cell_text = formatBytes(status.total_wanted, false); break;
 							case 3: ImGui::ProgressBar(status.progress); break;
@@ -250,7 +265,11 @@ void	UI::displayTorrentList()
 							#elif __linux__
 							std::string command = "xdg-open \"" + status.save_path + "\"";
 							#endif
-							system(command.c_str());
+							int ret = system(command.c_str());
+							if (ret != 0)
+							{
+								std::cerr << "Failed to open containing folder" << std::endl;
+							}
 						}
 						ImGui::Separator();
 						if (ImGui::MenuItem("Copy Magnet URI"))
@@ -293,25 +312,21 @@ void	UI::displayTorrentList()
 						ImGui::Separator();
 						if (ImGui::MenuItem("Remove"))
 						{
-							// TODO: Ask for confirmation modal before removing
-							removeTorrentCallback(info_hash, REMOVE_TORRENT);
+							this->torrentsToRemove.emplace_back(info_hash, REMOVE_TORRENT);
 						}
 						if (ImGui::BeginMenu("Remove And"))
 						{
 							if (ImGui::MenuItem("Delete .torrent"))
 							{
-								// TODO: Ask for confirmation modal before removing
-								removeTorrentCallback(info_hash, REMOVE_TORRENT_FILES);
+								this->torrentsToRemove.emplace_back(info_hash, REMOVE_TORRENT_FILES);
 							}
 							if (ImGui::MenuItem("Delete .torrent + Data"))
 							{
-								// TODO: Ask for confirmation modal before removing
-								removeTorrentCallback(info_hash, REMOVE_TORRENT_FILES_AND_DATA);
+								this->torrentsToRemove.emplace_back(info_hash, REMOVE_TORRENT_FILES_AND_DATA);
 							}
 							if (ImGui::MenuItem("Delete Data"))
 							{
-								// TODO: Ask for confirmation modal before removing
-								removeTorrentCallback(info_hash, REMOVE_TORRENT_DATA);
+								this->torrentsToRemove.emplace_back(info_hash, REMOVE_TORRENT_DATA);
 							}
 							ImGui::EndMenu();
 						}
@@ -464,7 +479,7 @@ void	UI::renderPopupFailure(const std::string &message)
 
 	if (ImGui::BeginPopupModal("Failure", NULL, ImGuiWindowFlags_AlwaysAutoResize))
 	{
-		ImGui::Text(message.c_str());
+		ImGui::Text("%s", message.c_str());
 		ImGui::Separator();
 
 		if (ImGui::Button("OK"))
@@ -487,7 +502,7 @@ void	UI::setAddMagnetLinkCallback(std::function<Result(const std::string&)> call
 	this->addMagnetLinkCallback = callback;
 }
 
-void	UI::setGetTorrentsCallback(std::function<std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()> callback)
+void	UI::setGetTorrentsCallback(std::function<const std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()> callback)
 {
 	this->getTorrentsCallback = callback;
 }
