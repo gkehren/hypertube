@@ -269,9 +269,7 @@ void	UI::displayTorrentList()
 						ImGui::Separator();
 						if (ImGui::MenuItem("Copy Magnet URI"))
 						{
-							// TODO: magnet URI work with my program but not with other program (BitTorrent)
-							std::string magnetUri = "magnet:?xt=urn:btih:" + sha1HashToHex(info_hash);
-							ImGui::SetClipboardText(magnetUri.c_str());
+							ImGui::SetClipboardText(lt::make_magnet_uri(handle).c_str());
 						}
 						ImGui::Separator();
 						if (ImGui::MenuItem("Force Start"))

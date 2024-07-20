@@ -9,7 +9,6 @@ static void glfw_error_callback(int error, const char* description)
 
 App::App()
 {
-	configManager.load("config.json");
 	glfwSetErrorCallback(glfw_error_callback);
 	if (!glfwInit())
 		throw std::runtime_error("Failed to initialize GLFW");
@@ -37,17 +36,20 @@ App::App()
 	ui.setRemoveTorrentCallback([this](const lt::sha1_hash hash, RemoveTorrentType removeType) -> Result {
 		return this->torrentManager.removeTorrent(hash, removeType);
 	});
+
+	configManager.load("./config/torrents.json");
+	torrentManager.addTorrentsFromVec(configManager.loadTorrents("./config/torrents.json"));
 }
 
 App::~App()
 {
+	configManager.saveTorrents(torrentManager.getTorrents());
 	glfwDestroyWindow(window);
 	glfwTerminate();
 }
 
 void	App::run()
 {
-	(void)configManager;
 	ui.init(window);
 
 	static const ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
