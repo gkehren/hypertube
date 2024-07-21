@@ -20,17 +20,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imgui)
 
-FetchContent_Declare(
-	ImGuiFileDialog
-	GIT_REPOSITORY https://github.com/aiekick/ImGuiFileDialog.git
-	GIT_TAG master
-)
-FetchContent_GetProperties(ImGuiFileDialog)
-if (NOT ImGuiFileDialog_POPULATED)
-	FetchContent_Populate(ImGuiFileDialog)
-	add_subdirectory(${ImGuiFileDialog_SOURCE_DIR} ${ImGuiFileDialog_BINARY_DIR})
-endif()
-
 # Fetch dirent for Windows
 if (WIN32)
 	FetchContent_Declare(
@@ -38,9 +27,19 @@ if (WIN32)
 		GIT_REPOSITORY https://github.com/tronkko/dirent.git
 		GIT_TAG 1.24
 	)
-	FetchContent_MakeAvailable(dirent)
-	include_directories(${dirent_SOURCE_DIR}/include)
+	FetchContent_GetProperties(dirent)
+	if (NOT dirent_POPULATED)
+		FetchContent_Populate(dirent)
+		include_directories(${dirent_SOURCE_DIR}/include)
+	endif()
 endif()
+
+FetchContent_Declare(
+	ImGuiFileDialog
+	GIT_REPOSITORY https://github.com/aiekick/ImGuiFileDialog.git
+	GIT_TAG master
+)
+FetchContent_MakeAvailable(ImGuiFileDialog)
 
 # Fetch nlohmann/json
 FetchContent_Declare(
