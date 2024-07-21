@@ -29,6 +29,15 @@ void	UI::init(GLFWwindow* window)
 	// Setup platform/renderer bindings
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 330");
+
+	// Set defaultSavePath to downloads directory of the current user
+	#ifdef _WIN32
+		this->defaultSavePath = std::string(std::getenv("USERPROFILE")) + "\\Downloads";
+	#elif __APPLE__
+		this->defaultSavePath = std::string(std::getenv("HOME")) + "/Downloads";
+	#elif __linux__
+		this->defaultSavePath = std::string(std::getenv("HOME")) + "/Downloads";
+	#endif
 }
 
 void	UI::render()
@@ -94,8 +103,9 @@ void	UI::render()
 	if (showTorrentPopup)
 	{
 		IGFD::FileDialogConfig config;
-		config.path = ".";
-		config.flags = ImGuiFileDialogFlags_Modal | ImGuiFileDialogFlags_ShowDevicesButton;
+		config.path = defaultSavePath;
+		config.countSelectionMax = 1;
+		config.flags = ImGuiFileDialogFlags_Modal | ImGuiFileDialogFlags_ShowDevicesButton | ImGuiFileDialogFlags_DontShowHiddenFiles;
 		ImGuiFileDialog::Instance()->OpenDialog("ChooseTorrentFile", "Choose a .torrent file", ".torrent", config);
 	}
 	addTorrentModal();
@@ -113,6 +123,14 @@ void	UI::render()
 		ImGui::OpenPopup("Remove Torrent");
 	}
 	removeTorrentModal();
+    if (!this->torrentToAdd.second.empty() && addTorrentCallback)
+	{
+		IGFD::FileDialogConfig config;
+		config.path = savePath.empty() ? defaultSavePath : savePath;
+		config.flags = ImGuiFileDialogFlags_Modal | ImGuiFileDialogFlags_ShowDevicesButton | ImGuiFileDialogFlags_DontShowHiddenFiles;
+		ImGuiFileDialog::Instance()->OpenDialog("ChooseSavePath", "Choose a directory to save the torrent", nullptr, config);
+	}
+	askSavePathModal();
 
 	if (this->showFailurePopup)
 	{
@@ -133,20 +151,20 @@ static std::string	torrentStateToString(lt::torrent_status::state_t state, lt::t
 		return "Paused";
 	switch (state)
 	{
-		case lt::torrent_status::downloading_metadata:
-			return "Downloading metadata";
-		case lt::torrent_status::downloading:
-			return "Downloading";
-		case lt::torrent_status::finished:
-			return "Finished";
-		case lt::torrent_status::seeding:
-			return "Seeding";
-		case lt::torrent_status::checking_files:
-			return "Checking files";
-		case lt::torrent_status::checking_resume_data:
-			return "Checking resume data";
-		default:
-			return "Unknown";
+	case lt::torrent_status::downloading_metadata:
+		return "Downloading metadata";
+	case lt::torrent_status::downloading:
+		return "Downloading";
+	case lt::torrent_status::finished:
+		return "Finished";
+	case lt::torrent_status::seeding:
+		return "Seeding";
+	case lt::torrent_status::checking_files:
+		return "Checking files";
+	case lt::torrent_status::checking_resume_data:
+		return "Checking resume data";
+	default:
+		return "Unknown";
 	}
 }
 
@@ -237,15 +255,15 @@ void	UI::displayTorrentList()
 
 						switch (col)
 						{
-							case 0: cell_text = std::to_string(static_cast<int>(status.queue_position) + 1); break;
-							case 1: cell_text = status.name; break;
-							case 2: cell_text = formatBytes(status.total_wanted, false); break;
-							case 3: ImGui::ProgressBar(status.progress); break;
-							case 4: cell_text = torrentStateToString(status.state, handle.flags()); break;
-							case 5: cell_text = formatBytes(status.download_payload_rate, true); break;
-							case 6: cell_text = formatBytes(status.upload_payload_rate, true); break;
-							case 7: cell_text = computeETA(&status); break;
-							case 8: cell_text = std::to_string(status.num_seeds) + "/" + std::to_string(status.num_peers) + " (" + std::to_string(status.num_seeds / (float)status.num_peers) + ")"; break;
+						case 0: cell_text = std::to_string(static_cast<int>(status.queue_position) + 1); break;
+						case 1: cell_text = status.name; break;
+						case 2: cell_text = formatBytes(status.total_wanted, false); break;
+						case 3: ImGui::ProgressBar(status.progress); break;
+						case 4: cell_text = torrentStateToString(status.state, handle.flags()); break;
+						case 5: cell_text = formatBytes(status.download_payload_rate, true); break;
+						case 6: cell_text = formatBytes(status.upload_payload_rate, true); break;
+						case 7: cell_text = computeETA(&status); break;
+						case 8: cell_text = std::to_string(status.num_seeds) + "/" + std::to_string(status.num_peers) + " (" + std::to_string(status.num_seeds / (float)status.num_peers) + ")"; break;
 						}
 						if (col != 3)
 						{
@@ -395,7 +413,7 @@ bool	UI::shouldExit() const
 
 
 // Layout Management
-void	UI::saveLayout(const std::string &configFilePath)
+void	UI::saveLayout(const std::string& configFilePath)
 {
 	size_t	size;
 	const char*	data = ImGui::SaveIniSettingsToMemory(&size);
@@ -447,15 +465,10 @@ void	UI::addTorrentModal()
 		if (ImGuiFileDialog::Instance()->IsOk())
 		{
 			std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
-			std::cout << "Selected file: " << filePath << std::endl;
-			if (addTorrentCallback)
+			if (!filePath.empty())
 			{
-				Result result = addTorrentCallback(filePath);
-				if (!result)
-				{
-					this->showFailurePopup = true;
-					this->failurePopupMessage = result.message;
-				}
+				torrentToAdd.first = false;
+				torrentToAdd.second = filePath;
 			}
 		}
 		ImGuiFileDialog::Instance()->Close();
@@ -475,14 +488,8 @@ void	UI::addMagnetTorrentModal()
 
 		if (ImGui::Button("OK", ImVec2(120, 0)))
 		{
-			if (addMagnetLinkCallback) {
-				Result result = addMagnetLinkCallback(this->magnetLinkBuffer);
-				if (!result)
-				{
-					this->showFailurePopup = true;
-					this->failurePopupMessage = result.message;
-				}
-			}
+			torrentToAdd.first = true;
+			torrentToAdd.second = this->magnetLinkBuffer;
 			memset(this->magnetLinkBuffer, 0, sizeof(this->magnetLinkBuffer));
 			ImGui::CloseCurrentPopup();
 		}
@@ -493,6 +500,46 @@ void	UI::addMagnetTorrentModal()
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
+	}
+}
+
+void	UI::askSavePathModal()
+{
+	if (torrentToAdd.second.empty())
+		return;
+
+	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+	if (ImGuiFileDialog::Instance()->Display("ChooseSavePath"))
+	{
+		if (ImGuiFileDialog::Instance()->IsOk())
+		{
+			this->savePath = ImGuiFileDialog::Instance()->GetCurrentPath();
+			if (!savePath.empty())
+			{
+				if (addTorrentCallback && addMagnetLinkCallback)
+				{
+					Result result(true);
+					if (torrentToAdd.first)
+					{
+						result = addMagnetLinkCallback(torrentToAdd.second, savePath);
+					}
+					else
+					{
+						result = addTorrentCallback(torrentToAdd.second, savePath);
+					}
+					if (!result)
+					{
+						this->showFailurePopup = true;
+						this->failurePopupMessage = result.message;
+					}
+					torrentToAdd.second.clear();
+				}
+			}
+			ImGuiFileDialog::Instance()->Close();
+		}
+		ImGuiFileDialog::Instance()->Close();
 	}
 }
 
@@ -559,12 +606,12 @@ void	UI::removeTorrentModal()
 }
 
 // Callbacks
-void	UI::setAddTorrentCallback(std::function<Result(const std::string&)> callback)
+void	UI::setAddTorrentCallback(std::function<Result(const std::string&, const std::string&)> callback)
 {
 	this->addTorrentCallback = callback;
 }
 
-void	UI::setAddMagnetLinkCallback(std::function<Result(const std::string&)> callback)
+void	UI::setAddMagnetLinkCallback(std::function<Result(const std::string&, const std::string&)> callback)
 {
 	this->addMagnetLinkCallback = callback;
 }
