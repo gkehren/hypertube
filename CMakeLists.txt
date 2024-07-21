@@ -20,6 +20,28 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imgui)
 
+FetchContent_Declare(
+	ImGuiFileDialog
+	GIT_REPOSITORY https://github.com/aiekick/ImGuiFileDialog.git
+	GIT_TAG master
+)
+FetchContent_GetProperties(ImGuiFileDialog)
+if (NOT ImGuiFileDialog_POPULATED)
+	FetchContent_Populate(ImGuiFileDialog)
+	add_subdirectory(${ImGuiFileDialog_SOURCE_DIR} ${ImGuiFileDialog_BINARY_DIR})
+endif()
+
+# Fetch dirent for Windows
+if (WIN32)
+	FetchContent_Declare(
+		dirent
+		GIT_REPOSITORY https://github.com/tronkko/dirent.git
+		GIT_TAG 1.24
+	)
+	FetchContent_MakeAvailable(dirent)
+	include_directories(${dirent_SOURCE_DIR}/include)
+endif()
+
 # Fetch nlohmann/json
 FetchContent_Declare(
   json
@@ -35,6 +57,8 @@ include_directories(${imgui_SOURCE_DIR})
 include_directories(${imgui_SOURCE_DIR}/backends)
 include_directories(${json_SOURCE_DIR}/single_include/nlohmann/)
 include_directories(include include/app include/ui)
+
+target_include_directories(ImGuiFileDialog PUBLIC ${imgui_SOURCE_DIR})
 
 # Find required packages
 find_package(Boost REQUIRED COMPONENTS system filesystem)
@@ -69,4 +93,4 @@ add_custom_command(
 )
 
 # Link libraries
-target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} PRIVATE LibtorrentRasterbar::torrent-rasterbar OpenGL::GL glfw)
+target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} PRIVATE LibtorrentRasterbar::torrent-rasterbar OpenGL::GL glfw ImGuiFileDialog)

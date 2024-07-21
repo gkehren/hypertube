@@ -3,6 +3,8 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <ImGuiFileDialog.h>
+#include <ImGuiFileDialogConfig.h>
 #include <GLFW/glfw3.h>
 #include <functional>
 #include <string>
@@ -26,6 +28,7 @@ class UI
 		void				shutdown();
 		const ImGuiIO&		getIO() const;
 		bool				shouldExit() const;
+		void				setAddTorrentCallback(std::function<Result(const std::string&)> callback);
 		void				setAddMagnetLinkCallback(std::function<Result(const std::string&)> callback);
 		void				setGetTorrentsCallback(std::function<const std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()> callback);
 		void				setRemoveTorrentCallback(std::function<Result(const lt::sha1_hash, RemoveTorrentType)> callback);
@@ -55,6 +58,7 @@ class UI
 		void				removeTorrentModal();
 
 		// Callbacks
+		std::function<Result(const std::string&)>										addTorrentCallback;
 		std::function<Result(const std::string&)>										addMagnetLinkCallback;
 		std::function<const std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()>	getTorrentsCallback;
 		std::function<Result(const lt::sha1_hash, RemoveTorrentType)>					removeTorrentCallback;

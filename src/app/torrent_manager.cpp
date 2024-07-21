@@ -1,15 +1,17 @@
 #include "torrent_manager.hpp"
 #include <iostream>
 
-Result	TorrentManager::addTorrent(const std::string& torrentPath)
+Result	TorrentManager::addTorrent(const std::string& torrentPath, const std::string& savePath)
 {
 	try
 	{
 		lt::add_torrent_params	params;
-		params.save_path = "./downloads";
+		params.save_path = savePath;
 		params.ti = std::make_shared<lt::torrent_info>(torrentPath);
 		lt::torrent_handle	handle = this->session.add_torrent(params);
 		this->torrents[handle.info_hash()] = handle;
+
+		std::cout << "Added torrent from file: " << handle.status().name << std::endl;
 		return Result::Success();
 	}
 	catch (const std::exception& e)

@@ -38,7 +38,8 @@ void	UI::render()
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
-	bool showMagnetTorrentPopup = false;
+	bool	showMagnetTorrentPopup = false;
+	bool	showTorrentPopup = false;
 
 	// Menu bar
 	if (ImGui::BeginMainMenuBar())
@@ -47,7 +48,7 @@ void	UI::render()
 		{
 			if (ImGui::MenuItem("Add a torrent...", "CTRL+O"))
 			{
-				// TODO: Handle torrent file
+				showTorrentPopup = true;
 			}
 			if (ImGui::MenuItem("Add a magnet link...", "CTRL+U"))
 			{
@@ -90,6 +91,31 @@ void	UI::render()
 	ImGui::Text("Here will be the log.");
 	ImGui::End();
 
+	if (showTorrentPopup)
+	{
+		IGFD::FileDialogConfig	config;
+		config.path = ".";
+		config.countSelectionMax = 1;
+		ImGuiFileDialog::Instance()->OpenDialog("ChooseTorrentFile", "Choose a .torrent file", ".torrent", config);
+	}
+	if (ImGuiFileDialog::Instance()->Display("ChooseTorrentFile"))
+	{
+		if (ImGuiFileDialog::Instance()->IsOk())
+		{
+			std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
+			std::cout << "Selected file: " << filePath << std::endl;
+			if (addTorrentCallback)
+			{
+				Result result = addTorrentCallback(filePath);
+				if (!result)
+				{
+					this->showFailurePopup = true;
+					this->failurePopupMessage = result.message;
+				}
+			}
+		}
+		ImGuiFileDialog::Instance()->Close();
+	}
 	if (showMagnetTorrentPopup)
 	{
 		ImGui::OpenPopup("Add Magnet Torrent");
@@ -528,6 +554,11 @@ void	UI::removeTorrentModal()
 }
 
 // Callbacks
+void	UI::setAddTorrentCallback(std::function<Result(const std::string&)> callback)
+{
+	this->addTorrentCallback = callback;
+}
+
 void	UI::setAddMagnetLinkCallback(std::function<Result(const std::string&)> callback)
 {
 	this->addMagnetLinkCallback = callback;

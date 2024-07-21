@@ -30,6 +30,9 @@ App::App()
 	ui.setGetTorrentsCallback([this]() -> const std::unordered_map<lt::sha1_hash, lt::torrent_handle>& {
 		return this->torrentManager.getTorrents();
 	});
+	ui.setAddTorrentCallback([this](const std::string& torrentPath) -> Result {
+		return this->torrentManager.addTorrent(torrentPath);
+	});
 	ui.setAddMagnetLinkCallback([this](const std::string& magnetUri) -> Result {
 		return this->torrentManager.addMagnetTorrent(magnetUri);
 	});
