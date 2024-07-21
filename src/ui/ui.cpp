@@ -93,29 +93,12 @@ void	UI::render()
 
 	if (showTorrentPopup)
 	{
-		IGFD::FileDialogConfig	config;
+		IGFD::FileDialogConfig config;
 		config.path = ".";
-		config.countSelectionMax = 1;
+		config.flags = ImGuiFileDialogFlags_Modal | ImGuiFileDialogFlags_ShowDevicesButton;
 		ImGuiFileDialog::Instance()->OpenDialog("ChooseTorrentFile", "Choose a .torrent file", ".torrent", config);
 	}
-	if (ImGuiFileDialog::Instance()->Display("ChooseTorrentFile"))
-	{
-		if (ImGuiFileDialog::Instance()->IsOk())
-		{
-			std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
-			std::cout << "Selected file: " << filePath << std::endl;
-			if (addTorrentCallback)
-			{
-				Result result = addTorrentCallback(filePath);
-				if (!result)
-				{
-					this->showFailurePopup = true;
-					this->failurePopupMessage = result.message;
-				}
-			}
-		}
-		ImGuiFileDialog::Instance()->Close();
-	}
+	addTorrentModal();
 	if (showMagnetTorrentPopup)
 	{
 		ImGui::OpenPopup("Add Magnet Torrent");
@@ -455,7 +438,29 @@ void	UI::resetLayout()
 
 // Modal Windows
 void	UI::addTorrentModal()
-{}
+{
+	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+	if (ImGuiFileDialog::Instance()->Display("ChooseTorrentFile"))
+	{
+		if (ImGuiFileDialog::Instance()->IsOk())
+		{
+			std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
+			std::cout << "Selected file: " << filePath << std::endl;
+			if (addTorrentCallback)
+			{
+				Result result = addTorrentCallback(filePath);
+				if (!result)
+				{
+					this->showFailurePopup = true;
+					this->failurePopupMessage = result.message;
+				}
+			}
+		}
+		ImGuiFileDialog::Instance()->Close();
+	}
+}
 
 void	UI::addMagnetTorrentModal()
 {
