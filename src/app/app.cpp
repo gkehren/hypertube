@@ -59,22 +59,7 @@ void	App::run()
 	while (!glfwWindowShouldClose(window) && !ui.shouldExit())
 	{
 		glfwPollEvents();
-		ui.render();
-		int	width, height;
-		glfwGetFramebufferSize(window, &width, &height);
-		glViewport(0, 0, width, height);
-		glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
-		glClear(GL_COLOR_BUFFER_BIT);
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-		// Multi-Viewport support
-		if (ui.getIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-		{
-			GLFWwindow* backup_current_context = glfwGetCurrentContext();
-			ImGui::UpdatePlatformWindows();
-			ImGui::RenderPlatformWindowsDefault();
-			glfwMakeContextCurrent(backup_current_context);
-		}
+		ui.renderFrame(window, clear_color);
 		glfwSwapBuffers(window);
 	}
 	ui.shutdown();

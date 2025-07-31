@@ -1,25 +1,46 @@
 #include "ui.hpp"
+#include "imgui_internal.h"
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <chrono>
 
-void	UI::init(GLFWwindow* window)
+void UI::init(GLFWwindow *window)
+{
+	initImGui(window);
+	setDefaultSavePath();
+}
+
+void UI::setDefaultSavePath()
+{
+// Set defaultSavePath to downloads directory of the current user
+#ifdef _WIN32
+	this->defaultSavePath = std::string(std::getenv("USERPROFILE")) + "\\Downloads";
+#elif __APPLE__
+	this->defaultSavePath = std::string(std::getenv("HOME")) + "/Downloads";
+#elif __linux__
+	this->defaultSavePath = std::string(std::getenv("HOME")) + "/Downloads";
+#endif
+}
+
+void UI::initImGui(GLFWwindow *window)
 {
 	// Initialize ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 
-	ImGuiIO& io = ImGui::GetIO();
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable; // Enable Docking
-	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
-	this->io = io;
+	ImGuiIO &io_ref = ImGui::GetIO();
+	io_ref.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	io_ref.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	io_ref.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+	io_ref.IniFilename = NULL;
+	this->io = io_ref;
 
 	// Setup ImGui style
 	ImGui::StyleColorsDark();
 
-	ImGuiStyle& style = ImGui::GetStyle();
+	ImGuiStyle &style = ImGui::GetStyle();
 	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
 	{
 		style.WindowRounding = 0.0f;
@@ -29,108 +50,57 @@ void	UI::init(GLFWwindow* window)
 	// Setup platform/renderer bindings
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 330");
-
-	// Set defaultSavePath to downloads directory of the current user
-	#ifdef _WIN32
-		this->defaultSavePath = std::string(std::getenv("USERPROFILE")) + "\\Downloads";
-	#elif __APPLE__
-		this->defaultSavePath = std::string(std::getenv("HOME")) + "/Downloads";
-	#elif __linux__
-		this->defaultSavePath = std::string(std::getenv("HOME")) + "/Downloads";
-	#endif
 }
 
-void	UI::render()
+void UI::renderFrame(GLFWwindow *window, const ImVec4 &clear_color)
 {
 	// Start the ImGui frame
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
-	bool	showMagnetTorrentPopup = false;
-	bool	showTorrentPopup = false;
+	// Create the docking environment
+	ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+	ImGuiViewport *viewport = ImGui::GetMainViewport();
+	ImGui::SetNextWindowPos(viewport->Pos);
+	ImGui::SetNextWindowSize(viewport->Size);
+	ImGui::SetNextWindowViewport(viewport->ID);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+	window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+	window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
-	// Menu bar
-	if (ImGui::BeginMainMenuBar())
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+	ImGui::Begin("DockSpace", nullptr, window_flags);
+	ImGui::PopStyleVar(3);
+
+	ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+	ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+
+	static bool first_time = true;
+	if (first_time)
 	{
-		if (ImGui::BeginMenu("File"))
-		{
-			if (ImGui::MenuItem("Add a torrent...", "CTRL+O"))
-			{
-				showTorrentPopup = true;
-			}
-			if (ImGui::MenuItem("Add a magnet link...", "CTRL+U"))
-			{
-				showMagnetTorrentPopup = true;
-			}
-			ImGui::Separator();
-			if (ImGui::MenuItem("Preferences", "CTRL+P")) {}
-			ImGui::Separator();
-			if (ImGui::MenuItem("Exit", "ALT+F4"))
-			{
-				this->exitRequested = true;
-			}
-			ImGui::EndMenu();
-		}
-		if (ImGui::BeginMenu("View"))
-		{
-			if (ImGui::MenuItem("Save layout"))
-				this->saveLayout("config/layout.ini");
-			if (ImGui::BeginMenu("Load layout"))
-			{
-				this->loadLayout();
-				ImGui::EndMenu();
-			}
-			if (ImGui::MenuItem("Reset layout"))
-				this->resetLayout();
-			ImGui::EndMenu();
-		}
-		if (ImGui::BeginMenu("Help"))
-		{
-			if (ImGui::MenuItem("About"))
-				ImGui::ShowAboutWindow();
-			ImGui::EndMenu();
-		}
-		ImGui::EndMainMenuBar();
+		first_time = false;
+		setupDocking(dockspace_id);
 	}
 
-	ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+	bool showMagnetTorrentPopup = false;
+	bool showTorrentPopup = false;
+
+	displayMenuBar(showTorrentPopup, showMagnetTorrentPopup);
+
+	displayCategories();
+	displayTorrentList();
+	displayTorrentDetails();
 
 	ImGui::Begin("Log");
 	ImGui::Text("Here will be the log.");
 	ImGui::End();
 
-	if (showTorrentPopup)
-	{
-		IGFD::FileDialogConfig config;
-		config.path = defaultSavePath;
-		config.countSelectionMax = 1;
-		config.flags = ImGuiFileDialogFlags_Modal | ImGuiFileDialogFlags_ShowDevicesButton | ImGuiFileDialogFlags_DontShowHiddenFiles;
-		ImGuiFileDialog::Instance()->OpenDialog("ChooseTorrentFile", "Choose a .torrent file", ".torrent", config);
-	}
-	addTorrentModal();
-	if (showMagnetTorrentPopup)
-	{
-		ImGui::OpenPopup("Add Magnet Torrent");
-	}
-	addMagnetTorrentModal();
-
-	displayTorrentList();
-	displayTorrentDetails();
-
-	if (this->torrentsToRemove.size() > 0)
-	{
-		ImGui::OpenPopup("Remove Torrent");
-	}
-	removeTorrentModal();
-    if (!this->torrentToAdd.second.empty() && addTorrentCallback)
-	{
-		IGFD::FileDialogConfig config;
-		config.path = savePath.empty() ? defaultSavePath : savePath;
-		config.flags = ImGuiFileDialogFlags_Modal | ImGuiFileDialogFlags_ShowDevicesButton | ImGuiFileDialogFlags_DontShowHiddenFiles;
-		ImGuiFileDialog::Instance()->OpenDialog("ChooseSavePath", "Choose a directory to save the torrent", nullptr, config);
-	}
-	askSavePathModal();
+	handleAddTorrentModal(showTorrentPopup);
+	handleAddMagnetTorrentModal(showMagnetTorrentPopup);
+	handleRemoveTorrentModal();
+	handleAskSavePathModal();
 
 	if (this->showFailurePopup)
 	{
@@ -139,324 +109,61 @@ void	UI::render()
 	}
 	renderPopupFailure(this->failurePopupMessage);
 
-	ImGui::ShowDemoWindow();
+	ImGui::End();
 
 	// Render ImGui
 	ImGui::Render();
-}
 
-static std::string	torrentStateToString(lt::torrent_status::state_t state, lt::torrent_flags_t flags)
-{
-	if (flags & lt::torrent_flags::paused)
-		return "Paused";
-	switch (state)
+	int width, height;
+	glfwGetFramebufferSize(window, &width, &height);
+	glViewport(0, 0, width, height);
+	glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
+	glClear(GL_COLOR_BUFFER_BIT);
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+	// Multi-Viewport support
+	if (this->getIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
 	{
-	case lt::torrent_status::downloading_metadata:
-		return "Downloading metadata";
-	case lt::torrent_status::downloading:
-		return "Downloading";
-	case lt::torrent_status::finished:
-		return "Finished";
-	case lt::torrent_status::seeding:
-		return "Seeding";
-	case lt::torrent_status::checking_files:
-		return "Checking files";
-	case lt::torrent_status::checking_resume_data:
-		return "Checking resume data";
-	default:
-		return "Unknown";
+		GLFWwindow *backup_current_context = glfwGetCurrentContext();
+		ImGui::UpdatePlatformWindows();
+		ImGui::RenderPlatformWindowsDefault();
+		glfwMakeContextCurrent(backup_current_context);
 	}
 }
 
-static std::string	formatBytes(size_t bytes, bool speed)
+void UI::setupDocking(ImGuiID dockspace_id)
 {
-	const char*	units[] = { "B", "KB", "MB", "GB", "TB" };
-	size_t		size = bytes;
-	size_t		unitIndex = 0;
+	ImGui::DockBuilderRemoveNode(dockspace_id);
+	ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+	ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
 
-	while (size >= 1024 && unitIndex < sizeof(units) / sizeof(units[0]) - 1)
+	ImGuiID dock_main_id = dockspace_id;
+	ImGuiID dock_left_id;
+	ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.2f, &dock_left_id, &dock_main_id);
+
+	ImGuiID dock_top_id;
+	ImGuiID dock_bottom_id;
+	ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.4f, &dock_bottom_id, &dock_top_id);
+
+	ImGui::DockBuilderDockWindow("Categories", dock_left_id);
+	ImGui::DockBuilderDockWindow("Torrent List", dock_top_id);
+	ImGui::DockBuilderDockWindow("Torrent Details", dock_bottom_id);
+	ImGui::DockBuilderDockWindow("Log", dock_bottom_id);
+
+	ImGui::DockBuilderFinish(dockspace_id);
+}
+
+void UI::handleAddTorrentModal(bool &showTorrentPopup)
+{
+	if (showTorrentPopup)
 	{
-		size /= 1024;
-		unitIndex++;
+		IGFD::FileDialogConfig config;
+		config.path = defaultSavePath;
+		config.countSelectionMax = 1;
+		config.flags = ImGuiFileDialogFlags_Modal | ImGuiFileDialogFlags_ShowDevicesButton | ImGuiFileDialogFlags_DontShowHiddenFiles;
+		ImGuiFileDialog::Instance()->OpenDialog("ChooseTorrentFile", "Choose a .torrent file", ".torrent", config);
 	}
 
-	std::ostringstream	oss;
-	oss << std::fixed << std::setprecision(2) << size << " " << units[unitIndex];
-	if (speed)
-		oss << "/s";
-	return oss.str();
-}
-
-static std::string	computeETA(lt::torrent_status* status)
-{
-	if (status->state == lt::torrent_status::downloading && status->download_payload_rate > 0)
-	{
-		int64_t		secondsLeft = (status->total_wanted - status->total_wanted_done) / status->download_payload_rate;
-		int64_t		minutesLeft = secondsLeft / 60;
-		int64_t		hoursLeft = minutesLeft / 60;
-		int64_t		daysLeft = hoursLeft / 24;
-
-		if (daysLeft > 0)
-			return std::to_string(daysLeft) + " days";
-		if (hoursLeft > 0)
-			return std::to_string(hoursLeft) + " hours";
-		if (minutesLeft > 0)
-			return std::to_string(minutesLeft) + " minutes";
-		return std::to_string(secondsLeft) + " seconds";
-	}
-	return "N/A";
-}
-
-static std::string sha1HashToHex(const lt::sha1_hash& hash)
-{
-	const char* hexChars = "0123456789ABCDEF";
-	constexpr std::size_t hashSize = lt::sha1_hash::size();
-	std::string hexString(hashSize * 2, ' ');
-
-	for (std::size_t i = 0; i < hashSize; ++i)
-	{
-		const unsigned char byte = hash[i];
-		hexString[i * 2] = hexChars[byte >> 4];
-		hexString[i * 2 + 1] = hexChars[byte & 0x0F];
-	}
-
-	return hexString;
-}
-
-void	UI::displayTorrentList()
-{
-	if (ImGui::Begin("Torrent List"))
-	{
-		if (ImGui::BeginTable("Torrents", 9, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
-		{
-			ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed);
-			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableSetupColumn("Size");
-			ImGui::TableSetupColumn("Progress");
-			ImGui::TableSetupColumn("Status");
-			ImGui::TableSetupColumn("Down Speed");
-			ImGui::TableSetupColumn("Up Speed");
-			ImGui::TableSetupColumn("ETA");
-			ImGui::TableSetupColumn("Seeds/Peers");
-			ImGui::TableHeadersRow();
-
-			if (getTorrentsCallback)
-			{
-				auto& torrents = getTorrentsCallback();
-				for (const auto& [info_hash, handle] : torrents)
-				{
-					lt::torrent_status	status = handle.status();
-					ImGui::PushID(&handle);
-					ImGui::TableNextRow();
-					for (int col = 0; col < 9; col++)
-					{
-						ImGui::TableSetColumnIndex(col);
-						std::string	cell_text;
-
-						switch (col)
-						{
-						case 0: cell_text = std::to_string(static_cast<int>(status.queue_position) + 1); break;
-						case 1: cell_text = status.name; break;
-						case 2: cell_text = formatBytes(status.total_wanted, false); break;
-						case 3: ImGui::ProgressBar(status.progress); break;
-						case 4: cell_text = torrentStateToString(status.state, handle.flags()); break;
-						case 5: cell_text = formatBytes(status.download_payload_rate, true); break;
-						case 6: cell_text = formatBytes(status.upload_payload_rate, true); break;
-						case 7: cell_text = computeETA(&status); break;
-						case 8: cell_text = std::to_string(status.num_seeds) + "/" + std::to_string(status.num_peers) + " (" + std::to_string(status.num_seeds / (float)status.num_peers) + ")"; break;
-						}
-						if (col != 3)
-						{
-							if (ImGui::Selectable(cell_text.c_str(), this->selectedTorrent == handle, ImGuiSelectableFlags_SpanAllColumns))
-							{
-								this->selectedTorrent = handle;
-							}
-						}
-						ImGui::SameLine();
-					}
-					if (ImGui::BeginPopupContextItem("##context", ImGuiPopupFlags_MouseButtonRight))
-					{
-						if (ImGui::MenuItem("Open"))
-						{}
-						if (ImGui::MenuItem("Open Containing Folder"))
-						{
-							#ifdef _WIN32
-							std::string command = "explorer.exe \"" + status.save_path + "\"";
-							#elif __APPLE__
-							std::string command = "open \"" + status.save_path + "\"";
-							#elif __linux__
-							std::string command = "xdg-open \"" + status.save_path + "\"";
-							#endif
-							int ret = system(command.c_str());
-							if (ret != 0)
-							{
-								std::cerr << "Failed to open containing folder" << std::endl;
-							}
-						}
-						ImGui::Separator();
-						if (ImGui::MenuItem("Copy Magnet URI"))
-						{
-							ImGui::SetClipboardText(lt::make_magnet_uri(handle).c_str());
-						}
-						ImGui::Separator();
-						if (ImGui::MenuItem("Force Start"))
-						{
-							handle.force_recheck();
-							handle.resume();
-						}
-						if (ImGui::MenuItem("Start"))
-						{
-							handle.resume();
-						}
-						if (ImGui::MenuItem("Pause"))
-						{
-							if (handle.flags() & lt::torrent_flags::paused)
-								handle.resume();
-							else
-								handle.pause();
-						}
-						if (ImGui::MenuItem("Stop"))
-						{
-							handle.pause();
-							handle.force_recheck();
-						}
-						ImGui::Separator();
-						if (ImGui::MenuItem("Move Up Queue"))
-						{
-							handle.queue_position_up();
-						}
-						if (ImGui::MenuItem("Move Down Queue"))
-						{
-							handle.queue_position_down();
-						}
-						ImGui::Separator();
-						if (ImGui::MenuItem("Remove"))
-						{
-							this->torrentsToRemove.emplace_back(info_hash, REMOVE_TORRENT);
-						}
-						if (ImGui::BeginMenu("Remove And"))
-						{
-							if (ImGui::MenuItem("Delete .torrent"))
-							{
-								this->torrentsToRemove.emplace_back(info_hash, REMOVE_TORRENT_FILES);
-							}
-							if (ImGui::MenuItem("Delete .torrent + Data"))
-							{
-								this->torrentsToRemove.emplace_back(info_hash, REMOVE_TORRENT_FILES_AND_DATA);
-							}
-							if (ImGui::MenuItem("Delete Data"))
-							{
-								this->torrentsToRemove.emplace_back(info_hash, REMOVE_TORRENT_DATA);
-							}
-							ImGui::EndMenu();
-						}
-						ImGui::Separator();
-						if (ImGui::MenuItem("Update Tracker"))
-						{
-							handle.force_reannounce();
-						}
-						ImGui::Separator();
-						if (ImGui::MenuItem("Properties"))
-						{}
-						ImGui::EndPopup();
-					}
-					ImGui::PopID();
-				}
-			}
-			ImGui::EndTable();
-		}
-		ImGui::End();
-	}
-}
-
-void	UI::displayTorrentDetails()
-{
-	ImGui::Begin("Torrent Details");
-	if (this->selectedTorrent.is_valid())
-	{
-		lt::torrent_status	status = this->selectedTorrent.status();
-		ImGui::Text("Name: %s", status.name.c_str());
-		ImGui::Text("Size: %s", formatBytes(status.total_wanted, false).c_str());
-		ImGui::Text("Progress: %.2f%%", status.progress * 100);
-		ImGui::Text("Status: %s", torrentStateToString(status.state, this->selectedTorrent.flags()).c_str());
-		ImGui::Text("Down Speed: %s", formatBytes(status.download_payload_rate, true).c_str());
-		ImGui::Text("Up Speed: %s", formatBytes(status.upload_payload_rate, true).c_str());
-		ImGui::Text("ETA: %s", computeETA(&status).c_str());
-		ImGui::Text("Seeds/Peers: %d/%d (%.2f)", status.num_seeds, status.num_peers, status.num_seeds / (float)status.num_peers);
-	}
-	else
-	{
-		ImGui::Text("No torrent selected");
-	}
-	ImGui::End();
-}
-
-void	UI::shutdown()
-{
-	// Shutdown platform/renderer bindings
-	ImGui_ImplOpenGL3_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
-
-	// Shutdown ImGui context
-	ImGui::DestroyContext();
-}
-
-const ImGuiIO&	UI::getIO() const
-{
-	return (io);
-}
-
-bool	UI::shouldExit() const
-{
-	return (exitRequested);
-}
-
-
-// Layout Management
-void	UI::saveLayout(const std::string& configFilePath)
-{
-	size_t	size;
-	const char*	data = ImGui::SaveIniSettingsToMemory(&size);
-
-	std::ofstream file(configFilePath, std::ios::out | std::ios::binary);
-	if (file.is_open())
-	{
-		file.write(data, size);
-		file.close();
-	}
-
-	ImGui::MemFree((void*)data);
-}
-
-void	UI::loadLayout()
-{
-	const std::string configPath = "config";
-	if (!std::filesystem::exists(configPath))
-	{
-		std::cerr << "Config folder not found" << std::endl;
-		return;
-	}
-
-	for (const auto& entry : std::filesystem::directory_iterator(configPath))
-	{
-		if (entry.path().extension() == ".ini")
-		{
-			if (ImGui::MenuItem(entry.path().filename().string().c_str()))
-			{
-				ImGui::LoadIniSettingsFromDisk(entry.path().string().c_str());
-			}
-		}
-	}
-}
-
-void	UI::resetLayout()
-{
-	ImGui::LoadIniSettingsFromDisk("config/default_layout.ini");
-}
-
-// Modal Windows
-void	UI::addTorrentModal()
-{
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
@@ -475,8 +182,13 @@ void	UI::addTorrentModal()
 	}
 }
 
-void	UI::addMagnetTorrentModal()
+void UI::handleAddMagnetTorrentModal(bool &showMagnetTorrentPopup)
 {
+	if (showMagnetTorrentPopup)
+	{
+		ImGui::OpenPopup("Add Magnet Torrent");
+	}
+
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
@@ -503,7 +215,485 @@ void	UI::addMagnetTorrentModal()
 	}
 }
 
-void	UI::askSavePathModal()
+void UI::handleRemoveTorrentModal()
+{
+	if (this->torrentsToRemove.size() > 0)
+	{
+		ImGui::OpenPopup("Remove Torrent");
+	}
+	removeTorrentModal();
+}
+
+void UI::handleAskSavePathModal()
+{
+	if (!this->torrentToAdd.second.empty() && addTorrentCallback)
+	{
+		IGFD::FileDialogConfig config;
+		config.path = savePath.empty() ? defaultSavePath : savePath;
+		config.flags = ImGuiFileDialogFlags_Modal | ImGuiFileDialogFlags_ShowDevicesButton | ImGuiFileDialogFlags_DontShowHiddenFiles;
+		ImGuiFileDialog::Instance()->OpenDialog("ChooseSavePath", "Choose a directory to save the torrent", nullptr, config);
+	}
+	askSavePathModal();
+}
+
+void UI::displayMenuBar(bool &showTorrentPopup, bool &showMagnetTorrentPopup)
+{
+	if (ImGui::BeginMainMenuBar())
+	{
+		if (ImGui::BeginMenu("File"))
+		{
+			const std::vector<MenuItem> menuItems = {
+				{"Add a torrent...", "CTRL+O", [&]()
+				 { showTorrentPopup = true; }},
+				{"Add a magnet link...", "CTRL+U", [&]()
+				 { showMagnetTorrentPopup = true; }},
+				{"Preferences", "CTRL+P", []() {}},
+				{"Exit", "ALT+F4", [&]()
+				 { this->exitRequested = true; }},
+			};
+
+			for (const auto &item : menuItems)
+			{
+				if (ImGui::MenuItem(item.label.c_str(), item.shortcut.c_str()))
+				{
+					item.action();
+				}
+			}
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Help"))
+		{
+			if (ImGui::MenuItem("About"))
+				ImGui::ShowAboutWindow();
+			ImGui::EndMenu();
+		}
+		ImGui::EndMainMenuBar();
+	}
+}
+
+std::string UI::torrentStateToString(lt::torrent_status::state_t state, lt::torrent_flags_t flags)
+{
+	if (flags & lt::torrent_flags::paused)
+		return "Paused";
+	switch (state)
+	{
+	case lt::torrent_status::downloading_metadata:
+		return "Downloading metadata";
+	case lt::torrent_status::downloading:
+		return "Downloading";
+	case lt::torrent_status::finished:
+		return "Finished";
+	case lt::torrent_status::seeding:
+		return "Seeding";
+	case lt::torrent_status::checking_files:
+		return "Checking files";
+	case lt::torrent_status::checking_resume_data:
+		return "Checking resume data";
+	default:
+		return "Unknown";
+	}
+}
+
+std::string UI::formatBytes(size_t bytes, bool speed)
+{
+	const char *units[] = {"B", "KB", "MB", "GB", "TB"};
+	size_t size = bytes;
+	size_t unitIndex = 0;
+
+	while (size >= 1024 && unitIndex < sizeof(units) / sizeof(units[0]) - 1)
+	{
+		size /= 1024;
+		unitIndex++;
+	}
+
+	std::ostringstream oss;
+	oss << std::fixed << std::setprecision(2) << size << " " << units[unitIndex];
+	if (speed)
+		oss << "/s";
+	return oss.str();
+}
+
+std::string UI::computeETA(const lt::torrent_status &status) const
+{
+	if (status.state == lt::torrent_status::downloading && status.download_payload_rate > 0)
+	{
+		int64_t secondsLeft = (status.total_wanted - status.total_wanted_done) / status.download_payload_rate;
+		int64_t minutesLeft = secondsLeft / 60;
+		int64_t hoursLeft = minutesLeft / 60;
+		int64_t daysLeft = hoursLeft / 24;
+
+		if (daysLeft > 0)
+			return std::to_string(daysLeft) + " days";
+		if (hoursLeft > 0)
+			return std::to_string(hoursLeft) + " hours";
+		if (minutesLeft > 0)
+			return std::to_string(minutesLeft) + " minutes";
+		return std::to_string(secondsLeft) + " seconds";
+	}
+	return "N/A";
+}
+
+static std::string sha1HashToHex(const lt::sha1_hash &hash)
+{
+	const char *hexChars = "0123456789ABCDEF";
+	constexpr std::size_t hashSize = lt::sha1_hash::size();
+	std::string hexString(hashSize * 2, ' ');
+
+	for (std::size_t i = 0; i < hashSize; ++i)
+	{
+		const unsigned char byte = hash[i];
+		hexString[i * 2] = hexChars[byte >> 4];
+		hexString[i * 2 + 1] = hexChars[byte & 0x0F];
+	}
+
+	return hexString;
+}
+
+void UI::displayTorrentList()
+{
+	if (ImGui::Begin("Torrent List"))
+	{
+		if (ImGui::BeginTable("Torrents", 9, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+		{
+			displayTorrentTableHeader();
+			displayTorrentTableBody();
+			ImGui::EndTable();
+		}
+	}
+	ImGui::End();
+}
+
+void UI::displayTorrentTableHeader()
+{
+	ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed);
+	ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+	ImGui::TableSetupColumn("Size");
+	ImGui::TableSetupColumn("Progress");
+	ImGui::TableSetupColumn("Status");
+	ImGui::TableSetupColumn("Down Speed");
+	ImGui::TableSetupColumn("Up Speed");
+	ImGui::TableSetupColumn("ETA");
+	ImGui::TableSetupColumn("Seeds/Peers");
+	ImGui::TableHeadersRow();
+}
+
+void UI::displayTorrentTableBody()
+{
+	if (getTorrentsCallback)
+	{
+		auto &torrents = getTorrentsCallback();
+		for (const auto &[info_hash, handle] : torrents)
+		{
+			displayTorrentTableRow(handle, info_hash);
+		}
+	}
+}
+
+void UI::displayTorrentTableRow(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash)
+{
+	lt::torrent_status status = handle.status();
+	ImGui::PushID(&handle);
+	ImGui::TableNextRow();
+	for (int col = 0; col < 9; col++)
+	{
+		ImGui::TableSetColumnIndex(col);
+		std::string cell_text = getTorrentCellText(status, col, handle);
+		if (col != 3)
+		{
+			if (ImGui::Selectable(cell_text.c_str(), this->selectedTorrent == handle, ImGuiSelectableFlags_SpanAllColumns))
+			{
+				this->selectedTorrent = handle;
+			}
+		}
+		else
+		{
+			ImGui::ProgressBar(status.progress);
+		}
+		ImGui::SameLine();
+	}
+	displayTorrentContextMenu(handle, info_hash);
+	ImGui::PopID();
+}
+
+std::string UI::getTorrentCellText(const lt::torrent_status &status, int column, const lt::torrent_handle &handle)
+{
+	switch (column)
+	{
+	case 0:
+		return std::to_string(static_cast<int>(status.queue_position) + 1);
+	case 1:
+		return status.name;
+	case 2:
+		return formatBytes(status.total_wanted, false);
+	case 4:
+		return torrentStateToString(status.state, handle.flags());
+	case 5:
+		return formatBytes(status.download_payload_rate, true);
+	case 6:
+		return formatBytes(status.upload_payload_rate, true);
+	case 7:
+		return computeETA(status);
+	case 8:
+		return std::to_string(status.num_seeds) + "/" + std::to_string(status.num_peers) + " (" + std::to_string(status.num_seeds / (float)status.num_peers) + ")";
+	default:
+		return "";
+	}
+}
+
+void UI::displayTorrentContextMenu(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash)
+{
+	if (ImGui::BeginPopupContextItem("##context", ImGuiPopupFlags_MouseButtonRight))
+	{
+		const std::vector<MenuItem> menuItems = {
+			{"Open", "", []() {}},
+			{"Open Containing Folder", "", [=]()
+			 {
+#ifdef _WIN32
+				 std::string command = "explorer.exe \"" + handle.status().save_path + "\"";
+#elif __APPLE__
+				std::string command = "open \"" + handle.status().save_path + "\"";
+#elif __linux__
+				std::string command = "xdg-open \"" + handle.status().save_path + "\"";
+#endif
+				 int ret = system(command.c_str());
+				 if (ret != 0)
+				 {
+					 std::cerr << "Failed to open containing folder" << std::endl;
+				 }
+			 }},
+			{"Copy Magnet URI", "", [=]()
+			 { ImGui::SetClipboardText(lt::make_magnet_uri(handle).c_str()); }},
+			{"Force Start", "", [=]()
+			 { handle.force_recheck(); handle.resume(); }},
+			{"Start", "", [=]()
+			 { handle.resume(); }},
+			{"Pause", "", [=]()
+			 { if (handle.flags() & lt::torrent_flags::paused) handle.resume(); else handle.pause(); }},
+			{"Stop", "", [=]()
+			 { handle.pause(); handle.force_recheck(); }},
+			{"Move Up Queue", "", [=]()
+			 { handle.queue_position_up(); }},
+			{"Move Down Queue", "", [=]()
+			 { handle.queue_position_down(); }},
+			{"Remove", "", [=]()
+			 { this->torrentsToRemove.emplace_back(info_hash, REMOVE_TORRENT); }},
+			{"Update Tracker", "", [=]()
+			 { handle.force_reannounce(); }},
+			{"Properties", "", []() {}},
+		};
+
+		for (const auto &item : menuItems)
+		{
+			if (ImGui::MenuItem(item.label.c_str(), item.shortcut.c_str()))
+			{
+				item.action();
+			}
+		}
+		ImGui::EndPopup();
+	}
+}
+
+void UI::displayTorrentDetails()
+{
+	ImGui::Begin("Torrent Details");
+	if (this->selectedTorrent.is_valid())
+	{
+		lt::torrent_status status = this->selectedTorrent.status();
+		if (ImGui::BeginTabBar("TorrentDetailsTabBar"))
+		{
+			if (ImGui::BeginTabItem("General"))
+			{
+				displayTorrentDetails_General(status);
+				ImGui::EndTabItem();
+			}
+			if (ImGui::BeginTabItem("Files"))
+			{
+				displayTorrentDetails_Files();
+				ImGui::EndTabItem();
+			}
+			if (ImGui::BeginTabItem("Peers"))
+			{
+				displayTorrentDetails_Peers();
+				ImGui::EndTabItem();
+			}
+			if (ImGui::BeginTabItem("Trackers"))
+			{
+				displayTorrentDetails_Trackers();
+				ImGui::EndTabItem();
+			}
+			ImGui::EndTabBar();
+		}
+	}
+	else
+	{
+		ImGui::Text("No torrent selected");
+	}
+	ImGui::End();
+}
+
+void UI::displayTorrentDetails_General(const lt::torrent_status &status)
+{
+	displayTorrentDetailsContent(status);
+}
+
+void UI::displayTorrentDetails_Files()
+{
+	if (!selectedTorrent.is_valid())
+		return;
+
+	auto file_storage = selectedTorrent.torrent_file()->files();
+	std::vector<std::int64_t> file_progress;
+	selectedTorrent.file_progress(file_progress);
+
+	if (ImGui::BeginTable("Files", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+	{
+		ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableSetupColumn("Size");
+		ImGui::TableSetupColumn("Progress");
+		ImGui::TableHeadersRow();
+
+		for (int i = 0; i < file_storage.num_files(); ++i)
+		{
+			lt::file_index_t index(i);
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("%s", file_storage.file_name(index).to_string().c_str());
+			ImGui::TableSetColumnIndex(1);
+			ImGui::Text("%s", formatBytes(file_storage.file_size(index), false).c_str());
+			ImGui::TableSetColumnIndex(2);
+			if (file_storage.file_size(index) > 0)
+				ImGui::ProgressBar(static_cast<float>(file_progress[i]) / file_storage.file_size(index));
+			else
+				ImGui::ProgressBar(0.0f);
+		}
+		ImGui::EndTable();
+	}
+}
+
+void UI::displayTorrentDetails_Peers()
+{
+	if (!selectedTorrent.is_valid())
+		return;
+
+	std::vector<lt::peer_info> peers;
+	selectedTorrent.get_peer_info(peers);
+
+	if (ImGui::BeginTable("Peers", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+	{
+		ImGui::TableSetupColumn("IP");
+		ImGui::TableSetupColumn("Client");
+		ImGui::TableSetupColumn("Flags");
+		ImGui::TableSetupColumn("Down Speed");
+		ImGui::TableSetupColumn("Up Speed");
+		ImGui::TableHeadersRow();
+
+		for (const auto &peer : peers)
+		{
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("%s", peer.ip.address().to_string().c_str());
+			ImGui::TableSetColumnIndex(1);
+			ImGui::Text("%s", std::string(peer.client, 8).c_str());
+			ImGui::TableSetColumnIndex(2);
+			// TODO: Display flags
+			ImGui::Text("TODO");
+			ImGui::TableSetColumnIndex(3);
+			ImGui::Text("%s", formatBytes(peer.payload_down_speed, true).c_str());
+			ImGui::TableSetColumnIndex(4);
+			ImGui::Text("%s", formatBytes(peer.payload_up_speed, true).c_str());
+		}
+		ImGui::EndTable();
+	}
+}
+
+void UI::displayTorrentDetails_Trackers()
+{
+	if (!selectedTorrent.is_valid())
+		return;
+
+	auto trackers = selectedTorrent.trackers();
+
+	if (ImGui::BeginTable("Trackers", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+	{
+		ImGui::TableSetupColumn("URL");
+		ImGui::TableSetupColumn("Status");
+		ImGui::TableHeadersRow();
+
+		for (const auto &tracker : trackers)
+		{
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("%s", tracker.url.c_str());
+			ImGui::TableSetColumnIndex(1);
+			ImGui::Text("%s", tracker.verified ? "Verified" : "Not Verified");
+		}
+		ImGui::EndTable();
+	}
+}
+
+void UI::displayCategories()
+{
+	ImGui::Begin("Categories");
+	ImGui::Text("All");
+	ImGui::Text("Downloading");
+	ImGui::Text("Seeding");
+	ImGui::Text("Completed");
+	ImGui::Text("Paused");
+	ImGui::Text("Active");
+	ImGui::Text("Inactive");
+	ImGui::End();
+}
+
+void UI::displayTorrentDetailsContent(const lt::torrent_status &status)
+{
+	const std::vector<std::pair<std::string, std::function<std::string()>>> details = {
+		{"Name", [&]()
+		 { return status.name; }},
+		{"Size", [&]()
+		 { return this->formatBytes(status.total_wanted, false); }},
+		{"Progress", [&]()
+		 { return std::to_string(status.progress * 100) + "%%"; }},
+		{"Status", [&]()
+		 { return this->torrentStateToString(status.state, this->selectedTorrent.flags()); }},
+		{"Down Speed", [&]()
+		 { return this->formatBytes(status.download_payload_rate, true); }},
+		{"Up Speed", [&]()
+		 { return this->formatBytes(status.upload_payload_rate, true); }},
+		{"ETA", [&]()
+		 { return this->computeETA(status); }},
+		{"Seeds/Peers", [&]()
+		 { return std::to_string(status.num_seeds) + "/" + std::to_string(status.num_peers) + " (" + std::to_string(status.num_seeds / (float)status.num_peers) + ")"; }},
+	};
+
+	for (const auto &detail : details)
+	{
+		ImGui::Text("%s: %s", detail.first.c_str(), detail.second().c_str());
+	}
+}
+
+void UI::shutdown()
+{
+	// Shutdown platform/renderer bindings
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+
+	// Shutdown ImGui context
+	ImGui::DestroyContext();
+}
+
+const ImGuiIO &UI::getIO() const
+{
+	return (io);
+}
+
+bool UI::shouldExit() const
+{
+	return (exitRequested);
+}
+
+// Modal Windows
+
+void UI::askSavePathModal()
 {
 	if (torrentToAdd.second.empty())
 		return;
@@ -543,7 +733,7 @@ void	UI::askSavePathModal()
 	}
 }
 
-void	UI::renderPopupFailure(const std::string &message)
+void UI::renderPopupFailure(const std::string &message)
 {
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -567,7 +757,7 @@ void	UI::renderPopupFailure(const std::string &message)
 	}
 }
 
-void	UI::removeTorrentModal()
+void UI::removeTorrentModal()
 {
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -579,7 +769,7 @@ void	UI::removeTorrentModal()
 
 		if (ImGui::Button("OK", ImVec2(120, 0)))
 		{
-			for (const auto& removalInfo : this->torrentsToRemove)
+			for (const auto &removalInfo : this->torrentsToRemove)
 			{
 				if (removeTorrentCallback)
 				{
@@ -606,22 +796,22 @@ void	UI::removeTorrentModal()
 }
 
 // Callbacks
-void	UI::setAddTorrentCallback(std::function<Result(const std::string&, const std::string&)> callback)
+void UI::setAddTorrentCallback(std::function<Result(const std::string &, const std::string &)> callback)
 {
 	this->addTorrentCallback = callback;
 }
 
-void	UI::setAddMagnetLinkCallback(std::function<Result(const std::string&, const std::string&)> callback)
+void UI::setAddMagnetLinkCallback(std::function<Result(const std::string &, const std::string &)> callback)
 {
 	this->addMagnetLinkCallback = callback;
 }
 
-void	UI::setGetTorrentsCallback(std::function<const std::unordered_map<lt::sha1_hash, lt::torrent_handle>&()> callback)
+void UI::setGetTorrentsCallback(std::function<const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &()> callback)
 {
 	this->getTorrentsCallback = callback;
 }
 
-void	UI::setRemoveTorrentCallback(std::function<Result(const lt::sha1_hash, RemoveTorrentType)> callback)
+void UI::setRemoveTorrentCallback(std::function<Result(const lt::sha1_hash, RemoveTorrentType)> callback)
 {
 	this->removeTorrentCallback = callback;
 }
