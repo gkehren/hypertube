@@ -7,7 +7,7 @@ static void glfw_error_callback(int error, const char *description)
 	std::cerr << "GLFW Error " << error << ": " << description << std::endl;
 }
 
-App::App()
+App::App() : uiManager(torrentManager)
 {
 	glfwSetErrorCallback(glfw_error_callback);
 	if (!glfwInit())
@@ -25,16 +25,6 @@ App::App()
 	}
 	glfwMakeContextCurrent(window);
 	glfwSwapInterval(1); // Enable vsync
-
-	// Initialize UI Callbacks
-	uiManager.setGetTorrentsCallback([this]() -> const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &
-									 { return this->torrentManager.getTorrents(); });
-	uiManager.setAddTorrentCallback([this](const std::string &torrentPath, const std::string &savePath) -> Result
-									{ return this->torrentManager.addTorrent(torrentPath, savePath); });
-	uiManager.setAddMagnetLinkCallback([this](const std::string &magnetUri, const std::string &savePath) -> Result
-									   { return this->torrentManager.addMagnetTorrent(magnetUri, savePath); });
-	uiManager.setRemoveTorrentCallback([this](const lt::sha1_hash hash, RemoveTorrentType removeType) -> Result
-									   { return this->torrentManager.removeTorrent(hash, removeType); });
 
 	configManager.load("./config/torrents.json");
 	torrentManager.addTorrentsFromVec(configManager.loadTorrents("./config/torrents.json"));

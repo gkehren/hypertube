@@ -6,6 +6,11 @@
 #include <iostream>
 #include <chrono>
 
+UIManager::UIManager(TorrentManager &torrentManager)
+	: torrentManager(torrentManager)
+{
+}
+
 void UIManager::init(GLFWwindow *window)
 {
 	initImGui(window);
@@ -167,7 +172,7 @@ void UIManager::handleAddTorrentModal(bool &showTorrentPopup)
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-	if (ImGuiFileDialog::Instance()->Display("ChooseTorrentFile", ImGuiWindowFlags_NoCollapse, ImVec2(500, 300)))
+	if (ImGuiFileDialog::Instance()->Display("ChooseTorrentFile", ImGuiWindowFlags_NoCollapse, ImVec2(800, 600)))
 	{
 		if (ImGuiFileDialog::Instance()->IsOk())
 		{
@@ -226,7 +231,7 @@ void UIManager::handleRemoveTorrentModal()
 
 void UIManager::handleAskSavePathModal()
 {
-	if (!this->torrentToAdd.second.empty() && addTorrentCallback)
+	if (!this->torrentToAdd.second.empty())
 	{
 		IGFD::FileDialogConfig config;
 		config.path = savePath.empty() ? defaultSavePath : savePath;
@@ -379,13 +384,10 @@ void UIManager::displayTorrentTableHeader()
 
 void UIManager::displayTorrentTableBody()
 {
-	if (getTorrentsCallback)
+	auto &torrents = torrentManager.getTorrents();
+	for (const auto &[info_hash, handle] : torrents)
 	{
-		auto &torrents = getTorrentsCallback();
-		for (const auto &[info_hash, handle] : torrents)
-		{
-			displayTorrentTableRow(handle, info_hash);
-		}
+		displayTorrentTableRow(handle, info_hash);
 	}
 }
 
@@ -671,6 +673,16 @@ void UIManager::displayTorrentDetailsContent(const lt::torrent_status &status)
 	}
 }
 
+const ImGuiIO &UIManager::getIO() const
+{
+	return io;
+}
+
+bool UIManager::shouldExit() const
+{
+	return exitRequested;
+}
+
 void UIManager::shutdown()
 {
 	// Shutdown platform/renderer bindings
@@ -681,16 +693,6 @@ void UIManager::shutdown()
 	ImGui::DestroyContext();
 }
 
-const ImGuiIO &UIManager::getIO() const
-{
-	return (io);
-}
-
-bool UIManager::shouldExit() const
-{
-	return (exitRequested);
-}
-
 // Modal Windows
 
 void UIManager::askSavePathModal()
@@ -698,35 +700,28 @@ void UIManager::askSavePathModal()
 	if (torrentToAdd.second.empty())
 		return;
 
-	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(ImGui::GetMainViewport()->Size.x * 0.5f, ImGui::GetMainViewport()->Size.y * 0.6f), ImGuiCond_Appearing);
-
-	if (ImGuiFileDialog::Instance()->Display("ChooseSavePath", ImGuiWindowFlags_NoCollapse, ImVec2(500, 300)))
+	if (ImGuiFileDialog::Instance()->Display("ChooseSavePath", ImGuiWindowFlags_NoCollapse, ImVec2(800, 600)))
 	{
 		if (ImGuiFileDialog::Instance()->IsOk())
 		{
 			this->savePath = ImGuiFileDialog::Instance()->GetCurrentPath();
 			if (!savePath.empty())
 			{
-				if (addTorrentCallback && addMagnetLinkCallback)
+				Result result(true);
+				if (torrentToAdd.first)
 				{
-					Result result(true);
-					if (torrentToAdd.first)
-					{
-						result = addMagnetLinkCallback(torrentToAdd.second, savePath);
-					}
-					else
-					{
-						result = addTorrentCallback(torrentToAdd.second, savePath);
-					}
-					if (!result)
-					{
-						this->showFailurePopup = true;
-						this->failurePopupMessage = result.message;
-					}
-					torrentToAdd.second.clear();
+					result = torrentManager.addMagnetTorrent(torrentToAdd.second, savePath);
 				}
+				else
+				{
+					result = torrentManager.addTorrent(torrentToAdd.second, savePath);
+				}
+				if (!result)
+				{
+					this->showFailurePopup = true;
+					this->failurePopupMessage = result.message;
+				}
+				torrentToAdd.second.clear();
 			}
 			ImGuiFileDialog::Instance()->Close();
 		}
@@ -772,14 +767,11 @@ void UIManager::removeTorrentModal()
 		{
 			for (const auto &removalInfo : this->torrentsToRemove)
 			{
-				if (removeTorrentCallback)
+				Result result = torrentManager.removeTorrent(removalInfo.hash, removalInfo.removeType);
+				if (!result)
 				{
-					Result result = removeTorrentCallback(removalInfo.hash, removalInfo.removeType);
-					if (!result)
-					{
-						this->showFailurePopup = true;
-						this->failurePopupMessage = result.message;
-					}
+					this->showFailurePopup = true;
+					this->failurePopupMessage = result.message;
 				}
 			}
 			this->torrentsToRemove.clear();
@@ -794,25 +786,4 @@ void UIManager::removeTorrentModal()
 		}
 		ImGui::EndPopup();
 	}
-}
-
-// Callbacks
-void UIManager::setAddTorrentCallback(std::function<Result(const std::string &, const std::string &)> callback)
-{
-	this->addTorrentCallback = callback;
-}
-
-void UIManager::setAddMagnetLinkCallback(std::function<Result(const std::string &, const std::string &)> callback)
-{
-	this->addMagnetLinkCallback = callback;
-}
-
-void UIManager::setGetTorrentsCallback(std::function<const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &()> callback)
-{
-	this->getTorrentsCallback = callback;
-}
-
-void UIManager::setRemoveTorrentCallback(std::function<Result(const lt::sha1_hash, RemoveTorrentType)> callback)
-{
-	this->removeTorrentCallback = callback;
 }

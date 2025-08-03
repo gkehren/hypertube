@@ -32,21 +32,19 @@ struct TorrentRemovalInfo
 class UIManager
 {
 public:
+	UIManager(TorrentManager &torrentManager);
+	~UIManager() = default;
+
 	void init(GLFWwindow *window);
 	void initImGui(GLFWwindow *window);
 	void setDefaultSavePath();
 	std::string torrentStateToString(lt::torrent_status::state_t state, lt::torrent_flags_t flags);
 	std::string formatBytes(size_t bytes, bool speed);
 	std::string computeETA(const lt::torrent_status &status) const;
-	std::string sha1HashToHex(const lt::sha1_hash &hash);
 	void renderFrame(GLFWwindow *window, const ImVec4 &clear_color);
 	void shutdown();
 	const ImGuiIO &getIO() const;
 	bool shouldExit() const;
-	void setAddTorrentCallback(std::function<Result(const std::string &, const std::string &)> callback);
-	void setAddMagnetLinkCallback(std::function<Result(const std::string &, const std::string &)> callback);
-	void setGetTorrentsCallback(std::function<const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &()> callback);
-	void setRemoveTorrentCallback(std::function<Result(const lt::sha1_hash, RemoveTorrentType)> callback);
 
 private:
 	ImGuiIO io;
@@ -60,6 +58,8 @@ private:
 
 	std::pair<bool, std::string> torrentToAdd;
 	std::vector<TorrentRemovalInfo> torrentsToRemove;
+
+	TorrentManager &torrentManager;
 
 	void displayCategories();
 	void displayTorrentList();
@@ -85,10 +85,4 @@ private:
 	void askSavePathModal();
 	void renderPopupFailure(const std::string &message);
 	void removeTorrentModal();
-
-	// Callbacks
-	std::function<Result(const std::string &, const std::string &)> addTorrentCallback;
-	std::function<Result(const std::string &, const std::string &)> addMagnetLinkCallback;
-	std::function<const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &()> getTorrentsCallback;
-	std::function<Result(const lt::sha1_hash, RemoveTorrentType)> removeTorrentCallback;
 };
