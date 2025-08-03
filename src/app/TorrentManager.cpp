@@ -1,58 +1,58 @@
-#include "torrent_manager.hpp"
+#include "TorrentManager.hpp"
 #include <iostream>
 
-Result	TorrentManager::addTorrent(const std::string& torrentPath, const std::string& savePath)
+Result TorrentManager::addTorrent(const std::string &torrentPath, const std::string &savePath)
 {
 	try
 	{
-		lt::add_torrent_params	params;
+		lt::add_torrent_params params;
 		params.save_path = savePath;
 		params.ti = std::make_shared<lt::torrent_info>(torrentPath);
-		lt::torrent_handle	handle = this->session.add_torrent(params);
+		lt::torrent_handle handle = this->session.add_torrent(params);
 		this->torrents[handle.info_hash()] = handle;
 
 		std::cout << "Added torrent from file: " << handle.status().name << std::endl;
 		return Result::Success();
 	}
-	catch (const std::exception& e)
+	catch (const std::exception &e)
 	{
 		std::cerr << "Failed to add torrent: " << e.what() << std::endl;
 		return Result::Failure(e.what());
 	}
 }
 
-Result	TorrentManager::addMagnetTorrent(const std::string& magnetUri, const std::string& savePath)
+Result TorrentManager::addMagnetTorrent(const std::string &magnetUri, const std::string &savePath)
 {
 	try
 	{
 		std::cout << "Adding magnet torrent: " << magnetUri << std::endl;
-		lt::add_torrent_params	params = lt::parse_magnet_uri(magnetUri);
+		lt::add_torrent_params params = lt::parse_magnet_uri(magnetUri);
 		params.save_path = savePath;
-		lt::torrent_handle	handle = this->session.add_torrent(params);
+		lt::torrent_handle handle = this->session.add_torrent(params);
 		this->torrents[handle.info_hash()] = handle;
 
 		std::cout << "Added magnet torrent: " << handle.status().name << std::endl;
 		return Result::Success();
 	}
-	catch (const std::exception& e)
+	catch (const std::exception &e)
 	{
 		std::cerr << "Failed to add magnet torrent: " << e.what() << std::endl;
 		return Result::Failure(e.what());
 	}
 }
 
-void	TorrentManager::addTorrentsFromVec(const std::vector<std::string> torrents)
+void TorrentManager::addTorrentsFromVec(const std::vector<std::string> torrents)
 {
 	auto it = torrents.begin();
 	while (it != torrents.end())
 	{
-		std::string	magnetUri = *it++;
-		std::string	savePath = *it++;
+		std::string magnetUri = *it++;
+		std::string savePath = *it++;
 		this->addMagnetTorrent(magnetUri, savePath);
 	}
 }
 
-Result	TorrentManager::removeTorrent(const lt::sha1_hash hash, RemoveTorrentType removeType)
+Result TorrentManager::removeTorrent(const lt::sha1_hash hash, RemoveTorrentType removeType)
 {
 	auto it = this->torrents.find(hash);
 	if (it != this->torrents.end())
@@ -74,7 +74,7 @@ Result	TorrentManager::removeTorrent(const lt::sha1_hash hash, RemoveTorrentType
 	}
 }
 
-const std::unordered_map<lt::sha1_hash, lt::torrent_handle>& TorrentManager::getTorrents() const
+const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &TorrentManager::getTorrents() const
 {
 	return this->torrents;
 }

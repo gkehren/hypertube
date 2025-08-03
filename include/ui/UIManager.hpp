@@ -10,7 +10,7 @@
 #include <GLFW/glfw3.h>
 #include <functional>
 #include <string>
-#include "torrent_manager.hpp"
+#include "TorrentManager.hpp"
 #include "Result.hpp"
 
 struct MenuItem
@@ -29,7 +29,7 @@ struct TorrentRemovalInfo
 		: hash(hash), removeType(removeType) {}
 };
 
-class UI
+class UIManager
 {
 public:
 	void init(GLFWwindow *window);

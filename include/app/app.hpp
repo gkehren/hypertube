@@ -1,20 +1,20 @@
 #pragma once
 
-#include "ui.hpp"
-#include "config_manager.hpp"
-#include "torrent_manager.hpp"
+#include "UIManager.hpp"
+#include "ConfigManager.hpp"
+#include "TorrentManager.hpp"
 
 class App
 {
-	public:
-		App();
-		~App();
+public:
+	App();
+	~App();
 
-		void	run();
+	void run();
 
-	private:
-		GLFWwindow*		window;
-		ConfigManager	configManager;
-		TorrentManager	torrentManager;
-		UI				ui;
+private:
+	GLFWwindow *window;
+	ConfigManager configManager;
+	TorrentManager torrentManager;
+	UIManager uiManager;
 };

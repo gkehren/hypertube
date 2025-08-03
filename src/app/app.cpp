@@ -1,8 +1,8 @@
-#include "app.hpp"
+#include "App.hpp"
 #include <stdexcept>
 #include <iostream>
 
-static void glfw_error_callback(int error, const char* description)
+static void glfw_error_callback(int error, const char *description)
 {
 	std::cerr << "GLFW Error " << error << ": " << description << std::endl;
 }
@@ -27,18 +27,14 @@ App::App()
 	glfwSwapInterval(1); // Enable vsync
 
 	// Initialize UI Callbacks
-	ui.setGetTorrentsCallback([this]() -> const std::unordered_map<lt::sha1_hash, lt::torrent_handle>& {
-		return this->torrentManager.getTorrents();
-	});
-	ui.setAddTorrentCallback([this](const std::string& torrentPath, const std::string& savePath) -> Result {
-		return this->torrentManager.addTorrent(torrentPath, savePath);
-	});
-	ui.setAddMagnetLinkCallback([this](const std::string& magnetUri, const std::string& savePath) -> Result {
-		return this->torrentManager.addMagnetTorrent(magnetUri, savePath);
-	});
-	ui.setRemoveTorrentCallback([this](const lt::sha1_hash hash, RemoveTorrentType removeType) -> Result {
-		return this->torrentManager.removeTorrent(hash, removeType);
-	});
+	uiManager.setGetTorrentsCallback([this]() -> const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &
+									 { return this->torrentManager.getTorrents(); });
+	uiManager.setAddTorrentCallback([this](const std::string &torrentPath, const std::string &savePath) -> Result
+									{ return this->torrentManager.addTorrent(torrentPath, savePath); });
+	uiManager.setAddMagnetLinkCallback([this](const std::string &magnetUri, const std::string &savePath) -> Result
+									   { return this->torrentManager.addMagnetTorrent(magnetUri, savePath); });
+	uiManager.setRemoveTorrentCallback([this](const lt::sha1_hash hash, RemoveTorrentType removeType) -> Result
+									   { return this->torrentManager.removeTorrent(hash, removeType); });
 
 	configManager.load("./config/torrents.json");
 	torrentManager.addTorrentsFromVec(configManager.loadTorrents("./config/torrents.json"));
@@ -51,16 +47,16 @@ App::~App()
 	glfwTerminate();
 }
 
-void	App::run()
+void App::run()
 {
-	ui.init(window);
+	uiManager.init(window);
 
 	static const ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-	while (!glfwWindowShouldClose(window) && !ui.shouldExit())
+	while (!glfwWindowShouldClose(window) && !uiManager.shouldExit())
 	{
 		glfwPollEvents();
-		ui.renderFrame(window, clear_color);
+		uiManager.renderFrame(window, clear_color);
 		glfwSwapBuffers(window);
 	}
-	ui.shutdown();
+	uiManager.shutdown();
 }

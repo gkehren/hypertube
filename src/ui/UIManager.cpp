@@ -1,4 +1,4 @@
-#include "ui.hpp"
+#include "UIManager.hpp"
 #include "imgui_internal.h"
 #include <filesystem>
 #include <fstream>
@@ -6,13 +6,13 @@
 #include <iostream>
 #include <chrono>
 
-void UI::init(GLFWwindow *window)
+void UIManager::init(GLFWwindow *window)
 {
 	initImGui(window);
 	setDefaultSavePath();
 }
 
-void UI::setDefaultSavePath()
+void UIManager::setDefaultSavePath()
 {
 // Set defaultSavePath to downloads directory of the current user
 #ifdef _WIN32
@@ -24,7 +24,7 @@ void UI::setDefaultSavePath()
 #endif
 }
 
-void UI::initImGui(GLFWwindow *window)
+void UIManager::initImGui(GLFWwindow *window)
 {
 	// Initialize ImGui context
 	IMGUI_CHECKVERSION();
@@ -52,7 +52,7 @@ void UI::initImGui(GLFWwindow *window)
 	ImGui_ImplOpenGL3_Init("#version 330");
 }
 
-void UI::renderFrame(GLFWwindow *window, const ImVec4 &clear_color)
+void UIManager::renderFrame(GLFWwindow *window, const ImVec4 &clear_color)
 {
 	// Start the ImGui frame
 	ImGui_ImplOpenGL3_NewFrame();
@@ -131,7 +131,7 @@ void UI::renderFrame(GLFWwindow *window, const ImVec4 &clear_color)
 	}
 }
 
-void UI::setupDocking(ImGuiID dockspace_id)
+void UIManager::setupDocking(ImGuiID dockspace_id)
 {
 	ImGui::DockBuilderRemoveNode(dockspace_id);
 	ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
@@ -153,7 +153,7 @@ void UI::setupDocking(ImGuiID dockspace_id)
 	ImGui::DockBuilderFinish(dockspace_id);
 }
 
-void UI::handleAddTorrentModal(bool &showTorrentPopup)
+void UIManager::handleAddTorrentModal(bool &showTorrentPopup)
 {
 	if (showTorrentPopup)
 	{
@@ -167,7 +167,7 @@ void UI::handleAddTorrentModal(bool &showTorrentPopup)
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-	if (ImGuiFileDialog::Instance()->Display("ChooseTorrentFile"))
+	if (ImGuiFileDialog::Instance()->Display("ChooseTorrentFile", ImGuiWindowFlags_NoCollapse, ImVec2(500, 300)))
 	{
 		if (ImGuiFileDialog::Instance()->IsOk())
 		{
@@ -182,7 +182,7 @@ void UI::handleAddTorrentModal(bool &showTorrentPopup)
 	}
 }
 
-void UI::handleAddMagnetTorrentModal(bool &showMagnetTorrentPopup)
+void UIManager::handleAddMagnetTorrentModal(bool &showMagnetTorrentPopup)
 {
 	if (showMagnetTorrentPopup)
 	{
@@ -215,7 +215,7 @@ void UI::handleAddMagnetTorrentModal(bool &showMagnetTorrentPopup)
 	}
 }
 
-void UI::handleRemoveTorrentModal()
+void UIManager::handleRemoveTorrentModal()
 {
 	if (this->torrentsToRemove.size() > 0)
 	{
@@ -224,7 +224,7 @@ void UI::handleRemoveTorrentModal()
 	removeTorrentModal();
 }
 
-void UI::handleAskSavePathModal()
+void UIManager::handleAskSavePathModal()
 {
 	if (!this->torrentToAdd.second.empty() && addTorrentCallback)
 	{
@@ -236,7 +236,7 @@ void UI::handleAskSavePathModal()
 	askSavePathModal();
 }
 
-void UI::displayMenuBar(bool &showTorrentPopup, bool &showMagnetTorrentPopup)
+void UIManager::displayMenuBar(bool &showTorrentPopup, bool &showMagnetTorrentPopup)
 {
 	if (ImGui::BeginMainMenuBar())
 	{
@@ -271,7 +271,7 @@ void UI::displayMenuBar(bool &showTorrentPopup, bool &showMagnetTorrentPopup)
 	}
 }
 
-std::string UI::torrentStateToString(lt::torrent_status::state_t state, lt::torrent_flags_t flags)
+std::string UIManager::torrentStateToString(lt::torrent_status::state_t state, lt::torrent_flags_t flags)
 {
 	if (flags & lt::torrent_flags::paused)
 		return "Paused";
@@ -294,7 +294,7 @@ std::string UI::torrentStateToString(lt::torrent_status::state_t state, lt::torr
 	}
 }
 
-std::string UI::formatBytes(size_t bytes, bool speed)
+std::string UIManager::formatBytes(size_t bytes, bool speed)
 {
 	const char *units[] = {"B", "KB", "MB", "GB", "TB"};
 	size_t size = bytes;
@@ -313,7 +313,7 @@ std::string UI::formatBytes(size_t bytes, bool speed)
 	return oss.str();
 }
 
-std::string UI::computeETA(const lt::torrent_status &status) const
+std::string UIManager::computeETA(const lt::torrent_status &status) const
 {
 	if (status.state == lt::torrent_status::downloading && status.download_payload_rate > 0)
 	{
@@ -349,7 +349,7 @@ static std::string sha1HashToHex(const lt::sha1_hash &hash)
 	return hexString;
 }
 
-void UI::displayTorrentList()
+void UIManager::displayTorrentList()
 {
 	if (ImGui::Begin("Torrent List"))
 	{
@@ -363,7 +363,7 @@ void UI::displayTorrentList()
 	ImGui::End();
 }
 
-void UI::displayTorrentTableHeader()
+void UIManager::displayTorrentTableHeader()
 {
 	ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed);
 	ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
@@ -377,7 +377,7 @@ void UI::displayTorrentTableHeader()
 	ImGui::TableHeadersRow();
 }
 
-void UI::displayTorrentTableBody()
+void UIManager::displayTorrentTableBody()
 {
 	if (getTorrentsCallback)
 	{
@@ -389,7 +389,7 @@ void UI::displayTorrentTableBody()
 	}
 }
 
-void UI::displayTorrentTableRow(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash)
+void UIManager::displayTorrentTableRow(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash)
 {
 	lt::torrent_status status = handle.status();
 	ImGui::PushID(&handle);
@@ -415,7 +415,7 @@ void UI::displayTorrentTableRow(const lt::torrent_handle &handle, const lt::sha1
 	ImGui::PopID();
 }
 
-std::string UI::getTorrentCellText(const lt::torrent_status &status, int column, const lt::torrent_handle &handle)
+std::string UIManager::getTorrentCellText(const lt::torrent_status &status, int column, const lt::torrent_handle &handle)
 {
 	switch (column)
 	{
@@ -440,7 +440,7 @@ std::string UI::getTorrentCellText(const lt::torrent_status &status, int column,
 	}
 }
 
-void UI::displayTorrentContextMenu(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash)
+void UIManager::displayTorrentContextMenu(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash)
 {
 	if (ImGui::BeginPopupContextItem("##context", ImGuiPopupFlags_MouseButtonRight))
 	{
@@ -493,7 +493,7 @@ void UI::displayTorrentContextMenu(const lt::torrent_handle &handle, const lt::s
 	}
 }
 
-void UI::displayTorrentDetails()
+void UIManager::displayTorrentDetails()
 {
 	ImGui::Begin("Torrent Details");
 	if (this->selectedTorrent.is_valid())
@@ -531,12 +531,12 @@ void UI::displayTorrentDetails()
 	ImGui::End();
 }
 
-void UI::displayTorrentDetails_General(const lt::torrent_status &status)
+void UIManager::displayTorrentDetails_General(const lt::torrent_status &status)
 {
 	displayTorrentDetailsContent(status);
 }
 
-void UI::displayTorrentDetails_Files()
+void UIManager::displayTorrentDetails_Files()
 {
 	if (!selectedTorrent.is_valid())
 		return;
@@ -570,7 +570,7 @@ void UI::displayTorrentDetails_Files()
 	}
 }
 
-void UI::displayTorrentDetails_Peers()
+void UIManager::displayTorrentDetails_Peers()
 {
 	if (!selectedTorrent.is_valid())
 		return;
@@ -606,7 +606,7 @@ void UI::displayTorrentDetails_Peers()
 	}
 }
 
-void UI::displayTorrentDetails_Trackers()
+void UIManager::displayTorrentDetails_Trackers()
 {
 	if (!selectedTorrent.is_valid())
 		return;
@@ -631,7 +631,7 @@ void UI::displayTorrentDetails_Trackers()
 	}
 }
 
-void UI::displayCategories()
+void UIManager::displayCategories()
 {
 	ImGui::Begin("Categories");
 	ImGui::Text("All");
@@ -644,7 +644,7 @@ void UI::displayCategories()
 	ImGui::End();
 }
 
-void UI::displayTorrentDetailsContent(const lt::torrent_status &status)
+void UIManager::displayTorrentDetailsContent(const lt::torrent_status &status)
 {
 	const std::vector<std::pair<std::string, std::function<std::string()>>> details = {
 		{"Name", [&]()
@@ -671,7 +671,7 @@ void UI::displayTorrentDetailsContent(const lt::torrent_status &status)
 	}
 }
 
-void UI::shutdown()
+void UIManager::shutdown()
 {
 	// Shutdown platform/renderer bindings
 	ImGui_ImplOpenGL3_Shutdown();
@@ -681,27 +681,28 @@ void UI::shutdown()
 	ImGui::DestroyContext();
 }
 
-const ImGuiIO &UI::getIO() const
+const ImGuiIO &UIManager::getIO() const
 {
 	return (io);
 }
 
-bool UI::shouldExit() const
+bool UIManager::shouldExit() const
 {
 	return (exitRequested);
 }
 
 // Modal Windows
 
-void UI::askSavePathModal()
+void UIManager::askSavePathModal()
 {
 	if (torrentToAdd.second.empty())
 		return;
 
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(ImGui::GetMainViewport()->Size.x * 0.5f, ImGui::GetMainViewport()->Size.y * 0.6f), ImGuiCond_Appearing);
 
-	if (ImGuiFileDialog::Instance()->Display("ChooseSavePath"))
+	if (ImGuiFileDialog::Instance()->Display("ChooseSavePath", ImGuiWindowFlags_NoCollapse, ImVec2(500, 300)))
 	{
 		if (ImGuiFileDialog::Instance()->IsOk())
 		{
@@ -733,7 +734,7 @@ void UI::askSavePathModal()
 	}
 }
 
-void UI::renderPopupFailure(const std::string &message)
+void UIManager::renderPopupFailure(const std::string &message)
 {
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -757,7 +758,7 @@ void UI::renderPopupFailure(const std::string &message)
 	}
 }
 
-void UI::removeTorrentModal()
+void UIManager::removeTorrentModal()
 {
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -796,22 +797,22 @@ void UI::removeTorrentModal()
 }
 
 // Callbacks
-void UI::setAddTorrentCallback(std::function<Result(const std::string &, const std::string &)> callback)
+void UIManager::setAddTorrentCallback(std::function<Result(const std::string &, const std::string &)> callback)
 {
 	this->addTorrentCallback = callback;
 }
 
-void UI::setAddMagnetLinkCallback(std::function<Result(const std::string &, const std::string &)> callback)
+void UIManager::setAddMagnetLinkCallback(std::function<Result(const std::string &, const std::string &)> callback)
 {
 	this->addMagnetLinkCallback = callback;
 }
 
-void UI::setGetTorrentsCallback(std::function<const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &()> callback)
+void UIManager::setGetTorrentsCallback(std::function<const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &()> callback)
 {
 	this->getTorrentsCallback = callback;
 }
 
-void UI::setRemoveTorrentCallback(std::function<Result(const lt::sha1_hash, RemoveTorrentType)> callback)
+void UIManager::setRemoveTorrentCallback(std::function<Result(const lt::sha1_hash, RemoveTorrentType)> callback)
 {
 	this->removeTorrentCallback = callback;
 }

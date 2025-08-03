@@ -1,4 +1,8 @@
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.20)
+
+# Set modern CMake policies to resolve warnings and use modern practices
+cmake_policy(SET CMP0167 NEW) # Use Boost:: targets
+cmake_policy(SET CMP0169 NEW) # Use FetchContent_MakeAvailable
 
 # Project name
 project(hypertube)
@@ -7,12 +11,17 @@ project(hypertube)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+# Add compile definition for Windows to avoid SDK warnings
+if(WIN32)
+  add_compile_definitions(_WIN32_WINNT=0x0601)
+endif()
+
 set(OpenGL_GL_PREFERENCE GLVND)
 
-# Include FetchContent module
+# Include FetchContent module for dependency management
 include(FetchContent)
 
-# Fetch imgui docking branch
+# Fetch imgui (docking branch)
 FetchContent_Declare(
   imgui
   GIT_REPOSITORY https://github.com/ocornut/imgui.git
@@ -20,28 +29,15 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imgui)
 
-# Fetch dirent for Windows
-if (WIN32)
-	FetchContent_Declare(
-		dirent
-		GIT_REPOSITORY https://github.com/tronkko/dirent.git
-		GIT_TAG 1.24
-	)
-	FetchContent_GetProperties(dirent)
-	if (NOT dirent_POPULATED)
-		FetchContent_Populate(dirent)
-		include_directories(${dirent_SOURCE_DIR}/include)
-	endif()
-endif()
-
+# Fetch ImGuiFileDialog
 FetchContent_Declare(
-	ImGuiFileDialog
-	GIT_REPOSITORY https://github.com/aiekick/ImGuiFileDialog.git
-	GIT_TAG master
+    ImGuiFileDialog
+    GIT_REPOSITORY https://github.com/aiekick/ImGuiFileDialog.git
+    GIT_TAG master
 )
 FetchContent_MakeAvailable(ImGuiFileDialog)
 
-# Fetch nlohmann/json
+# Fetch nlohmann/json for JSON parsing
 FetchContent_Declare(
   json
   GIT_REPOSITORY https://github.com/nlohmann/json.git
@@ -49,47 +45,73 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-# Include directories
-include_directories(${Boost_INCLUDE_DIRS})
-include_directories(${libtorrent_INCLUDE_DIRS})
-include_directories(${imgui_SOURCE_DIR})
-include_directories(${imgui_SOURCE_DIR}/backends)
-include_directories(${json_SOURCE_DIR}/single_include/nlohmann/)
-include_directories(include include/app include/ui)
-
-target_include_directories(ImGuiFileDialog PUBLIC ${imgui_SOURCE_DIR})
-
 # Find required packages
 find_package(Boost REQUIRED COMPONENTS system filesystem)
 find_package(LibtorrentRasterbar CONFIG REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(glfw3 REQUIRED CONFIG)
 
-# ImGui Sources
-set(IMGUI_SOURCES
-	${imgui_SOURCE_DIR}/imgui.cpp
-	${imgui_SOURCE_DIR}/imgui_demo.cpp
-	${imgui_SOURCE_DIR}/imgui_draw.cpp
-	${imgui_SOURCE_DIR}/imgui_tables.cpp
-	${imgui_SOURCE_DIR}/imgui_widgets.cpp
-	${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
-	${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
-	${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp
+# Explicitly list all source files
+set(SOURCES
+    src/main.cpp
+    src/app/App.cpp
+    src/app/ConfigManager.cpp
+    src/app/TorrentManager.cpp
+    src/ui/UIManager.cpp
+    # Add core ImGui sources
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    # Add ImGui backend sources
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+    ${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp
 )
 
-# Source files
-file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.hpp")
+# Create the executable
+add_executable(hypertube ${SOURCES})
 
-# Executable
-add_executable(${PROJECT_NAME} ${SOURCES} ${IMGUI_SOURCES})
-
-add_custom_command(
-	TARGET ${PROJECT_NAME} POST_BUILD
-	COMMAND ${CMAKE_COMMAND} -E copy_directory
-			${CMAKE_SOURCE_DIR}/config
-			$<TARGET_FILE_DIR:${PROJECT_NAME}>/config
-	COMMENT "Copying config directory to build directory"
+# Set target-specific include directories
+target_include_directories(hypertube PRIVATE
+    "include"
+    "include/app"
+    "include/ui"
+    "${imgui_SOURCE_DIR}"
+    "${imgui_SOURCE_DIR}/backends"
+    "${json_SOURCE_DIR}/single_include/nlohmann"
 )
 
-# Link libraries
-target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES} PRIVATE LibtorrentRasterbar::torrent-rasterbar OpenGL::GL glfw ImGuiFileDialog)
+# ImGuiFileDialog needs to find imgui.h, so we help it
+target_include_directories(ImGuiFileDialog PUBLIC ${imgui_SOURCE_DIR})
+
+# Link libraries using modern imported targets
+target_link_libraries(hypertube PRIVATE
+    Boost::filesystem
+    Boost::system
+    LibtorrentRasterbar::torrent-rasterbar
+    OpenGL::GL
+    glfw
+    ImGuiFileDialog
+    nlohmann_json::nlohmann_json
+)
+
+file(COPY config DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
+# Add optimized flags for Release build
+if (MSVC)
+  target_compile_options(hypertube PRIVATE
+    $<$<CONFIG:Release>:/O2 /arch:AVX2 /GL /fp:fast>
+  )
+  target_link_options(hypertube PRIVATE
+    $<$<CONFIG:Release>:/LTCG>
+  )
+else()
+  target_compile_options(hypertube PRIVATE
+    $<$<CONFIG:Release>:-O3 -march=native -flto -ffast-math>
+  )
+  target_link_options(hypertube PRIVATE
+    $<$<CONFIG:Release>:-flto>
+  )
+endif()
