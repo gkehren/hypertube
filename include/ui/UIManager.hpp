@@ -60,7 +60,7 @@ private:
 
 	std::pair<bool, std::string> torrentToAdd;
 	std::vector<TorrentRemovalInfo> torrentsToRemove;
-	
+
 	// Search-related members
 	std::vector<TorrentSearchResult> searchResults;
 	TorrentSearchResult selectedSearchResult;

@@ -381,14 +381,14 @@ void UIManager::displayTorrentManagement()
 				}
 				ImGui::EndTabItem();
 			}
-			
+
 			// Search Tab
 			if (ImGui::BeginTabItem("Search Torrents"))
 			{
 				displayIntegratedSearch();
 				ImGui::EndTabItem();
 			}
-			
+
 			ImGui::EndTabBar();
 		}
 	}
@@ -400,31 +400,31 @@ void UIManager::displayIntegratedSearch()
 	// Search input section
 	ImGui::Text("Search for Torrents:");
 	ImGui::Separator();
-	
+
 	// Search input with better styling
 	ImGui::Text("Query:");
 	ImGui::SameLine();
 	ImGui::PushItemWidth(-150.0f); // Leave space for search button
 	bool enterPressed = ImGui::InputText("##search", searchQueryBuffer, sizeof(searchQueryBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
 	ImGui::PopItemWidth();
-	
+
 	ImGui::SameLine();
 	bool searchClicked = ImGui::Button("Search", ImVec2(140, 0));
-	
+
 	if (enterPressed || searchClicked)
 	{
 		performSearch(std::string(searchQueryBuffer));
 	}
-	
+
 	// Show search status
 	if (isSearching)
 	{
 		ImGui::Text("Searching...");
 		ImGui::ProgressBar(-1.0f * ImGui::GetTime(), ImVec2(0.0f, 0.0f), "");
 	}
-	
+
 	ImGui::Separator();
-	
+
 	// Display search results if available
 	if (!searchResults.empty() || !currentSearchQuery.empty())
 	{
@@ -792,7 +792,7 @@ void UIManager::askSavePathModal()
 			if (!savePath.empty())
 			{
 				Result result(true);
-				
+
 				// Handle search result
 				if (!selectedSearchResult.infoHash.empty())
 				{
@@ -812,7 +812,7 @@ void UIManager::askSavePathModal()
 					}
 					torrentToAdd.second.clear();
 				}
-				
+
 				if (!result)
 				{
 					this->showFailurePopup = true;
@@ -901,25 +901,25 @@ void UIManager::displaySearchWindow()
 	{
 		performSearch(std::string(searchQueryBuffer));
 	}
-	
+
 	ImGui::SameLine();
 	if (ImGui::Button("Search"))
 	{
 		performSearch(std::string(searchQueryBuffer));
 	}
-	
+
 	if (isSearching)
 	{
 		ImGui::Text("Searching...");
 		ImGui::ProgressBar(-1.0f * ImGui::GetTime());
 	}
-	
+
 	// Display search results
 	if (!searchResults.empty())
 	{
 		displaySearchResults();
 	}
-	
+
 	ImGui::End();
 }
 
@@ -927,17 +927,17 @@ void UIManager::displayEnhancedSearchResults()
 {
 	// Results header with count
 	ImGui::Text("Search Results (%d found for \"%s\"):", (int)searchResults.size(), currentSearchQuery.c_str());
-	
+
 	ImGui::Separator();
-	
+
 	// Create a table for search results with improved styling
-	if (ImGui::BeginTable("SearchResultsTable", 7, 
-		ImGuiTableFlags_Borders | 
-		ImGuiTableFlags_Resizable | 
-		ImGuiTableFlags_Sortable | 
-		ImGuiTableFlags_ScrollY |
-		ImGuiTableFlags_RowBg, 
-		ImVec2(0, -50))) // Leave space for bottom pagination
+	if (ImGui::BeginTable("SearchResultsTable", 7,
+						  ImGuiTableFlags_Borders |
+							  ImGuiTableFlags_Resizable |
+							  ImGuiTableFlags_Sortable |
+							  ImGuiTableFlags_ScrollY |
+							  ImGuiTableFlags_RowBg,
+						  ImVec2(0, -50))) // Leave space for bottom pagination
 	{
 		// Setup columns with better widths and sorting
 		ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_DefaultSort);
@@ -948,17 +948,18 @@ void UIManager::displayEnhancedSearchResults()
 		ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthFixed, 80);
 		ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 80);
 		ImGui::TableHeadersRow();
-		
+
 		// Handle sorting
-		if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs())
+		if (ImGuiTableSortSpecs *sort_specs = ImGui::TableGetSortSpecs())
 		{
 			if (sort_specs->SpecsDirty)
 			{
 				if (sort_specs->SpecsCount > 0)
 				{
-					const ImGuiTableColumnSortSpecs* spec = &sort_specs->Specs[0];
-					
-					std::stable_sort(searchResults.begin(), searchResults.end(), [spec](const TorrentSearchResult& a, const TorrentSearchResult& b) {
+					const ImGuiTableColumnSortSpecs *spec = &sort_specs->Specs[0];
+
+					std::stable_sort(searchResults.begin(), searchResults.end(), [spec](const TorrentSearchResult &a, const TorrentSearchResult &b)
+									 {
 						int result = 0;
 						switch (spec->ColumnIndex)
 						{
@@ -984,7 +985,7 @@ void UIManager::displayEnhancedSearchResults()
 							{
 								float ratioA = (a.leechers > 0) ? (float)a.seeders / a.leechers : (a.seeders > 0 ? 1000.0f : 0.0f);
 								float ratioB = (b.leechers > 0) ? (float)b.seeders / b.leechers : (b.seeders > 0 ? 1000.0f : 0.0f);
-								
+
 								if (ratioA < ratioB) result = -1;
 								else if (ratioA > ratioB) result = 1;
 								else result = 0;
@@ -993,31 +994,30 @@ void UIManager::displayEnhancedSearchResults()
 							case 5: // Category
 								result = a.category.compare(b.category);
 								break;
-							default: 
+							default:
 								result = 0;
 								break;
 						}
-						
+
 						// Apply sort direction
 						if (spec->SortDirection == ImGuiSortDirection_Descending) {
 							result = -result;
 						}
-						
-						return result < 0;
-					});
+
+						return result < 0; });
 				}
 				sort_specs->SpecsDirty = false;
 			}
 		}
-		
+
 		for (int i = 0; i < (int)searchResults.size(); ++i)
 		{
 			displayEnhancedSearchResultRow(searchResults[i], i);
 		}
-		
+
 		ImGui::EndTable();
 	}
-	
+
 	// Pagination controls at the bottom
 	ImGui::PushID("bottom_pagination");
 	displayPaginationControls();
@@ -1028,12 +1028,12 @@ void UIManager::displaySearchResults()
 {
 	ImGui::Separator();
 	ImGui::Text("Search Results (%d found):", (int)searchResults.size());
-	
+
 	// Pagination controls at the top
 	ImGui::PushID("top_pagination");
 	displayPaginationControls();
 	ImGui::PopID();
-	
+
 	// Create a table for search results
 	if (ImGui::BeginTable("SearchResultsTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable | ImGuiTableFlags_Sortable | ImGuiTableFlags_ScrollY, ImVec2(0, 300)))
 	{
@@ -1044,15 +1044,15 @@ void UIManager::displaySearchResults()
 		ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthFixed, 80);
 		ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 80);
 		ImGui::TableHeadersRow();
-		
+
 		for (int i = 0; i < (int)searchResults.size(); ++i)
 		{
 			displaySearchResultRow(searchResults[i], i);
 		}
-		
+
 		ImGui::EndTable();
 	}
-	
+
 	// Pagination controls at the bottom
 	ImGui::PushID("bottom_pagination");
 	displayPaginationControls();
@@ -1063,29 +1063,32 @@ void UIManager::displayEnhancedSearchResultRow(const TorrentSearchResult &result
 {
 	ImGui::TableNextRow();
 	ImGui::PushID(index);
-	
+
 	// Name column with truncation for very long names
 	ImGui::TableSetColumnIndex(0);
 	std::string displayName = result.name;
-	if (displayName.length() > 60) {
+	if (displayName.length() > 60)
+	{
 		displayName = displayName.substr(0, 57) + "...";
 	}
-	
-	if (ImGui::Selectable(displayName.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
+
+	if (ImGui::Selectable(displayName.c_str(), false, ImGuiSelectableFlags_SpanAllColumns))
+	{
 		handleSearchResultSelection(result);
 	}
-	
+
 	// Tooltip for full name if truncated
-	if (ImGui::IsItemHovered() && result.name.length() > 60) {
+	if (ImGui::IsItemHovered() && result.name.length() > 60)
+	{
 		ImGui::BeginTooltip();
 		ImGui::Text("%s", result.name.c_str());
 		ImGui::EndTooltip();
 	}
-	
+
 	// Size
 	ImGui::TableSetColumnIndex(1);
 	ImGui::Text("%s", formatBytes(result.sizeBytes, false).c_str());
-	
+
 	// Seeders with color coding
 	ImGui::TableSetColumnIndex(2);
 	if (result.seeders >= 10)
@@ -1094,14 +1097,15 @@ void UIManager::displayEnhancedSearchResultRow(const TorrentSearchResult &result
 		ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "%d", result.seeders);
 	else
 		ImGui::TextColored(ImVec4(0.8f, 0.0f, 0.0f, 1.0f), "%d", result.seeders);
-	
+
 	// Leechers
 	ImGui::TableSetColumnIndex(3);
 	ImGui::Text("%d", result.leechers);
-	
+
 	// Seed/Leech ratio
 	ImGui::TableSetColumnIndex(4);
-	if (result.leechers > 0) {
+	if (result.leechers > 0)
+	{
 		float ratio = (float)result.seeders / result.leechers;
 		if (ratio >= 2.0f)
 			ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "%.1f", ratio);
@@ -1109,52 +1113,57 @@ void UIManager::displayEnhancedSearchResultRow(const TorrentSearchResult &result
 			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "%.1f", ratio);
 		else
 			ImGui::TextColored(ImVec4(0.8f, 0.0f, 0.0f, 1.0f), "%.1f", ratio);
-	} else if (result.seeders > 0) {
+	}
+	else if (result.seeders > 0)
+	{
 		ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "∞");
-	} else {
+	}
+	else
+	{
 		ImGui::Text("-");
 	}
-	
+
 	// Category
 	ImGui::TableSetColumnIndex(5);
 	ImGui::Text("%s", result.category.c_str());
-	
+
 	// Action button with improved styling
 	ImGui::TableSetColumnIndex(6);
-	if (ImGui::Button("Download", ImVec2(-1, 0))) {
+	if (ImGui::Button("Download", ImVec2(-1, 0)))
+	{
 		handleSearchResultSelection(result);
 	}
-	
+
 	ImGui::PopID();
 }
 
 void UIManager::displaySearchResultRow(const TorrentSearchResult &result, int index)
 {
 	ImGui::TableNextRow();
-	
+
 	// Name
 	ImGui::TableSetColumnIndex(0);
 	ImGui::Text("%s", result.name.c_str());
-	
+
 	// Size
 	ImGui::TableSetColumnIndex(1);
 	ImGui::Text("%s", formatBytes(result.sizeBytes, false).c_str());
-	
+
 	// Seeders
 	ImGui::TableSetColumnIndex(2);
 	if (result.seeders > 0)
 		ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%d", result.seeders);
 	else
 		ImGui::Text("%d", result.seeders);
-	
+
 	// Leechers
 	ImGui::TableSetColumnIndex(3);
 	ImGui::Text("%d", result.leechers);
-	
+
 	// Category
 	ImGui::TableSetColumnIndex(4);
 	ImGui::Text("%s", result.category.c_str());
-	
+
 	// Action button
 	ImGui::TableSetColumnIndex(5);
 	std::string buttonId = "Add##" + std::to_string(index);
@@ -1178,19 +1187,19 @@ void UIManager::performSearch(const std::string &query)
 {
 	if (query.empty() || isSearching)
 		return;
-		
+
 	isSearching = true;
 	searchResults.clear();
 	currentSearchQuery = query;
 	nextToken.clear();
 	hasMoreResults = true;
-	
+
 	SearchResponse response;
 	SearchQuery searchQuery(query);
 	Result result = searchEngine.searchTorrents(searchQuery, response);
-	
+
 	isSearching = false;
-	
+
 	if (!result)
 	{
 		failurePopupMessage = "Search failed: " + result.message;
@@ -1207,9 +1216,9 @@ void UIManager::performSearch(const std::string &query)
 void UIManager::displayPaginationControls()
 {
 	ImGui::Separator();
-	
+
 	ImGui::Text("Results: %d found", (int)searchResults.size());
-	
+
 	// Load more results button
 	ImGui::SameLine();
 	if (hasMoreResults && !isSearching && !searchResults.empty())
@@ -1225,7 +1234,7 @@ void UIManager::displayPaginationControls()
 		ImGui::Button("Load More");
 		ImGui::EndDisabled();
 	}
-	
+
 	if (isSearching)
 	{
 		ImGui::SameLine();
@@ -1239,12 +1248,12 @@ void UIManager::loadMoreResults()
 	{
 		isSearching = true;
 		SearchResponse response;
-		
+
 		SearchQuery searchQuery(currentSearchQuery, 0, nextToken);
 		Result result = searchEngine.searchTorrents(searchQuery, response);
-		
+
 		isSearching = false;
-		
+
 		if (result && !response.torrents.empty())
 		{
 			// Append new results to existing ones
