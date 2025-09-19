@@ -13,6 +13,10 @@
 #include "TorrentManager.hpp"
 #include "SearchEngine.hpp"
 #include "Result.hpp"
+#include "TorrentTableUI.hpp"
+#include "TorrentDetailsUI.hpp"
+#include "SearchUI.hpp"
+#include "ModalDialogs.hpp"
 
 struct MenuItem
 {
@@ -39,9 +43,6 @@ public:
 	void init(GLFWwindow *window);
 	void initImGui(GLFWwindow *window);
 	void setDefaultSavePath();
-	std::string torrentStateToString(lt::torrent_status::state_t state, lt::torrent_flags_t flags);
-	std::string formatBytes(size_t bytes, bool speed);
-	std::string computeETA(const lt::torrent_status &status) const;
 	void renderFrame(GLFWwindow *window, const ImVec4 &clear_color);
 	void shutdown();
 	const ImGuiIO &getIO() const;
@@ -49,65 +50,34 @@ public:
 
 private:
 	ImGuiIO io;
-	char magnetLinkBuffer[4096] = {0};
-	char searchQueryBuffer[256] = {0};
 	bool exitRequested = false;
-	lt::torrent_handle selectedTorrent;
+	std::string defaultSavePath;
+
+	// UI Component instances
+	std::unique_ptr<TorrentTableUI> torrentTableUI;
+	std::unique_ptr<TorrentDetailsUI> torrentDetailsUI;
+	std::unique_ptr<SearchUI> searchUI;
+	std::unique_ptr<ModalDialogs> modalDialogs;
+
+	// Failure popup state
 	bool showFailurePopup = false;
 	std::string failurePopupMessage;
-	std::string defaultSavePath;
-	std::string savePath;
 
-	std::pair<bool, std::string> torrentToAdd;
+	// Torrent removal state
 	std::vector<TorrentRemovalInfo> torrentsToRemove;
-
-	// Search-related members
-	std::vector<TorrentSearchResult> searchResults;
-	TorrentSearchResult selectedSearchResult;
-	bool showSearchWindow = false;
-	bool isSearching = false;
-	std::string currentSearchQuery;
-	std::string nextToken;
-	bool hasMoreResults = true;
 
 	TorrentManager &torrentManager;
 	SearchEngine &searchEngine;
 
+	// Core UI methods
 	void displayCategories();
-	void displayTorrentList();
 	void displayTorrentManagement();
-	void displayTorrentDetails();
-	void displayTorrentDetails_General(const lt::torrent_status &status);
-	void displayTorrentDetails_Files();
-	void displayTorrentDetails_Peers();
-	void displayTorrentDetails_Trackers();
-	void displayTorrentContextMenu(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash);
-	void displayTorrentTableHeader();
-	void displayTorrentTableBody();
-	void displayTorrentTableRow(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash);
-	std::string getTorrentCellText(const lt::torrent_status &status, int column, const lt::torrent_handle &handle);
-	void displayTorrentDetailsContent(const lt::torrent_status &status);
-	void handleAddTorrentModal(bool &showTorrentPopup);
-	void handleAddMagnetTorrentModal(bool &showMagnetTorrentPopup);
-	void handleRemoveTorrentModal();
-	void handleAskSavePathModal();
 	void displayMenuBar(bool &showTorrentPopup, bool &showMagnetTorrentPopup);
 	void setupDocking(ImGuiID dockspace_id);
 
-	// Search-related methods
-	void displaySearchWindow();
-	void displayIntegratedSearch();
-	void displaySearchResults();
-	void displayEnhancedSearchResults();
-	void displaySearchResultRow(const TorrentSearchResult &result, int index);
-	void displayEnhancedSearchResultRow(const TorrentSearchResult &result, int index);
-	void handleSearchResultSelection(const TorrentSearchResult &result);
-	void performSearch(const std::string &query);
-	void displayPaginationControls();
-	void loadMoreResults();
-
-	// Modal Windows
-	void askSavePathModal();
-	void renderPopupFailure(const std::string &message);
-	void removeTorrentModal();
+	// Helper methods
+	void handleModals(bool &showTorrentPopup, bool &showMagnetTorrentPopup);
+	void setupUICallbacks();
+	void showFailurePopupWithMessage(const std::string &message);
+	void handleTorrentRemoval();
 };

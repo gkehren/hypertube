@@ -256,14 +256,37 @@ Result SearchEngine::parseSearchResponse(const std::string &response, std::vecto
 				result.leechers = 0;
 			}
 
-			// Handle created_unix as number and convert to string
+			// Handle created_unix as number and convert to string (legacy field)
 			if (item.contains("created_unix") && item["created_unix"].is_number())
 			{
 				result.dateUploaded = std::to_string(item["created_unix"].get<long long>());
+				// Also populate the new createdUnix field
+				result.createdUnix = item["created_unix"].get<long long>();
 			}
 			else
 			{
 				result.dateUploaded = "";
+				result.createdUnix = 0;
+			}
+
+			// Handle scraped_date field
+			if (item.contains("scraped_date") && item["scraped_date"].is_number())
+			{
+				result.scrapedDate = item["scraped_date"].get<long long>();
+			}
+			else
+			{
+				result.scrapedDate = 0;
+			}
+
+			// Handle completed field
+			if (item.contains("completed") && item["completed"].is_number())
+			{
+				result.completed = item["completed"].get<int>();
+			}
+			else
+			{
+				result.completed = 0;
 			}
 
 			// Category is often not present in torrents-csv, set default
@@ -399,14 +422,37 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 				result.leechers = 0;
 			}
 
-			// Handle created_unix as number and convert to string
+			// Handle created_unix as number and convert to string (legacy field)
 			if (item.contains("created_unix") && item["created_unix"].is_number())
 			{
 				result.dateUploaded = std::to_string(item["created_unix"].get<long long>());
+				// Also populate the new createdUnix field
+				result.createdUnix = item["created_unix"].get<long long>();
 			}
 			else
 			{
 				result.dateUploaded = "";
+				result.createdUnix = 0;
+			}
+
+			// Handle scraped_date field
+			if (item.contains("scraped_date") && item["scraped_date"].is_number())
+			{
+				result.scrapedDate = item["scraped_date"].get<long long>();
+			}
+			else
+			{
+				result.scrapedDate = 0;
+			}
+
+			// Handle completed field
+			if (item.contains("completed") && item["completed"].is_number())
+			{
+				result.completed = item["completed"].get<int>();
+			}
+			else
+			{
+				result.completed = 0;
 			}
 
 			// Category is often not present in torrents-csv, set default

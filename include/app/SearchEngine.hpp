@@ -16,14 +16,19 @@ struct TorrentSearchResult
 	int leechers;
 	std::string dateUploaded;
 	std::string category;
+	int64_t createdUnix;
+	int64_t scrapedDate;
+	int completed;
 
 	TorrentSearchResult() = default;
 	TorrentSearchResult(const std::string &name, const std::string &magnetUri,
 						const std::string &infoHash, size_t sizeBytes, int seeders,
-						int leechers, const std::string &dateUploaded, const std::string &category)
+						int leechers, const std::string &dateUploaded, const std::string &category,
+						int64_t createdUnix = 0, int64_t scrapedDate = 0, int completed = 0)
 		: name(name), magnetUri(magnetUri), infoHash(infoHash),
 		  sizeBytes(sizeBytes), seeders(seeders), leechers(leechers),
-		  dateUploaded(dateUploaded), category(category) {}
+		  dateUploaded(dateUploaded), category(category), createdUnix(createdUnix),
+		  scrapedDate(scrapedDate), completed(completed) {}
 };
 
 struct SearchQuery

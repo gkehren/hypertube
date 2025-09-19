@@ -60,6 +60,10 @@ set(SOURCES
     src/app/TorrentManager.cpp
     src/app/SearchEngine.cpp
     src/ui/UIManager.cpp
+    src/ui/TorrentTableUI.cpp
+    src/ui/TorrentDetailsUI.cpp
+    src/ui/SearchUI.cpp
+    src/ui/ModalDialogs.cpp
     # Add core ImGui sources
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_demo.cpp
