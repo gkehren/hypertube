@@ -7,7 +7,7 @@ static void glfw_error_callback(int error, const char *description)
 	std::cerr << "GLFW Error " << error << ": " << description << std::endl;
 }
 
-App::App() : uiManager(torrentManager)
+App::App() : uiManager(torrentManager, searchEngine)
 {
 	glfwSetErrorCallback(glfw_error_callback);
 	if (!glfwInit())

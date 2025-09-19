@@ -3,6 +3,7 @@
 #include "UIManager.hpp"
 #include "ConfigManager.hpp"
 #include "TorrentManager.hpp"
+#include "SearchEngine.hpp"
 
 class App
 {
@@ -16,5 +17,6 @@ private:
 	GLFWwindow *window;
 	ConfigManager configManager;
 	TorrentManager torrentManager;
+	SearchEngine searchEngine;
 	UIManager uiManager;
 };

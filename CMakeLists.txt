@@ -48,6 +48,7 @@ FetchContent_MakeAvailable(json)
 # Find required packages
 find_package(Boost REQUIRED COMPONENTS system filesystem)
 find_package(LibtorrentRasterbar CONFIG REQUIRED)
+find_package(CURL REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(glfw3 REQUIRED CONFIG)
 
@@ -57,6 +58,7 @@ set(SOURCES
     src/app/App.cpp
     src/app/ConfigManager.cpp
     src/app/TorrentManager.cpp
+    src/app/SearchEngine.cpp
     src/ui/UIManager.cpp
     # Add core ImGui sources
     ${imgui_SOURCE_DIR}/imgui.cpp
@@ -95,6 +97,7 @@ target_link_libraries(hypertube PRIVATE
     glfw
     ImGuiFileDialog
     nlohmann_json::nlohmann_json
+    CURL::libcurl
 )
 
 file(COPY config DESTINATION ${CMAKE_CURRENT_BINARY_DIR})

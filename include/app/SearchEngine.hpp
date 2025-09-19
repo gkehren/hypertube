@@ -1,0 +1,95 @@
+#pragma once
+
+#include "Result.hpp"
+#include <string>
+#include <vector>
+#include <memory>
+#include <functional>
+
+struct TorrentSearchResult
+{
+	std::string name;
+	std::string magnetUri;
+	std::string infoHash;
+	size_t sizeBytes;
+	int seeders;
+	int leechers;
+	std::string dateUploaded;
+	std::string category;
+
+	TorrentSearchResult() = default;
+	TorrentSearchResult(const std::string& name, const std::string& magnetUri, 
+		const std::string& infoHash, size_t sizeBytes, int seeders, 
+		int leechers, const std::string& dateUploaded, const std::string& category)
+		: name(name), magnetUri(magnetUri), infoHash(infoHash), 
+		  sizeBytes(sizeBytes), seeders(seeders), leechers(leechers),
+		  dateUploaded(dateUploaded), category(category) {}
+};
+
+struct SearchQuery
+{
+	std::string query;
+	int maxResults = 0; // 0 means use API default (don't send size parameter)
+	std::string nextToken = ""; // Token for pagination (from API 'next' field)
+
+	SearchQuery(const std::string& q) : query(q) {}
+	SearchQuery(const std::string& q, int max) : query(q), maxResults(max) {}
+	SearchQuery(const std::string& q, int max, const std::string& next) 
+		: query(q), maxResults(max), nextToken(next) {}
+};
+
+struct SearchResponse
+{
+	std::vector<TorrentSearchResult> torrents;
+	std::string nextToken;
+	bool hasMore = false;
+};
+
+class SearchEngine
+{
+public:
+	SearchEngine();
+	~SearchEngine() = default;
+
+	// Core search functionality
+	Result searchTorrents(const SearchQuery& query, std::vector<TorrentSearchResult>& results);
+	Result searchTorrents(const SearchQuery& query, SearchResponse& response);
+	Result searchTorrentsAsync(const SearchQuery& query, std::function<void(const std::vector<TorrentSearchResult>&)> callback);
+	
+	// Search history and favorites
+	void addToSearchHistory(const std::string& query);
+	const std::vector<std::string>& getSearchHistory() const;
+	void clearSearchHistory();
+	
+	void addToFavorites(const TorrentSearchResult& result);
+	void removeFromFavorites(const std::string& infoHash);
+	const std::vector<TorrentSearchResult>& getFavorites() const;
+	
+	// Configuration
+	void setApiUrl(const std::string& url);
+	void setTimeout(int seconds);
+	void setMaxRetries(int retries);
+	
+	// Status
+	bool isSearching() const;
+	void cancelCurrentSearch();
+
+private:
+	std::string apiUrl;
+	int timeoutSeconds;
+	int maxRetries;
+	bool searching;
+	
+	std::vector<std::string> searchHistory;
+	std::vector<TorrentSearchResult> favorites;
+	
+	// HTTP client methods
+	Result makeHttpRequest(const std::string& url, std::string& response);
+	std::string buildSearchUrl(const SearchQuery& query) const;
+	Result parseSearchResponse(const std::string& response, std::vector<TorrentSearchResult>& results);
+	Result parseSearchResponse(const std::string& response, SearchResponse& searchResponse);
+	
+	// Utility methods
+	std::string urlEncode(const std::string& value) const;
+	std::string formatMagnetUri(const std::string& infoHash, const std::string& name) const;
+};

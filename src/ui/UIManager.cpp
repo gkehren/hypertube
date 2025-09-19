@@ -7,8 +7,8 @@
 #include <chrono>
 #include <cstring>
 
-UIManager::UIManager(TorrentManager &torrentManager)
-	: torrentManager(torrentManager)
+UIManager::UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine)
+	: torrentManager(torrentManager), searchEngine(searchEngine)
 {
 }
 
@@ -96,7 +96,7 @@ void UIManager::renderFrame(GLFWwindow *window, const ImVec4 &clear_color)
 	displayMenuBar(showTorrentPopup, showMagnetTorrentPopup);
 
 	displayCategories();
-	displayTorrentList();
+	displayTorrentManagement();
 	displayTorrentDetails();
 
 	handleAddTorrentModal(showTorrentPopup);
@@ -148,7 +148,7 @@ void UIManager::setupDocking(ImGuiID dockspace_id)
 	ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.4f, &dock_bottom_id, &dock_top_id);
 
 	ImGui::DockBuilderDockWindow("Categories", dock_left_id);
-	ImGui::DockBuilderDockWindow("Torrent List", dock_top_id);
+	ImGui::DockBuilderDockWindow("Torrent Management", dock_top_id);
 	ImGui::DockBuilderDockWindow("Torrent Details", dock_bottom_id);
 
 	ImGui::DockBuilderFinish(dockspace_id);
@@ -362,6 +362,78 @@ void UIManager::displayTorrentList()
 		}
 	}
 	ImGui::End();
+}
+
+void UIManager::displayTorrentManagement()
+{
+	if (ImGui::Begin("Torrent Management"))
+	{
+		if (ImGui::BeginTabBar("TorrentManagementTabs", ImGuiTabBarFlags_None))
+		{
+			// My Torrents Tab
+			if (ImGui::BeginTabItem("My Torrents"))
+			{
+				if (ImGui::BeginTable("Torrents", 9, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+				{
+					displayTorrentTableHeader();
+					displayTorrentTableBody();
+					ImGui::EndTable();
+				}
+				ImGui::EndTabItem();
+			}
+			
+			// Search Tab
+			if (ImGui::BeginTabItem("Search Torrents"))
+			{
+				displayIntegratedSearch();
+				ImGui::EndTabItem();
+			}
+			
+			ImGui::EndTabBar();
+		}
+	}
+	ImGui::End();
+}
+
+void UIManager::displayIntegratedSearch()
+{
+	// Search input section
+	ImGui::Text("Search for Torrents:");
+	ImGui::Separator();
+	
+	// Search input with better styling
+	ImGui::Text("Query:");
+	ImGui::SameLine();
+	ImGui::PushItemWidth(-150.0f); // Leave space for search button
+	bool enterPressed = ImGui::InputText("##search", searchQueryBuffer, sizeof(searchQueryBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
+	ImGui::PopItemWidth();
+	
+	ImGui::SameLine();
+	bool searchClicked = ImGui::Button("Search", ImVec2(140, 0));
+	
+	if (enterPressed || searchClicked)
+	{
+		performSearch(std::string(searchQueryBuffer));
+	}
+	
+	// Show search status
+	if (isSearching)
+	{
+		ImGui::Text("Searching...");
+		ImGui::ProgressBar(-1.0f * ImGui::GetTime(), ImVec2(0.0f, 0.0f), "");
+	}
+	
+	ImGui::Separator();
+	
+	// Display search results if available
+	if (!searchResults.empty() || !currentSearchQuery.empty())
+	{
+		displayEnhancedSearchResults();
+	}
+	else if (!isSearching)
+	{
+		ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Enter a search query to find torrents...");
+	}
 }
 
 void UIManager::displayTorrentTableHeader()
@@ -709,7 +781,7 @@ void UIManager::shutdown()
 
 void UIManager::askSavePathModal()
 {
-	if (torrentToAdd.second.empty())
+	if (torrentToAdd.second.empty() && selectedSearchResult.infoHash.empty())
 		return;
 
 	if (ImGuiFileDialog::Instance()->Display("ChooseSavePath", ImGuiWindowFlags_NoCollapse, ImVec2(800, 600)))
@@ -720,20 +792,32 @@ void UIManager::askSavePathModal()
 			if (!savePath.empty())
 			{
 				Result result(true);
-				if (torrentToAdd.first)
+				
+				// Handle search result
+				if (!selectedSearchResult.infoHash.empty())
 				{
-					result = torrentManager.addMagnetTorrent(torrentToAdd.second, savePath);
+					result = torrentManager.addMagnetTorrent(selectedSearchResult.magnetUri, savePath);
+					selectedSearchResult = TorrentSearchResult(); // Clear selection
 				}
-				else
+				// Handle regular torrent addition
+				else if (!torrentToAdd.second.empty())
 				{
-					result = torrentManager.addTorrent(torrentToAdd.second, savePath);
+					if (torrentToAdd.first)
+					{
+						result = torrentManager.addMagnetTorrent(torrentToAdd.second, savePath);
+					}
+					else
+					{
+						result = torrentManager.addTorrent(torrentToAdd.second, savePath);
+					}
+					torrentToAdd.second.clear();
 				}
+				
 				if (!result)
 				{
 					this->showFailurePopup = true;
 					this->failurePopupMessage = result.message;
 				}
-				torrentToAdd.second.clear();
 			}
 			ImGuiFileDialog::Instance()->Close();
 		}
@@ -797,5 +881,386 @@ void UIManager::removeTorrentModal()
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
+	}
+}
+
+// Search functionality implementation
+
+void UIManager::displaySearchWindow()
+{
+	if (!ImGui::Begin("Torrent Search", &showSearchWindow, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ImGui::End();
+		return;
+	}
+
+	// Search input
+	ImGui::Text("Search Query:");
+	ImGui::SameLine();
+	if (ImGui::InputText("##search", searchQueryBuffer, sizeof(searchQueryBuffer), ImGuiInputTextFlags_EnterReturnsTrue))
+	{
+		performSearch(std::string(searchQueryBuffer));
+	}
+	
+	ImGui::SameLine();
+	if (ImGui::Button("Search"))
+	{
+		performSearch(std::string(searchQueryBuffer));
+	}
+	
+	if (isSearching)
+	{
+		ImGui::Text("Searching...");
+		ImGui::ProgressBar(-1.0f * ImGui::GetTime());
+	}
+	
+	// Display search results
+	if (!searchResults.empty())
+	{
+		displaySearchResults();
+	}
+	
+	ImGui::End();
+}
+
+void UIManager::displayEnhancedSearchResults()
+{
+	// Results header with count
+	ImGui::Text("Search Results (%d found for \"%s\"):", (int)searchResults.size(), currentSearchQuery.c_str());
+	
+	ImGui::Separator();
+	
+	// Create a table for search results with improved styling
+	if (ImGui::BeginTable("SearchResultsTable", 7, 
+		ImGuiTableFlags_Borders | 
+		ImGuiTableFlags_Resizable | 
+		ImGuiTableFlags_Sortable | 
+		ImGuiTableFlags_ScrollY |
+		ImGuiTableFlags_RowBg, 
+		ImVec2(0, -50))) // Leave space for bottom pagination
+	{
+		// Setup columns with better widths and sorting
+		ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_DefaultSort);
+		ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending, 90);
+		ImGui::TableSetupColumn("Seeds", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending, 60);
+		ImGui::TableSetupColumn("Leech", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending, 60);
+		ImGui::TableSetupColumn("Ratio", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending, 60);
+		ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthFixed, 80);
+		ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 80);
+		ImGui::TableHeadersRow();
+		
+		// Handle sorting
+		if (ImGuiTableSortSpecs* sort_specs = ImGui::TableGetSortSpecs())
+		{
+			if (sort_specs->SpecsDirty)
+			{
+				if (sort_specs->SpecsCount > 0)
+				{
+					const ImGuiTableColumnSortSpecs* spec = &sort_specs->Specs[0];
+					
+					std::stable_sort(searchResults.begin(), searchResults.end(), [spec](const TorrentSearchResult& a, const TorrentSearchResult& b) {
+						int result = 0;
+						switch (spec->ColumnIndex)
+						{
+							case 0: // Name
+								result = a.name.compare(b.name);
+								break;
+							case 1: // Size
+								if (a.sizeBytes < b.sizeBytes) result = -1;
+								else if (a.sizeBytes > b.sizeBytes) result = 1;
+								else result = 0;
+								break;
+							case 2: // Seeds
+								if (a.seeders < b.seeders) result = -1;
+								else if (a.seeders > b.seeders) result = 1;
+								else result = 0;
+								break;
+							case 3: // Leechers
+								if (a.leechers < b.leechers) result = -1;
+								else if (a.leechers > b.leechers) result = 1;
+								else result = 0;
+								break;
+							case 4: // Ratio
+							{
+								float ratioA = (a.leechers > 0) ? (float)a.seeders / a.leechers : (a.seeders > 0 ? 1000.0f : 0.0f);
+								float ratioB = (b.leechers > 0) ? (float)b.seeders / b.leechers : (b.seeders > 0 ? 1000.0f : 0.0f);
+								
+								if (ratioA < ratioB) result = -1;
+								else if (ratioA > ratioB) result = 1;
+								else result = 0;
+								break;
+							}
+							case 5: // Category
+								result = a.category.compare(b.category);
+								break;
+							default: 
+								result = 0;
+								break;
+						}
+						
+						// Apply sort direction
+						if (spec->SortDirection == ImGuiSortDirection_Descending) {
+							result = -result;
+						}
+						
+						return result < 0;
+					});
+				}
+				sort_specs->SpecsDirty = false;
+			}
+		}
+		
+		for (int i = 0; i < (int)searchResults.size(); ++i)
+		{
+			displayEnhancedSearchResultRow(searchResults[i], i);
+		}
+		
+		ImGui::EndTable();
+	}
+	
+	// Pagination controls at the bottom
+	ImGui::PushID("bottom_pagination");
+	displayPaginationControls();
+	ImGui::PopID();
+}
+
+void UIManager::displaySearchResults()
+{
+	ImGui::Separator();
+	ImGui::Text("Search Results (%d found):", (int)searchResults.size());
+	
+	// Pagination controls at the top
+	ImGui::PushID("top_pagination");
+	displayPaginationControls();
+	ImGui::PopID();
+	
+	// Create a table for search results
+	if (ImGui::BeginTable("SearchResultsTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable | ImGuiTableFlags_Sortable | ImGuiTableFlags_ScrollY, ImVec2(0, 300)))
+	{
+		ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 80);
+		ImGui::TableSetupColumn("Seeders", ImGuiTableColumnFlags_WidthFixed, 60);
+		ImGui::TableSetupColumn("Leechers", ImGuiTableColumnFlags_WidthFixed, 60);
+		ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthFixed, 80);
+		ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 80);
+		ImGui::TableHeadersRow();
+		
+		for (int i = 0; i < (int)searchResults.size(); ++i)
+		{
+			displaySearchResultRow(searchResults[i], i);
+		}
+		
+		ImGui::EndTable();
+	}
+	
+	// Pagination controls at the bottom
+	ImGui::PushID("bottom_pagination");
+	displayPaginationControls();
+	ImGui::PopID();
+}
+
+void UIManager::displayEnhancedSearchResultRow(const TorrentSearchResult &result, int index)
+{
+	ImGui::TableNextRow();
+	ImGui::PushID(index);
+	
+	// Name column with truncation for very long names
+	ImGui::TableSetColumnIndex(0);
+	std::string displayName = result.name;
+	if (displayName.length() > 60) {
+		displayName = displayName.substr(0, 57) + "...";
+	}
+	
+	if (ImGui::Selectable(displayName.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
+		handleSearchResultSelection(result);
+	}
+	
+	// Tooltip for full name if truncated
+	if (ImGui::IsItemHovered() && result.name.length() > 60) {
+		ImGui::BeginTooltip();
+		ImGui::Text("%s", result.name.c_str());
+		ImGui::EndTooltip();
+	}
+	
+	// Size
+	ImGui::TableSetColumnIndex(1);
+	ImGui::Text("%s", formatBytes(result.sizeBytes, false).c_str());
+	
+	// Seeders with color coding
+	ImGui::TableSetColumnIndex(2);
+	if (result.seeders >= 10)
+		ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "%d", result.seeders);
+	else if (result.seeders >= 1)
+		ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "%d", result.seeders);
+	else
+		ImGui::TextColored(ImVec4(0.8f, 0.0f, 0.0f, 1.0f), "%d", result.seeders);
+	
+	// Leechers
+	ImGui::TableSetColumnIndex(3);
+	ImGui::Text("%d", result.leechers);
+	
+	// Seed/Leech ratio
+	ImGui::TableSetColumnIndex(4);
+	if (result.leechers > 0) {
+		float ratio = (float)result.seeders / result.leechers;
+		if (ratio >= 2.0f)
+			ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "%.1f", ratio);
+		else if (ratio >= 1.0f)
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "%.1f", ratio);
+		else
+			ImGui::TextColored(ImVec4(0.8f, 0.0f, 0.0f, 1.0f), "%.1f", ratio);
+	} else if (result.seeders > 0) {
+		ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "∞");
+	} else {
+		ImGui::Text("-");
+	}
+	
+	// Category
+	ImGui::TableSetColumnIndex(5);
+	ImGui::Text("%s", result.category.c_str());
+	
+	// Action button with improved styling
+	ImGui::TableSetColumnIndex(6);
+	if (ImGui::Button("Download", ImVec2(-1, 0))) {
+		handleSearchResultSelection(result);
+	}
+	
+	ImGui::PopID();
+}
+
+void UIManager::displaySearchResultRow(const TorrentSearchResult &result, int index)
+{
+	ImGui::TableNextRow();
+	
+	// Name
+	ImGui::TableSetColumnIndex(0);
+	ImGui::Text("%s", result.name.c_str());
+	
+	// Size
+	ImGui::TableSetColumnIndex(1);
+	ImGui::Text("%s", formatBytes(result.sizeBytes, false).c_str());
+	
+	// Seeders
+	ImGui::TableSetColumnIndex(2);
+	if (result.seeders > 0)
+		ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%d", result.seeders);
+	else
+		ImGui::Text("%d", result.seeders);
+	
+	// Leechers
+	ImGui::TableSetColumnIndex(3);
+	ImGui::Text("%d", result.leechers);
+	
+	// Category
+	ImGui::TableSetColumnIndex(4);
+	ImGui::Text("%s", result.category.c_str());
+	
+	// Action button
+	ImGui::TableSetColumnIndex(5);
+	std::string buttonId = "Add##" + std::to_string(index);
+	if (ImGui::Button(buttonId.c_str()))
+	{
+		handleSearchResultSelection(result);
+	}
+}
+
+void UIManager::handleSearchResultSelection(const TorrentSearchResult &result)
+{
+	selectedSearchResult = result;
+	// Open save path selection modal
+	IGFD::FileDialogConfig config;
+	config.path = defaultSavePath;
+	config.flags = ImGuiFileDialogFlags_Modal | ImGuiFileDialogFlags_ShowDevicesButton | ImGuiFileDialogFlags_DontShowHiddenFiles;
+	ImGuiFileDialog::Instance()->OpenDialog("ChooseSavePath", "Choose Save Path", nullptr, config);
+}
+
+void UIManager::performSearch(const std::string &query)
+{
+	if (query.empty() || isSearching)
+		return;
+		
+	isSearching = true;
+	searchResults.clear();
+	currentSearchQuery = query;
+	nextToken.clear();
+	hasMoreResults = true;
+	
+	SearchResponse response;
+	SearchQuery searchQuery(query);
+	Result result = searchEngine.searchTorrents(searchQuery, response);
+	
+	isSearching = false;
+	
+	if (!result)
+	{
+		failurePopupMessage = "Search failed: " + result.message;
+		showFailurePopup = true;
+	}
+	else
+	{
+		searchResults = response.torrents;
+		nextToken = response.nextToken;
+		hasMoreResults = response.hasMore;
+	}
+}
+
+void UIManager::displayPaginationControls()
+{
+	ImGui::Separator();
+	
+	ImGui::Text("Results: %d found", (int)searchResults.size());
+	
+	// Load more results button
+	ImGui::SameLine();
+	if (hasMoreResults && !isSearching && !searchResults.empty())
+	{
+		if (ImGui::Button("Load More"))
+		{
+			loadMoreResults();
+		}
+	}
+	else
+	{
+		ImGui::BeginDisabled();
+		ImGui::Button("Load More");
+		ImGui::EndDisabled();
+	}
+	
+	if (isSearching)
+	{
+		ImGui::SameLine();
+		ImGui::Text("Loading...");
+	}
+}
+
+void UIManager::loadMoreResults()
+{
+	if (hasMoreResults && !isSearching && !currentSearchQuery.empty() && !nextToken.empty())
+	{
+		isSearching = true;
+		SearchResponse response;
+		
+		SearchQuery searchQuery(currentSearchQuery, 0, nextToken);
+		Result result = searchEngine.searchTorrents(searchQuery, response);
+		
+		isSearching = false;
+		
+		if (result && !response.torrents.empty())
+		{
+			// Append new results to existing ones
+			searchResults.insert(searchResults.end(), response.torrents.begin(), response.torrents.end());
+			nextToken = response.nextToken;
+			hasMoreResults = response.hasMore;
+		}
+		else if (!result)
+		{
+			failurePopupMessage = "Failed to load more results: " + result.message;
+			showFailurePopup = true;
+		}
+		else
+		{
+			// No more results
+			hasMoreResults = false;
+		}
 	}
 }

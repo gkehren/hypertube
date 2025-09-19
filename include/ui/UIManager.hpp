@@ -11,6 +11,7 @@
 #include <functional>
 #include <string>
 #include "TorrentManager.hpp"
+#include "SearchEngine.hpp"
 #include "Result.hpp"
 
 struct MenuItem
@@ -32,7 +33,7 @@ struct TorrentRemovalInfo
 class UIManager
 {
 public:
-	UIManager(TorrentManager &torrentManager);
+	UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine);
 	~UIManager() = default;
 
 	void init(GLFWwindow *window);
@@ -49,6 +50,7 @@ public:
 private:
 	ImGuiIO io;
 	char magnetLinkBuffer[4096] = {0};
+	char searchQueryBuffer[256] = {0};
 	bool exitRequested = false;
 	lt::torrent_handle selectedTorrent;
 	bool showFailurePopup = false;
@@ -58,11 +60,22 @@ private:
 
 	std::pair<bool, std::string> torrentToAdd;
 	std::vector<TorrentRemovalInfo> torrentsToRemove;
+	
+	// Search-related members
+	std::vector<TorrentSearchResult> searchResults;
+	TorrentSearchResult selectedSearchResult;
+	bool showSearchWindow = false;
+	bool isSearching = false;
+	std::string currentSearchQuery;
+	std::string nextToken;
+	bool hasMoreResults = true;
 
 	TorrentManager &torrentManager;
+	SearchEngine &searchEngine;
 
 	void displayCategories();
 	void displayTorrentList();
+	void displayTorrentManagement();
 	void displayTorrentDetails();
 	void displayTorrentDetails_General(const lt::torrent_status &status);
 	void displayTorrentDetails_Files();
@@ -80,6 +93,18 @@ private:
 	void handleAskSavePathModal();
 	void displayMenuBar(bool &showTorrentPopup, bool &showMagnetTorrentPopup);
 	void setupDocking(ImGuiID dockspace_id);
+
+	// Search-related methods
+	void displaySearchWindow();
+	void displayIntegratedSearch();
+	void displaySearchResults();
+	void displayEnhancedSearchResults();
+	void displaySearchResultRow(const TorrentSearchResult &result, int index);
+	void displayEnhancedSearchResultRow(const TorrentSearchResult &result, int index);
+	void handleSearchResultSelection(const TorrentSearchResult &result);
+	void performSearch(const std::string &query);
+	void displayPaginationControls();
+	void loadMoreResults();
 
 	// Modal Windows
 	void askSavePathModal();
