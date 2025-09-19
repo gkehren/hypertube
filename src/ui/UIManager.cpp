@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <iostream>
 #include <chrono>
+#include <cstring>
 
 UIManager::UIManager(TorrentManager &torrentManager)
 	: torrentManager(torrentManager)
@@ -595,7 +596,23 @@ void UIManager::displayTorrentDetails_Peers()
 			ImGui::TableSetColumnIndex(0);
 			ImGui::Text("%s", peer.ip.address().to_string().c_str());
 			ImGui::TableSetColumnIndex(1);
-			ImGui::Text("%s", std::string(peer.client, 8).c_str());
+
+			// Safely display peer client by limiting length and handling non-printable chars
+			std::string client = peer.client;
+			if (client.length() > 8)
+			{
+				client = client.substr(0, 8);
+			}
+			// Replace any non-printable characters with '.'
+			for (char &c : client)
+			{
+				if (c < 32 || c > 126)
+				{
+					c = '.';
+				}
+			}
+			ImGui::Text("%s", client.c_str());
+
 			ImGui::TableSetColumnIndex(2);
 			// TODO: Display flags
 			ImGui::Text("TODO");
