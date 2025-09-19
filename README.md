@@ -4,34 +4,28 @@ A lightweight and fast cross-platform BitTorrent client built with C++ and Dear 
 
 ## Features
 
-### Must Have
-- Support for basic BitTorrent operations (download, upload, pause, resume, stop torrents)
-- Cross-platform compatibility (Windows, Linux, MacOS)
-- User-friendly GUI with Dear ImGui
+### Already Implemented
+- Cross-platform GUI with Dear ImGui and docking support
+- Torrent file loading and parsing
 - Magnet link support
-- Peer discovery and connection management
-- Tracker communication (HTTP, UDP)
-- Torrent file creation and parsing
-
-### Should Have
-- DHT (Distributed Hash Table) support for decentralized peer discovery
-- UPnP/NAT-PMP for port forwarding
-- Encryption support for peer connections
-- Bandwidth management and scheduling
-- Logging of torrent activities
-
-### Could Have
-- RSS feed support for automatic downloading
-- Integrated search functionality
-- Web interface for remote management
-- Customizable UI themes
+- Basic torrent management (add, remove, pause, resume)
+- Real-time torrent status display (progress, speeds, peers, seeds)
+- Peer information viewing
+- File details and progress tracking
+- Tracker information display
+- Context menu operations (open folder, copy magnet URI, queue management)
+- File dialog integration for torrent/save path selection
+- Configuration management with JSON
+- Automatic torrent state persistence
 
 ## Dependencies
 
 - [Dear ImGui](https://github.com/ocornut/imgui) - Immediate mode GUI library.
+- [ImGuiFileDialog](https://github.com/aiekick/ImGuiFileDialog) - File dialog extension for ImGui.
 - [libtorrent](https://github.com/arvidn/libtorrent) - BitTorrent library.
-- [Boost](https://www.boost.org/) - Libraries for C++ including Boost.Asio used by libtorrent.
 - [nlohmann/json](https://github.com/nlohmann/json) - JSON library for configuration management.
+- [GLFW](https://www.glfw.org/) - OpenGL framework for window management.
+- [OpenGL](https://www.opengl.org/) - Graphics rendering.
 
 ## Project Structure
 
@@ -119,33 +113,6 @@ Libtorrent is used to handle all BitTorrent protocol operations, including peer 
 ### Configuration Management
 User settings and torrent states are managed using JSON files. This allows for easy reading and writing of configuration data.
 
-## Development Roadmap
-
-### Milestone 1: Project Setup and Initial UI
-- Setup development environment and project structure.
-- Create basic UI with Dear ImGui.
-
-### Milestone 2: Basic BitTorrent Operations
-- Implement and test basic BitTorrent operations with libtorrent.
-
-### Milestone 3: Configuration Management
-- Implement loading and saving of configuration data using JSON.
-
-### Milestone 4: Advanced Features and Optimization
-- Implement additional features (e.g., DHT support, bandwidth management).
-- Optimize performance and test on all platforms.
-
-### Milestone 5: Final Testing and Documentation
-- Conduct thorough testing.
-- Prepare documentation and user guide.
-
 ## Contributing
 
 Contributions are welcome! Please fork the repository and submit a pull request for any improvements or bug fixes.
-
-## Acknowledgements
-
-- [Dear ImGui](https://github.com/ocornut/imgui) - Immediate mode GUI library.
-- [libtorrent](https://github.com/arvidn/libtorrent) - BitTorrent library.
-- [Boost](https://www.boost.org/) - C++ libraries.
-- [nlohmann/json](https://github.com/nlohmann/json) - JSON library for configuration management.

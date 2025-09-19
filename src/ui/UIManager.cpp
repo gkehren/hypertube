@@ -99,10 +99,6 @@ void UIManager::renderFrame(GLFWwindow *window, const ImVec4 &clear_color)
 	displayTorrentList();
 	displayTorrentDetails();
 
-	ImGui::Begin("Log");
-	ImGui::Text("Here will be the log.");
-	ImGui::End();
-
 	handleAddTorrentModal(showTorrentPopup);
 	handleAddMagnetTorrentModal(showMagnetTorrentPopup);
 	handleRemoveTorrentModal();
@@ -154,7 +150,6 @@ void UIManager::setupDocking(ImGuiID dockspace_id)
 	ImGui::DockBuilderDockWindow("Categories", dock_left_id);
 	ImGui::DockBuilderDockWindow("Torrent List", dock_top_id);
 	ImGui::DockBuilderDockWindow("Torrent Details", dock_bottom_id);
-	ImGui::DockBuilderDockWindow("Log", dock_bottom_id);
 
 	ImGui::DockBuilderFinish(dockspace_id);
 }
