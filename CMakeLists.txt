@@ -1,9 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
 
-# Set modern CMake policies to resolve warnings and use modern practices
-cmake_policy(SET CMP0167 NEW) # Use Boost:: targets
-cmake_policy(SET CMP0169 NEW) # Use FetchContent_MakeAvailable
-
 # Project name
 project(hypertube)
 
@@ -51,6 +47,11 @@ find_package(LibtorrentRasterbar CONFIG REQUIRED)
 find_package(CURL REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(glfw3 REQUIRED CONFIG)
+
+# Find X11 on Linux systems for ImGui GLFW backend
+if(UNIX AND NOT APPLE)
+    find_package(X11 REQUIRED)
+endif()
 
 # Explicitly list all source files
 set(SOURCES
@@ -103,6 +104,11 @@ target_link_libraries(hypertube PRIVATE
     nlohmann_json::nlohmann_json
     CURL::libcurl
 )
+
+# Platform-specific libraries
+if(UNIX AND NOT APPLE)
+    target_link_libraries(hypertube PRIVATE ${X11_LIBRARIES})
+endif()
 
 file(COPY config DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 

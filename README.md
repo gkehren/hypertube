@@ -76,7 +76,7 @@ A lightweight and fast cross-platform BitTorrent client built with C++ and Dear 
 2. **Install Dependencies:**
    Ensure you have the required dependencies installed. You can use a package manager like vcpkg:
    ```sh
-   vcpkg install imgui libtorrent boost-json
+   vcpkg install glfw3 imgui libtorrent curl boost-system boost-filesystem
    ```
 
 3. **Build the Project:**
