@@ -17,6 +17,7 @@
 #include "TorrentDetailsUI.hpp"
 #include "SearchUI.hpp"
 #include "ModalDialogs.hpp"
+#include "ConfigManager.hpp"
 
 struct MenuItem
 {
@@ -37,7 +38,7 @@ struct TorrentRemovalInfo
 class UIManager
 {
 public:
-	UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine);
+	UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine, ConfigManager &configManager);
 	~UIManager() = default;
 
 	void init(GLFWwindow *window);
@@ -66,8 +67,14 @@ private:
 	// Torrent removal state
 	std::vector<TorrentRemovalInfo> torrentsToRemove;
 
+	// Preferences dialog state
+	bool showPreferencesDialog = false;
+	int tempDownloadSpeedLimit = 0;
+	int tempUploadSpeedLimit = 0;
+
 	TorrentManager &torrentManager;
 	SearchEngine &searchEngine;
+	ConfigManager &configManager;
 
 	// Core UI methods
 	void displayCategories();
@@ -80,4 +87,7 @@ private:
 	void setupUICallbacks();
 	void showFailurePopupWithMessage(const std::string &message);
 	void handleTorrentRemoval();
+	void displayPreferencesDialog();
+	void loadSpeedLimitsFromConfig();
+	void applySpeedLimits();
 };

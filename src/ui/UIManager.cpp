@@ -4,8 +4,8 @@
 #include <iostream>
 #include <memory>
 
-UIManager::UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine)
-	: torrentManager(torrentManager), searchEngine(searchEngine)
+UIManager::UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine, ConfigManager &configManager)
+	: torrentManager(torrentManager), searchEngine(searchEngine), configManager(configManager)
 {
 	// Initialize UI components
 	torrentTableUI = std::make_unique<TorrentTableUI>(torrentManager);
@@ -21,6 +21,8 @@ void UIManager::init(GLFWwindow *window)
 {
 	initImGui(window);
 	setDefaultSavePath();
+	loadSpeedLimitsFromConfig();
+	applySpeedLimits();
 }
 
 void UIManager::setDefaultSavePath()
@@ -157,6 +159,8 @@ void UIManager::renderFrame(GLFWwindow *window, const ImVec4 &clear_color)
 
 	handleModals(showTorrentPopup, showMagnetTorrentPopup);
 
+	displayPreferencesDialog();
+
 	if (showFailurePopup)
 	{
 		ImGui::OpenPopup("Failure");
@@ -228,7 +232,8 @@ void UIManager::displayMenuBar(bool &showTorrentPopup, bool &showMagnetTorrentPo
 				 { showTorrentPopup = true; }},
 				{"Add a magnet link...", "CTRL+U", [&]()
 				 { showMagnetTorrentPopup = true; }},
-				{"Preferences", "CTRL+P", []() {}},
+				{"Preferences", "CTRL+P", [&]()
+				 { showPreferencesDialog = true; }},
 				{"Exit", "ALT+F4", [&]()
 				 { exitRequested = true; }},
 			};
@@ -309,4 +314,94 @@ void UIManager::shutdown()
 
 	// Shutdown ImGui context
 	ImGui::DestroyContext();
+}
+
+void UIManager::displayPreferencesDialog()
+{
+	if (showPreferencesDialog)
+	{
+		ImGui::OpenPopup("Preferences");
+		showPreferencesDialog = false;
+		// Load current values when opening dialog
+		tempDownloadSpeedLimit = configManager.getDownloadSpeedLimit();
+		tempUploadSpeedLimit = configManager.getUploadSpeedLimit();
+	}
+
+	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(400, 250), ImGuiCond_Appearing);
+
+	if (ImGui::BeginPopupModal("Preferences", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ImGui::Text("Speed Limits");
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		// Download speed limit
+		ImGui::Text("Download Speed Limit (KB/s):");
+		ImGui::SetNextItemWidth(150);
+		int downloadKBps = tempDownloadSpeedLimit / 1024;
+		if (ImGui::InputInt("##DownloadLimit", &downloadKBps, 1, 100))
+		{
+			if (downloadKBps < 0)
+				downloadKBps = 0;
+			tempDownloadSpeedLimit = downloadKBps * 1024;
+		}
+		ImGui::SameLine();
+		ImGui::TextDisabled("(0 = unlimited)");
+
+		ImGui::Spacing();
+
+		// Upload speed limit
+		ImGui::Text("Upload Speed Limit (KB/s):  ");
+		ImGui::SetNextItemWidth(150);
+		int uploadKBps = tempUploadSpeedLimit / 1024;
+		if (ImGui::InputInt("##UploadLimit", &uploadKBps, 1, 100))
+		{
+			if (uploadKBps < 0)
+				uploadKBps = 0;
+			tempUploadSpeedLimit = uploadKBps * 1024;
+		}
+		ImGui::SameLine();
+		ImGui::TextDisabled("(0 = unlimited)");
+
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		// Buttons
+		if (ImGui::Button("Apply", ImVec2(120, 0)))
+		{
+			// Save to config
+			configManager.setDownloadSpeedLimit(tempDownloadSpeedLimit);
+			configManager.setUploadSpeedLimit(tempUploadSpeedLimit);
+			configManager.save("./config/settings.json");
+
+			// Apply to torrent manager
+			applySpeedLimits();
+
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SetItemDefaultFocus();
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel", ImVec2(120, 0)))
+		{
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
+	}
+}
+
+void UIManager::loadSpeedLimitsFromConfig()
+{
+	configManager.load("./config/settings.json");
+}
+
+void UIManager::applySpeedLimits()
+{
+	int downloadLimit = configManager.getDownloadSpeedLimit();
+	int uploadLimit = configManager.getUploadSpeedLimit();
+
+	torrentManager.setDownloadSpeedLimit(downloadLimit);
+	torrentManager.setUploadSpeedLimit(uploadLimit);
 }

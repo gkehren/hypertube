@@ -26,6 +26,12 @@ public:
 	Result removeTorrent(const lt::sha1_hash hash, RemoveTorrentType removeType);
 	const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &getTorrents() const;
 
+	// Speed limit methods
+	void setDownloadSpeedLimit(int bytesPerSecond); // 0 means unlimited
+	void setUploadSpeedLimit(int bytesPerSecond);	// 0 means unlimited
+	int getDownloadSpeedLimit() const;
+	int getUploadSpeedLimit() const;
+
 private:
 	lt::session session;
 	std::unordered_map<lt::sha1_hash, lt::torrent_handle> torrents;

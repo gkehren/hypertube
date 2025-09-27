@@ -54,3 +54,31 @@ json &ConfigManager::getConfig()
 {
 	return this->config;
 }
+
+void ConfigManager::setDownloadSpeedLimit(int bytesPerSecond)
+{
+	config["speed_limits"]["download"] = bytesPerSecond;
+}
+
+void ConfigManager::setUploadSpeedLimit(int bytesPerSecond)
+{
+	config["speed_limits"]["upload"] = bytesPerSecond;
+}
+
+int ConfigManager::getDownloadSpeedLimit() const
+{
+	if (config.contains("speed_limits") && config["speed_limits"].contains("download"))
+	{
+		return config["speed_limits"]["download"];
+	}
+	return 0; // 0 means unlimited
+}
+
+int ConfigManager::getUploadSpeedLimit() const
+{
+	if (config.contains("speed_limits") && config["speed_limits"].contains("upload"))
+	{
+		return config["speed_limits"]["upload"];
+	}
+	return 0; // 0 means unlimited
+}

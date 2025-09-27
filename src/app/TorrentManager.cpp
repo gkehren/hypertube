@@ -78,3 +78,27 @@ const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &TorrentManager::get
 {
 	return this->torrents;
 }
+
+void TorrentManager::setDownloadSpeedLimit(int bytesPerSecond)
+{
+	lt::settings_pack settings;
+	settings.set_int(lt::settings_pack::download_rate_limit, bytesPerSecond);
+	session.apply_settings(settings);
+}
+
+void TorrentManager::setUploadSpeedLimit(int bytesPerSecond)
+{
+	lt::settings_pack settings;
+	settings.set_int(lt::settings_pack::upload_rate_limit, bytesPerSecond);
+	session.apply_settings(settings);
+}
+
+int TorrentManager::getDownloadSpeedLimit() const
+{
+	return session.get_settings().get_int(lt::settings_pack::download_rate_limit);
+}
+
+int TorrentManager::getUploadSpeedLimit() const
+{
+	return session.get_settings().get_int(lt::settings_pack::upload_rate_limit);
+}
