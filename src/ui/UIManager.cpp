@@ -88,6 +88,9 @@ void UIManager::setupUICallbacks()
 
 	modalDialogs->setRemoveCompletedCallback([this]()
 											 { handleTorrentRemoval(); });
+
+	modalDialogs->setRemoveCancelledCallback([this]()
+											 { torrentsToRemove.clear(); });
 }
 
 void UIManager::showFailurePopupWithMessage(const std::string &message)

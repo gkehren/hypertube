@@ -188,6 +188,10 @@ void ModalDialogs::removeTorrentModal()
 		ImGui::SameLine();
 		if (ImGui::Button("Cancel", ImVec2(120, 0)))
 		{
+			if (onRemoveCancelled)
+			{
+				onRemoveCancelled();
+			}
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
@@ -207,4 +211,9 @@ void ModalDialogs::setTorrentAddCallback(std::function<void(const std::string &,
 void ModalDialogs::setRemoveCompletedCallback(std::function<void()> callback)
 {
 	onRemoveCompleted = callback;
+}
+
+void ModalDialogs::setRemoveCancelledCallback(std::function<void()> callback)
+{
+	onRemoveCancelled = callback;
 }

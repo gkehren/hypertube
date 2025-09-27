@@ -42,6 +42,7 @@ public:
 	void setShowFailurePopupCallback(std::function<void(const std::string &)> callback);
 	void setTorrentAddCallback(std::function<void(const std::string &, const std::string &, bool)> callback);
 	void setRemoveCompletedCallback(std::function<void()> callback);
+	void setRemoveCancelledCallback(std::function<void()> callback);
 
 	// Access for external state
 	void setSavePath(const std::string &path) { savePath = path; }
@@ -61,4 +62,5 @@ private:
 	std::function<void(const std::string &)> onShowFailurePopup;
 	std::function<void(const std::string &, const std::string &, bool)> onTorrentAdd; // path, savePath, isMagnet
 	std::function<void()> onRemoveCompleted;
+	std::function<void()> onRemoveCancelled;
 };
