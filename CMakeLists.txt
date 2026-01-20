@@ -65,7 +65,6 @@ set(SOURCES
     src/ui/TorrentDetailsUI.cpp
     src/ui/SearchUI.cpp
     src/ui/ModalDialogs.cpp
-    src/utils/StringUtils.cpp
     # Add core ImGui sources
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_demo.cpp
@@ -76,6 +75,20 @@ set(SOURCES
     ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
     ${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp
+)
+
+# Create the utils library
+add_library(hypertube_utils STATIC
+    src/utils/StringUtils.cpp
+)
+
+target_include_directories(hypertube_utils PUBLIC
+    "include"
+    "include/utils"
+)
+
+target_link_libraries(hypertube_utils PUBLIC
+    LibtorrentRasterbar::torrent-rasterbar
 )
 
 # Create the executable
@@ -97,6 +110,7 @@ target_include_directories(ImGuiFileDialog PUBLIC ${imgui_SOURCE_DIR})
 
 # Link libraries using modern imported targets
 target_link_libraries(hypertube PRIVATE
+    hypertube_utils
     Boost::filesystem
     Boost::system
     LibtorrentRasterbar::torrent-rasterbar
@@ -130,3 +144,6 @@ else()
     $<$<CONFIG:Release>:-flto>
   )
 endif()
+
+enable_testing()
+add_subdirectory(tests)
