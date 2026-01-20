@@ -22,7 +22,7 @@ class TorrentManager
 public:
 	Result addTorrent(const std::string &torrentPath, const std::string &savePath = "./downloads");
 	Result addMagnetTorrent(const std::string &magnetUri, const std::string &savePath = "./downloads");
-	void addTorrentsFromVec(const std::vector<std::string> &torrents);
+	void addTorrentsFromVec(std::vector<std::string> &&torrents);
 	Result removeTorrent(const lt::sha1_hash hash, RemoveTorrentType removeType);
 	const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &getTorrents() const;
 
