@@ -318,13 +318,15 @@ void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result,
 
 	// Created date
 	ImGui::TableSetColumnIndex(6);
-	std::string createdDate = formatUnixTime(result.createdUnix);
-	ImGui::Text("%s", createdDate.c_str());
+	char createdDate[32];
+	formatUnixTime(result.createdUnix, createdDate, sizeof(createdDate));
+	ImGui::Text("%s", createdDate);
 
 	// Last seen (scraped date)
 	ImGui::TableSetColumnIndex(7);
-	std::string scrapedDate = formatUnixTime(result.scrapedDate);
-	ImGui::Text("%s", scrapedDate.c_str());
+	char scrapedDate[32];
+	formatUnixTime(result.scrapedDate, scrapedDate, sizeof(scrapedDate));
+	ImGui::Text("%s", scrapedDate);
 
 	// Category
 	ImGui::TableSetColumnIndex(8);
@@ -372,8 +374,9 @@ void SearchUI::displaySearchResultRow(const TorrentSearchResult &result, int ind
 
 	// Created date
 	ImGui::TableSetColumnIndex(5);
-	std::string createdDate = formatUnixTime(result.createdUnix);
-	ImGui::Text("%s", createdDate.c_str());
+	char createdDate[32];
+	formatUnixTime(result.createdUnix, createdDate, sizeof(createdDate));
+	ImGui::Text("%s", createdDate);
 
 	// Category
 	ImGui::TableSetColumnIndex(6);
@@ -511,11 +514,17 @@ std::string SearchUI::formatBytes(size_t bytes, bool speed)
 	return oss.str();
 }
 
-std::string SearchUI::formatUnixTime(int64_t unixTime)
+void SearchUI::formatUnixTime(int64_t unixTime, char *buffer, size_t bufferSize)
 {
+	if (bufferSize == 0)
+	{
+		return;
+	}
+
 	if (unixTime == 0)
 	{
-		return "N/A";
+		snprintf(buffer, bufferSize, "N/A");
+		return;
 	}
 
 	// Handle both seconds and milliseconds timestamps
@@ -532,7 +541,8 @@ std::string SearchUI::formatUnixTime(int64_t unixTime)
 	// Validate the timestamp is reasonable (between 1970 and 2100)
 	if (time < 0 || time > 4102444800)
 	{ // 4102444800 = 2100-01-01
-		return "Invalid TS";
+		snprintf(buffer, bufferSize, "Invalid TS");
+		return;
 	}
 
 	// Use localtime for local time
@@ -540,17 +550,15 @@ std::string SearchUI::formatUnixTime(int64_t unixTime)
 
 	if (!tm)
 	{
-		return "TM Error";
+		snprintf(buffer, bufferSize, "TM Error");
+		return;
 	}
 
 	// Use manual formatting
-	char buffer[32];
-	if (std::strftime(buffer, sizeof(buffer), "%Y-%m-%d", tm) == 0)
+	if (std::strftime(buffer, bufferSize, "%Y-%m-%d", tm) == 0)
 	{
-		return "Format Error";
+		snprintf(buffer, bufferSize, "Format Error");
 	}
-
-	return std::string(buffer);
 }
 
 void SearchUI::setSearchResultSelectedCallback(std::function<void(const TorrentSearchResult &)> callback)
