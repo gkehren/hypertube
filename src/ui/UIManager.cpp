@@ -228,13 +228,6 @@ void UIManager::displayMenuBar()
 	{
 		if (ImGui::BeginMenu("File"))
 		{
-			struct MenuBarItem
-			{
-				std::string label;
-				std::string shortcut;
-				std::function<void(UIManager *)> action;
-			};
-
 			static const std::vector<MenuBarItem> menuItems = {
 				{"Add a torrent...", "CTRL+O", [](UIManager *mgr)
 				 { mgr->showTorrentPopup = true; }},
