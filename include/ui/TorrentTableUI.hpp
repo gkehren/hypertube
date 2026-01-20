@@ -8,8 +8,14 @@
 #include <functional>
 #include "TorrentManager.hpp"
 
-struct MenuItem;
 struct TorrentRemovalInfo;
+
+struct MenuItem
+{
+	std::string label;
+	std::string shortcut;
+	std::function<void()> action;
+};
 
 class TorrentTableUI
 {

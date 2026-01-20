@@ -19,11 +19,13 @@
 #include "ModalDialogs.hpp"
 #include "ConfigManager.hpp"
 
-struct MenuItem
+class UIManager;
+
+struct MenuBarItem
 {
 	std::string label;
 	std::string shortcut;
-	std::function<void()> action;
+	std::function<void(UIManager *)> action;
 };
 
 struct TorrentRemovalInfo
