@@ -160,75 +160,81 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 {
 	if (ImGui::BeginPopupContextItem("##context", ImGuiPopupFlags_MouseButtonRight))
 	{
-		const std::vector<MenuItem> menuItems = {
-			{"Open", "", []() {}},
-			{"Open Containing Folder", "", [=]()
-			 {
-#ifdef _WIN32
-				 std::string command = "explorer.exe \"" + handle.status().save_path + "\"";
-#elif __APPLE__
-				std::string command = "open \"" + handle.status().save_path + "\"";
-#elif __linux__
-				std::string command = "xdg-open \"" + handle.status().save_path + "\"";
-#endif
-				 int ret = system(command.c_str());
-				 if (ret != 0)
-				 {
-					 std::cerr << "Failed to open containing folder" << std::endl;
-				 }
-			 }},
-			{"Copy Magnet URI", "", [=]()
-			 {
-				 ImGui::SetClipboardText(lt::make_magnet_uri(handle).c_str());
-			 }},
-			{"Force Start", "", [=]()
-			 {
-				 handle.force_recheck();
-				 handle.resume();
-			 }},
-			{"Start", "", [=]()
-			 {
-				 handle.resume();
-			 }},
-			{"Pause", "", [=]()
-			 {
-				 if (handle.flags() & lt::torrent_flags::paused)
-					 handle.resume();
-				 else
-					 handle.pause();
-			 }},
-			{"Stop", "", [=]()
-			 {
-				 handle.pause();
-				 handle.force_recheck();
-			 }},
-			{"Move Up Queue", "", [=]()
-			 {
-				 handle.queue_position_up();
-			 }},
-			{"Move Down Queue", "", [=]()
-			 {
-				 handle.queue_position_down();
-			 }},
-			{"Remove", "", [=]()
-			 {
-				 if (onRemoveTorrent)
-					 onRemoveTorrent(info_hash, REMOVE_TORRENT);
-			 }},
-			{"Update Tracker", "", [=]()
-			 {
-				 handle.force_reannounce();
-			 }},
-			{"Properties", "", []() {}},
-		};
-
-		for (const auto &item : menuItems)
+		if (ImGui::MenuItem("Open"))
 		{
-			if (ImGui::MenuItem(item.label.c_str(), item.shortcut.c_str()))
+		}
+
+		if (ImGui::MenuItem("Open Containing Folder"))
+		{
+#ifdef _WIN32
+			std::string command = "explorer.exe \"" + handle.status().save_path + "\"";
+#elif __APPLE__
+			std::string command = "open \"" + handle.status().save_path + "\"";
+#elif __linux__
+			std::string command = "xdg-open \"" + handle.status().save_path + "\"";
+#endif
+			int ret = system(command.c_str());
+			if (ret != 0)
 			{
-				item.action();
+				std::cerr << "Failed to open containing folder" << std::endl;
 			}
 		}
+
+		if (ImGui::MenuItem("Copy Magnet URI"))
+		{
+			ImGui::SetClipboardText(lt::make_magnet_uri(handle).c_str());
+		}
+
+		if (ImGui::MenuItem("Force Start"))
+		{
+			handle.force_recheck();
+			handle.resume();
+		}
+
+		if (ImGui::MenuItem("Start"))
+		{
+			handle.resume();
+		}
+
+		if (ImGui::MenuItem("Pause"))
+		{
+			if (handle.flags() & lt::torrent_flags::paused)
+				handle.resume();
+			else
+				handle.pause();
+		}
+
+		if (ImGui::MenuItem("Stop"))
+		{
+			handle.pause();
+			handle.force_recheck();
+		}
+
+		if (ImGui::MenuItem("Move Up Queue"))
+		{
+			handle.queue_position_up();
+		}
+
+		if (ImGui::MenuItem("Move Down Queue"))
+		{
+			handle.queue_position_down();
+		}
+
+		if (ImGui::MenuItem("Remove"))
+		{
+			if (onRemoveTorrent)
+				onRemoveTorrent(info_hash, REMOVE_TORRENT);
+		}
+
+		if (ImGui::MenuItem("Update Tracker"))
+		{
+			handle.force_reannounce();
+		}
+
+		if (ImGui::MenuItem("Properties"))
+		{
+		}
+
 		ImGui::EndPopup();
 	}
 }
