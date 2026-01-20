@@ -480,16 +480,25 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 
 std::string SearchEngine::urlEncode(const std::string &value) const
 {
-	CURL *curl = curl_easy_init();
-	if (!curl)
-		return value;
+	static const char lookup[] = "0123456789ABCDEF";
+	std::string escaped;
+	escaped.reserve(value.length() * 3);
 
-	char *encoded = curl_easy_escape(curl, value.c_str(), value.length());
-	std::string result = encoded;
-	curl_free(encoded);
-	curl_easy_cleanup(curl);
+	for (char c : value)
+	{
+		if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~')
+		{
+			escaped += c;
+		}
+		else
+		{
+			escaped += '%';
+			escaped += lookup[(c >> 4) & 0x0F];
+			escaped += lookup[c & 0x0F];
+		}
+	}
 
-	return result;
+	return escaped;
 }
 
 std::string SearchEngine::formatMagnetUri(const std::string &infoHash, const std::string &name) const
