@@ -33,7 +33,7 @@ public:
 
 	// Utility methods
 	std::string formatBytes(size_t bytes, bool speed);
-	std::string formatUnixTime(int64_t unixTime);
+	void formatUnixTime(int64_t unixTime, char *buffer, size_t bufferSize);
 
 	// Callback setup
 	void setSearchResultSelectedCallback(std::function<void(const TorrentSearchResult &)> callback);
