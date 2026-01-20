@@ -41,7 +41,7 @@ Result TorrentManager::addMagnetTorrent(const std::string &magnetUri, const std:
 	}
 }
 
-void TorrentManager::addTorrentsFromVec(const std::vector<std::string> torrents)
+void TorrentManager::addTorrentsFromVec(const std::vector<std::string> &torrents)
 {
 	auto it = torrents.begin();
 	while (it != torrents.end())
