@@ -36,16 +36,17 @@ void ConfigManager::saveTorrents(const std::unordered_map<lt::sha1_hash, lt::tor
 	save("./config/torrents.json");
 }
 
-const std::vector<std::string> ConfigManager::loadTorrents(const std::string &path)
+std::vector<std::string> ConfigManager::loadTorrents(const std::string &path)
 {
 	std::vector<std::string> torrents;
-	json torrentsJson = this->config["torrents"];
+	const auto &torrentsJson = this->config["torrents"];
+	torrents.reserve(torrentsJson.size() * 2);
 	for (const auto &torrent : torrentsJson)
 	{
 		std::string magnetUri = torrent["magnet_uri"];
 		std::string savePath = torrent["save_path"];
-		torrents.push_back(magnetUri);
-		torrents.push_back(savePath);
+		torrents.push_back(std::move(magnetUri));
+		torrents.push_back(std::move(savePath));
 	}
 	return torrents;
 }
