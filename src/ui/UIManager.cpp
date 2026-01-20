@@ -146,10 +146,11 @@ void UIManager::renderFrame(GLFWwindow *window, const ImVec4 &clear_color)
 		setupDocking(dockspace_id);
 	}
 
-	bool showMagnetTorrentPopup = false;
-	bool showTorrentPopup = false;
+	// Reset popup triggers
+	showMagnetTorrentPopup = false;
+	showTorrentPopup = false;
 
-	displayMenuBar(showTorrentPopup, showMagnetTorrentPopup);
+	displayMenuBar();
 
 	displayCategories();
 	displayTorrentManagement();
@@ -157,7 +158,7 @@ void UIManager::renderFrame(GLFWwindow *window, const ImVec4 &clear_color)
 	// Use the new TorrentDetailsUI component
 	torrentDetailsUI->displayTorrentDetails(torrentTableUI->getSelectedTorrent());
 
-	handleModals(showTorrentPopup, showMagnetTorrentPopup);
+	handleModals();
 
 	displayPreferencesDialog();
 
@@ -211,7 +212,7 @@ void UIManager::setupDocking(ImGuiID dockspace_id)
 	ImGui::DockBuilderFinish(dockspace_id);
 }
 
-void UIManager::handleModals(bool &showTorrentPopup, bool &showMagnetTorrentPopup)
+void UIManager::handleModals()
 {
 	modalDialogs->handleAddTorrentModal(showTorrentPopup, defaultSavePath);
 	modalDialogs->handleAddMagnetTorrentModal(showMagnetTorrentPopup);
@@ -221,28 +222,28 @@ void UIManager::handleModals(bool &showTorrentPopup, bool &showMagnetTorrentPopu
 	modalDialogs->handleAskSavePathModal(torrentToAdd, searchUI->getSelectedSearchResult(), defaultSavePath, "");
 }
 
-void UIManager::displayMenuBar(bool &showTorrentPopup, bool &showMagnetTorrentPopup)
+void UIManager::displayMenuBar()
 {
 	if (ImGui::BeginMainMenuBar())
 	{
 		if (ImGui::BeginMenu("File"))
 		{
-			const std::vector<MenuItem> menuItems = {
-				{"Add a torrent...", "CTRL+O", [&]()
-				 { showTorrentPopup = true; }},
-				{"Add a magnet link...", "CTRL+U", [&]()
-				 { showMagnetTorrentPopup = true; }},
-				{"Preferences", "CTRL+P", [&]()
-				 { showPreferencesDialog = true; }},
-				{"Exit", "ALT+F4", [&]()
-				 { exitRequested = true; }},
+			static const std::vector<MenuItem> menuItems = {
+				{"Add a torrent...", "CTRL+O", [](UIManager *mgr)
+				 { mgr->showTorrentPopup = true; }},
+				{"Add a magnet link...", "CTRL+U", [](UIManager *mgr)
+				 { mgr->showMagnetTorrentPopup = true; }},
+				{"Preferences", "CTRL+P", [](UIManager *mgr)
+				 { mgr->showPreferencesDialog = true; }},
+				{"Exit", "ALT+F4", [](UIManager *mgr)
+				 { mgr->exitRequested = true; }},
 			};
 
 			for (const auto &item : menuItems)
 			{
 				if (ImGui::MenuItem(item.label.c_str(), item.shortcut.c_str()))
 				{
-					item.action();
+					item.action(this);
 				}
 			}
 			ImGui::EndMenu();
