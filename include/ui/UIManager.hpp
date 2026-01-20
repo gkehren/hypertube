@@ -19,11 +19,13 @@
 #include "ModalDialogs.hpp"
 #include "ConfigManager.hpp"
 
+class UIManager;
+
 struct MenuItem
 {
 	std::string label;
 	std::string shortcut;
-	std::function<void()> action;
+	std::function<void(UIManager *)> action;
 };
 
 struct TorrentRemovalInfo
@@ -69,6 +71,8 @@ private:
 
 	// Preferences dialog state
 	bool showPreferencesDialog = false;
+	bool showTorrentPopup = false;
+	bool showMagnetTorrentPopup = false;
 	int tempDownloadSpeedLimit = 0;
 	int tempUploadSpeedLimit = 0;
 
@@ -79,11 +83,11 @@ private:
 	// Core UI methods
 	void displayCategories();
 	void displayTorrentManagement();
-	void displayMenuBar(bool &showTorrentPopup, bool &showMagnetTorrentPopup);
+	void displayMenuBar();
 	void setupDocking(ImGuiID dockspace_id);
 
 	// Helper methods
-	void handleModals(bool &showTorrentPopup, bool &showMagnetTorrentPopup);
+	void handleModals();
 	void setupUICallbacks();
 	void showFailurePopupWithMessage(const std::string &message);
 	void handleTorrentRemoval();
