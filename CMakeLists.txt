@@ -65,6 +65,7 @@ set(SOURCES
     src/ui/TorrentDetailsUI.cpp
     src/ui/SearchUI.cpp
     src/ui/ModalDialogs.cpp
+    src/utils/StringUtils.cpp
     # Add core ImGui sources
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_demo.cpp
@@ -85,6 +86,7 @@ target_include_directories(hypertube PRIVATE
     "include"
     "include/app"
     "include/ui"
+    "include/utils"
     "${imgui_SOURCE_DIR}"
     "${imgui_SOURCE_DIR}/backends"
     "${json_SOURCE_DIR}/single_include/nlohmann"

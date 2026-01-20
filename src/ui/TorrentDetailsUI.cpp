@@ -1,4 +1,5 @@
 #include "TorrentDetailsUI.hpp"
+#include "StringUtils.hpp"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -205,63 +206,19 @@ void TorrentDetailsUI::displayTorrentDetailsContent(const lt::torrent_status &st
 
 std::string TorrentDetailsUI::formatBytes(size_t bytes, bool speed)
 {
-	const char *units[] = {"B", "KB", "MB", "GB", "TB"};
-	size_t size = bytes;
-	size_t unitIndex = 0;
-
-	while (size >= 1024 && unitIndex < sizeof(units) / sizeof(units[0]) - 1)
-	{
-		size /= 1024;
-		unitIndex++;
-	}
-
-	std::ostringstream oss;
-	oss << std::fixed << std::setprecision(2) << size << " " << units[unitIndex];
-	if (speed)
-		oss << "/s";
-	return oss.str();
+	char buf[64];
+	Utils::formatBytes(bytes, speed, buf, sizeof(buf));
+	return std::string(buf);
 }
 
 std::string TorrentDetailsUI::torrentStateToString(lt::torrent_status::state_t state, lt::torrent_flags_t flags)
 {
-	if (flags & lt::torrent_flags::paused)
-		return "Paused";
-
-	switch (state)
-	{
-	case lt::torrent_status::downloading_metadata:
-		return "Downloading metadata";
-	case lt::torrent_status::downloading:
-		return "Downloading";
-	case lt::torrent_status::finished:
-		return "Finished";
-	case lt::torrent_status::seeding:
-		return "Seeding";
-	case lt::torrent_status::checking_files:
-		return "Checking files";
-	case lt::torrent_status::checking_resume_data:
-		return "Checking resume data";
-	default:
-		return "Unknown";
-	}
+	return std::string(Utils::torrentStateToString(state, flags));
 }
 
 std::string TorrentDetailsUI::computeETA(const lt::torrent_status &status) const
 {
-	if (status.state == lt::torrent_status::downloading && status.download_payload_rate > 0)
-	{
-		int64_t secondsLeft = (status.total_wanted - status.total_wanted_done) / status.download_payload_rate;
-		int64_t minutesLeft = secondsLeft / 60;
-		int64_t hoursLeft = minutesLeft / 60;
-		int64_t daysLeft = hoursLeft / 24;
-
-		if (daysLeft > 0)
-			return std::to_string(daysLeft) + " days";
-		if (hoursLeft > 0)
-			return std::to_string(hoursLeft) + " hours";
-		if (minutesLeft > 0)
-			return std::to_string(minutesLeft) + " minutes";
-		return std::to_string(secondsLeft) + " seconds";
-	}
-	return "N/A";
+	char buf[64];
+	Utils::computeETA(status, buf, sizeof(buf));
+	return std::string(buf);
 }
