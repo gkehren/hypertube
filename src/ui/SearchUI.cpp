@@ -1,4 +1,5 @@
 #include "SearchUI.hpp"
+#include "StringUtils.hpp"
 #include <algorithm>
 #include <iostream>
 #include <iomanip>
@@ -273,7 +274,9 @@ void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result,
 
 	// Size
 	ImGui::TableSetColumnIndex(1);
-	ImGui::Text("%s", formatBytes(result.sizeBytes, false).c_str());
+	char sizeBuf[64];
+	formatBytes(result.sizeBytes, false, sizeBuf, sizeof(sizeBuf));
+	ImGui::Text("%s", sizeBuf);
 
 	// Seeders with color coding
 	ImGui::TableSetColumnIndex(2);
@@ -352,7 +355,9 @@ void SearchUI::displaySearchResultRow(const TorrentSearchResult &result, int ind
 
 	// Size
 	ImGui::TableSetColumnIndex(1);
-	ImGui::Text("%s", formatBytes(result.sizeBytes, false).c_str());
+	char sizeBuf[64];
+	formatBytes(result.sizeBytes, false, sizeBuf, sizeof(sizeBuf));
+	ImGui::Text("%s", sizeBuf);
 
 	// Seeders
 	ImGui::TableSetColumnIndex(2);
@@ -495,23 +500,9 @@ void SearchUI::loadMoreResults()
 	}
 }
 
-std::string SearchUI::formatBytes(size_t bytes, bool speed)
+void SearchUI::formatBytes(size_t bytes, bool speed, char *buffer, size_t bufferSize)
 {
-	const char *units[] = {"B", "KB", "MB", "GB", "TB"};
-	size_t size = bytes;
-	size_t unitIndex = 0;
-
-	while (size >= 1024 && unitIndex < sizeof(units) / sizeof(units[0]) - 1)
-	{
-		size /= 1024;
-		unitIndex++;
-	}
-
-	std::ostringstream oss;
-	oss << std::fixed << std::setprecision(2) << size << " " << units[unitIndex];
-	if (speed)
-		oss << "/s";
-	return oss.str();
+	Utils::formatBytes(bytes, speed, buffer, bufferSize);
 }
 
 void SearchUI::formatUnixTime(int64_t unixTime, char *buffer, size_t bufferSize)

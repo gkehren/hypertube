@@ -32,7 +32,7 @@ public:
 	void handleSearchResultSelection(const TorrentSearchResult &result);
 
 	// Utility methods
-	std::string formatBytes(size_t bytes, bool speed);
+	void formatBytes(size_t bytes, bool speed, char *buffer, size_t bufferSize);
 	void formatUnixTime(int64_t unixTime, char *buffer, size_t bufferSize);
 
 	// Callback setup
