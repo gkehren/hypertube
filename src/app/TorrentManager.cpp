@@ -1,5 +1,7 @@
 #include "TorrentManager.hpp"
+#include "ConfigManager.hpp"
 #include <iostream>
+#include <filesystem>
 
 Result TorrentManager::addTorrent(const std::string &torrentPath, const std::string &savePath)
 {
@@ -9,7 +11,10 @@ Result TorrentManager::addTorrent(const std::string &torrentPath, const std::str
 		params.save_path = savePath;
 		params.ti = std::make_shared<lt::torrent_info>(torrentPath);
 		lt::torrent_handle handle = this->session.add_torrent(params);
-		this->torrents[handle.info_hash()] = handle;
+
+		lt::sha1_hash hash = handle.info_hash();
+		this->torrents[hash] = handle;
+		this->torrentFilePaths[hash] = torrentPath;
 
 		std::cout << "Added torrent from file: " << handle.status().name << std::endl;
 		return Result::Success();
@@ -41,14 +46,19 @@ Result TorrentManager::addMagnetTorrent(const std::string &magnetUri, const std:
 	}
 }
 
-void TorrentManager::addTorrentsFromVec(std::vector<std::string> &&torrents)
+void TorrentManager::addTorrentsFromConfig(const std::vector<TorrentConfigData> &torrents)
 {
-	auto it = torrents.begin();
-	while (it != torrents.end())
+	for (const auto &data : torrents)
 	{
-		std::string magnetUri = std::move(*it++);
-		std::string savePath = std::move(*it++);
-		this->addMagnetTorrent(magnetUri, savePath);
+		// Try to add from file if path exists
+		if (!data.torrentFilePath.empty() && std::filesystem::exists(data.torrentFilePath))
+		{
+			this->addTorrent(data.torrentFilePath, data.savePath);
+		}
+		else if (!data.magnetUri.empty())
+		{
+			this->addMagnetTorrent(data.magnetUri, data.savePath);
+		}
 	}
 }
 
@@ -59,13 +69,38 @@ Result TorrentManager::removeTorrent(const lt::sha1_hash hash, RemoveTorrentType
 	{
 		if (removeType == REMOVE_TORRENT_FILES || removeType == REMOVE_TORRENT_FILES_AND_DATA)
 		{
-			// TODO: Remove .torrent file (if it exists)
+			auto pathIt = this->torrentFilePaths.find(hash);
+			if (pathIt != this->torrentFilePaths.end())
+			{
+				try
+				{
+					if (std::filesystem::exists(pathIt->second))
+					{
+						std::filesystem::remove(pathIt->second);
+						std::cout << "Deleted .torrent file: " << pathIt->second << std::endl;
+					}
+				}
+				catch (const std::exception &e)
+				{
+					std::cerr << "Failed to delete .torrent file: " << e.what() << std::endl;
+				}
+				this->torrentFilePaths.erase(pathIt);
+			}
 		}
+
 		if (removeType == REMOVE_TORRENT_DATA || removeType == REMOVE_TORRENT_FILES_AND_DATA)
 			this->session.remove_torrent(it->second, lt::session::delete_files);
 		else
 			this->session.remove_torrent(it->second);
+
 		this->torrents.erase(it);
+		// Also clean up path if it wasn't removed above (e.g. for other remove types)
+		// Although removeType check implies we only delete file on specific flags,
+		// we should probably always stop tracking the file path when the torrent is removed from session.
+		if (this->torrentFilePaths.count(hash)) {
+			this->torrentFilePaths.erase(hash);
+		}
+
 		return Result::Success();
 	}
 	else
@@ -77,6 +112,11 @@ Result TorrentManager::removeTorrent(const lt::sha1_hash hash, RemoveTorrentType
 const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &TorrentManager::getTorrents() const
 {
 	return this->torrents;
+}
+
+const std::unordered_map<lt::sha1_hash, std::string> &TorrentManager::getTorrentFilePaths() const
+{
+	return this->torrentFilePaths;
 }
 
 void TorrentManager::setDownloadSpeedLimit(int bytesPerSecond)
