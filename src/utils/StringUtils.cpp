@@ -1,6 +1,7 @@
 #include "StringUtils.hpp"
 #include <cstdio>
 #include <cmath>
+#include <string>
 
 namespace Utils {
 
@@ -67,6 +68,38 @@ namespace Utils {
                  buf[0] = 'N'; buf[1] = '/'; buf[2] = 'A'; buf[3] = '\0';
             }
         }
+    }
+
+    void getPeerFlags(const lt::peer_info& p, char* buf, size_t buf_size)
+    {
+        std::string flags;
+
+        if (p.flags & lt::peer_info::interesting) {
+            if (p.flags & lt::peer_info::choked) flags += 'd';
+            else flags += 'D';
+        }
+
+        if (p.flags & lt::peer_info::remote_interested) {
+            if (p.flags & lt::peer_info::remote_choked) flags += 'u';
+            else flags += 'U';
+        }
+
+        if (p.flags & lt::peer_info::optimistic_unchoke) flags += 'O';
+        if (p.flags & lt::peer_info::snubbed) flags += 'S';
+        if (p.flags & lt::peer_info::local_connection) flags += 'l';
+
+        if (p.flags & lt::peer_info::supports_extensions) flags += 'E';
+        if (p.flags & lt::peer_info::utp_socket) flags += 'P';
+
+        if ((p.flags & lt::peer_info::rc4_encrypted) || (p.flags & lt::peer_info::plaintext_encrypted)) {
+             flags += 'e';
+        }
+
+        if (flags.length() >= buf_size) {
+            flags = flags.substr(0, buf_size - 1);
+        }
+
+        snprintf(buf, buf_size, "%s", flags.c_str());
     }
 
 }
