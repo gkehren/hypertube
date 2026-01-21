@@ -51,4 +51,7 @@ private:
 
 	// Callback for torrent removal (handled by parent)
 	std::function<void(const lt::sha1_hash &, RemoveTorrentType)> onRemoveTorrent;
+
+	// Cache for ImGuiListClipper
+	std::vector<const std::pair<const lt::sha1_hash, lt::torrent_handle> *> m_torrentListCache;
 };
