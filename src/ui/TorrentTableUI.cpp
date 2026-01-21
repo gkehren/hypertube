@@ -39,9 +39,25 @@ void TorrentTableUI::displayTorrentTableHeader()
 void TorrentTableUI::displayTorrentTableBody()
 {
 	auto &torrents = torrentManager.getTorrents();
-	for (const auto &[info_hash, handle] : torrents)
+
+	// Update cache
+	m_torrentListCache.clear();
+	m_torrentListCache.reserve(torrents.size());
+	for (const auto &pair : torrents)
 	{
-		displayTorrentTableRow(handle, info_hash);
+		m_torrentListCache.push_back(&pair);
+	}
+
+	ImGuiListClipper clipper;
+	clipper.Begin(m_torrentListCache.size());
+
+	while (clipper.Step())
+	{
+		for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+		{
+			const auto &[info_hash, handle] = *m_torrentListCache[i];
+			displayTorrentTableRow(handle, info_hash);
+		}
 	}
 }
 
