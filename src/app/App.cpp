@@ -27,12 +27,12 @@ App::App() : uiManager(torrentManager, searchEngine, configManager)
 	glfwSwapInterval(1); // Enable vsync
 
 	configManager.load("./config/torrents.json");
-	torrentManager.addTorrentsFromVec(configManager.loadTorrents("./config/torrents.json"));
+	torrentManager.addTorrentsFromConfig(configManager.loadTorrents("./config/torrents.json"));
 }
 
 App::~App()
 {
-	configManager.saveTorrents(torrentManager.getTorrents());
+	configManager.saveTorrents(torrentManager.getTorrents(), torrentManager.getTorrentFilePaths());
 	glfwDestroyWindow(window);
 	glfwTerminate();
 }
