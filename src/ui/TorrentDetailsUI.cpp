@@ -134,8 +134,9 @@ void TorrentDetailsUI::displayTorrentDetails_Peers(const lt::torrent_handle &sel
 			ImGui::Text("%s", client.c_str());
 
 			ImGui::TableSetColumnIndex(2);
-			// TODO: Display flags
-			ImGui::Text("TODO");
+			char flagsBuf[32];
+			Utils::getPeerFlags(peer, flagsBuf, sizeof(flagsBuf));
+			ImGui::Text("%s", flagsBuf);
 
 			ImGui::TableSetColumnIndex(3);
 			ImGui::Text("%s", formatBytes(peer.payload_down_speed, true).c_str());

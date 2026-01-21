@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <libtorrent/torrent_status.hpp>
 #include <libtorrent/torrent_handle.hpp>
+#include <libtorrent/peer_info.hpp>
 
 namespace Utils {
 
@@ -17,5 +18,9 @@ namespace Utils {
 
     // Computes the ETA and writes it to the provided buffer.
     void computeETA(const lt::torrent_status &status, char* buf, size_t buf_size);
+
+    // Generates a string of flags representing the peer's state (e.g., "D U E").
+    // Writes to the provided buffer.
+    void getPeerFlags(const lt::peer_info& p, char* buf, size_t buf_size);
 
 }
