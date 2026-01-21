@@ -220,10 +220,29 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 			handle.queue_position_down();
 		}
 
-		if (ImGui::MenuItem("Remove"))
+		if (ImGui::BeginMenu("Remove"))
 		{
-			if (onRemoveTorrent)
-				onRemoveTorrent(info_hash, REMOVE_TORRENT);
+			if (ImGui::MenuItem("Remove"))
+			{
+				if (onRemoveTorrent)
+					onRemoveTorrent(info_hash, REMOVE_TORRENT);
+			}
+			if (ImGui::MenuItem("Remove with Data"))
+			{
+				if (onRemoveTorrent)
+					onRemoveTorrent(info_hash, REMOVE_TORRENT_DATA);
+			}
+			if (ImGui::MenuItem("Remove with .torrent"))
+			{
+				if (onRemoveTorrent)
+					onRemoveTorrent(info_hash, REMOVE_TORRENT_FILES);
+			}
+			if (ImGui::MenuItem("Remove with Data & .torrent"))
+			{
+				if (onRemoveTorrent)
+					onRemoveTorrent(info_hash, REMOVE_TORRENT_FILES_AND_DATA);
+			}
+			ImGui::EndMenu();
 		}
 
 		if (ImGui::MenuItem("Update Tracker"))
