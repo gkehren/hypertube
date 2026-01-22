@@ -17,6 +17,28 @@ A lightweight and fast cross-platform BitTorrent client built with C++ and Dear 
 - File dialog integration for torrent/save path selection
 - Configuration management with JSON
 - Automatic torrent state persistence
+- Integrated torrent search using torrents-csv.com API
+- Search history and favorites management
+
+### Roadmap (Future Features)
+
+**High Priority (Core Experience & Convenience)**
+- **Sequential Download (Streaming):** Prioritize the first pieces of media files to allow playback while downloading.
+- **Media Preview Integration:** Button to launch the default media player for the file currently being streamed.
+- **File Priority Control:** Ability to set priority (Skip, Low, Normal, High) for individual files within a torrent.
+- **Magnet Link Association:** Integration with the OS to open magnet links directly with Hypertube.
+
+**Medium Priority (Enhancements)**
+- **RSS Feed Support:** Automatically download torrents from RSS feeds with basic filtering.
+- **IP Filtering / Blocklists:** Support for loading IP blocklists (e.g., eMule format) to block bad peers.
+- **Proxy / VPN Configuration:** SOCKS5/HTTP proxy support for privacy.
+- **Detailed Peer/Tracker Management:** Manually ban peers or add/remove trackers from the UI.
+
+**Low Priority (Advanced Features)**
+- **Web UI / Remote Control:** A web interface for managing the client remotely.
+- **Plugin System:** Support for Lua or Python scripts to extend functionality.
+- **Scheduling:** Bandwidth scheduler to limit speeds at certain times of day.
+- **Theme Customization:** User-selectable themes (Dark/Light) and font scaling.
 
 ## Dependencies
 
