@@ -206,9 +206,10 @@ Result SearchEngine::parseSearchResponse(const std::string &response, std::vecto
 			TorrentSearchResult result;
 
 			// Parse name field
-			if (item.contains("name") && item["name"].is_string())
+			auto itName = item.find("name");
+			if (itName != item.end() && itName->is_string())
 			{
-				result.name = item["name"].get<std::string>();
+				result.name = itName->get<std::string>();
 			}
 			else
 			{
@@ -216,9 +217,10 @@ Result SearchEngine::parseSearchResponse(const std::string &response, std::vecto
 			}
 
 			// Parse infohash field
-			if (item.contains("infohash") && item["infohash"].is_string())
+			auto itInfoHash = item.find("infohash");
+			if (itInfoHash != item.end() && itInfoHash->is_string())
 			{
-				result.infoHash = item["infohash"].get<std::string>();
+				result.infoHash = itInfoHash->get<std::string>();
 			}
 			else
 			{
@@ -229,27 +231,30 @@ Result SearchEngine::parseSearchResponse(const std::string &response, std::vecto
 			result.magnetUri = formatMagnetUri(result.infoHash, result.name);
 
 			// Parse numeric fields safely
-			if (item.contains("size_bytes") && item["size_bytes"].is_number())
+			auto itSizeBytes = item.find("size_bytes");
+			if (itSizeBytes != item.end() && itSizeBytes->is_number())
 			{
-				result.sizeBytes = item["size_bytes"].get<size_t>();
+				result.sizeBytes = itSizeBytes->get<size_t>();
 			}
 			else
 			{
 				result.sizeBytes = 0;
 			}
 
-			if (item.contains("seeders") && item["seeders"].is_number())
+			auto itSeeders = item.find("seeders");
+			if (itSeeders != item.end() && itSeeders->is_number())
 			{
-				result.seeders = item["seeders"].get<int>();
+				result.seeders = itSeeders->get<int>();
 			}
 			else
 			{
 				result.seeders = 0;
 			}
 
-			if (item.contains("leechers") && item["leechers"].is_number())
+			auto itLeechers = item.find("leechers");
+			if (itLeechers != item.end() && itLeechers->is_number())
 			{
-				result.leechers = item["leechers"].get<int>();
+				result.leechers = itLeechers->get<int>();
 			}
 			else
 			{
@@ -257,11 +262,12 @@ Result SearchEngine::parseSearchResponse(const std::string &response, std::vecto
 			}
 
 			// Handle created_unix as number and convert to string (legacy field)
-			if (item.contains("created_unix") && item["created_unix"].is_number())
+			auto itCreatedUnix = item.find("created_unix");
+			if (itCreatedUnix != item.end() && itCreatedUnix->is_number())
 			{
-				result.dateUploaded = std::to_string(item["created_unix"].get<long long>());
+				result.dateUploaded = std::to_string(itCreatedUnix->get<long long>());
 				// Also populate the new createdUnix field
-				result.createdUnix = item["created_unix"].get<long long>();
+				result.createdUnix = itCreatedUnix->get<long long>();
 			}
 			else
 			{
@@ -270,9 +276,10 @@ Result SearchEngine::parseSearchResponse(const std::string &response, std::vecto
 			}
 
 			// Handle scraped_date field
-			if (item.contains("scraped_date") && item["scraped_date"].is_number())
+			auto itScrapedDate = item.find("scraped_date");
+			if (itScrapedDate != item.end() && itScrapedDate->is_number())
 			{
-				result.scrapedDate = item["scraped_date"].get<long long>();
+				result.scrapedDate = itScrapedDate->get<long long>();
 			}
 			else
 			{
@@ -280,9 +287,10 @@ Result SearchEngine::parseSearchResponse(const std::string &response, std::vecto
 			}
 
 			// Handle completed field
-			if (item.contains("completed") && item["completed"].is_number())
+			auto itCompleted = item.find("completed");
+			if (itCompleted != item.end() && itCompleted->is_number())
 			{
-				result.completed = item["completed"].get<int>();
+				result.completed = itCompleted->get<int>();
 			}
 			else
 			{
@@ -365,9 +373,10 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 			TorrentSearchResult result;
 
 			// Parse name field
-			if (item.contains("name") && item["name"].is_string())
+			auto itName = item.find("name");
+			if (itName != item.end() && itName->is_string())
 			{
-				result.name = item["name"].get<std::string>();
+				result.name = itName->get<std::string>();
 			}
 			else
 			{
@@ -375,9 +384,10 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 			}
 
 			// Parse infohash field
-			if (item.contains("infohash") && item["infohash"].is_string())
+			auto itInfoHash = item.find("infohash");
+			if (itInfoHash != item.end() && itInfoHash->is_string())
 			{
-				result.infoHash = item["infohash"].get<std::string>();
+				result.infoHash = itInfoHash->get<std::string>();
 			}
 			else
 			{
@@ -395,27 +405,30 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 			result.magnetUri = formatMagnetUri(result.infoHash, result.name);
 
 			// Parse numeric fields safely
-			if (item.contains("size_bytes") && item["size_bytes"].is_number())
+			auto itSizeBytes = item.find("size_bytes");
+			if (itSizeBytes != item.end() && itSizeBytes->is_number())
 			{
-				result.sizeBytes = item["size_bytes"].get<size_t>();
+				result.sizeBytes = itSizeBytes->get<size_t>();
 			}
 			else
 			{
 				result.sizeBytes = 0;
 			}
 
-			if (item.contains("seeders") && item["seeders"].is_number())
+			auto itSeeders = item.find("seeders");
+			if (itSeeders != item.end() && itSeeders->is_number())
 			{
-				result.seeders = item["seeders"].get<int>();
+				result.seeders = itSeeders->get<int>();
 			}
 			else
 			{
 				result.seeders = 0;
 			}
 
-			if (item.contains("leechers") && item["leechers"].is_number())
+			auto itLeechers = item.find("leechers");
+			if (itLeechers != item.end() && itLeechers->is_number())
 			{
-				result.leechers = item["leechers"].get<int>();
+				result.leechers = itLeechers->get<int>();
 			}
 			else
 			{
@@ -423,11 +436,12 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 			}
 
 			// Handle created_unix as number and convert to string (legacy field)
-			if (item.contains("created_unix") && item["created_unix"].is_number())
+			auto itCreatedUnix = item.find("created_unix");
+			if (itCreatedUnix != item.end() && itCreatedUnix->is_number())
 			{
-				result.dateUploaded = std::to_string(item["created_unix"].get<long long>());
+				result.dateUploaded = std::to_string(itCreatedUnix->get<long long>());
 				// Also populate the new createdUnix field
-				result.createdUnix = item["created_unix"].get<long long>();
+				result.createdUnix = itCreatedUnix->get<long long>();
 			}
 			else
 			{
@@ -436,9 +450,10 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 			}
 
 			// Handle scraped_date field
-			if (item.contains("scraped_date") && item["scraped_date"].is_number())
+			auto itScrapedDate = item.find("scraped_date");
+			if (itScrapedDate != item.end() && itScrapedDate->is_number())
 			{
-				result.scrapedDate = item["scraped_date"].get<long long>();
+				result.scrapedDate = itScrapedDate->get<long long>();
 			}
 			else
 			{
@@ -446,9 +461,10 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 			}
 
 			// Handle completed field
-			if (item.contains("completed") && item["completed"].is_number())
+			auto itCompleted = item.find("completed");
+			if (itCompleted != item.end() && itCompleted->is_number())
 			{
-				result.completed = item["completed"].get<int>();
+				result.completed = itCompleted->get<int>();
 			}
 			else
 			{
