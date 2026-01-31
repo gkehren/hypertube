@@ -192,8 +192,3 @@ std::vector<lt::alert *> TorrentManager::pollAlerts()
 	session.pop_alerts(&alerts);
 	return alerts;
 }
-
-lt::session_stats_metrics TorrentManager::getSessionStats() const
-{
-	return session.session_state();
-}

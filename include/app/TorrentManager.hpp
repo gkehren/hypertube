@@ -47,9 +47,6 @@ public:
 
 	// Alert polling methods
 	std::vector<lt::alert *> pollAlerts();
-	
-	// Session statistics methods
-	lt::session_stats_metrics getSessionStats() const;
 
 private:
 	lt::session session;
