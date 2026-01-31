@@ -301,6 +301,7 @@ void TorrentDetailsUI::displayTorrentDetails_Settings(const lt::torrent_handle &
 	if (settingsState.lastTorrentHash != currentHash)
 	{
 		settingsState.lastTorrentHash = currentHash;
+		// Convert from bytes/s to KB/s (note: this truncates to KB/s granularity)
 		settingsState.downloadLimit = selectedTorrent.download_limit() / 1024;
 		settingsState.uploadLimit = selectedTorrent.upload_limit() / 1024;
 	}
@@ -343,7 +344,7 @@ void TorrentDetailsUI::displayTorrentDetails_Settings(const lt::torrent_handle &
 	ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Download Mode:");
 	ImGui::Spacing();
 
-	bool sequentialMode = (selectedTorrent.flags() & lt::torrent_flags::sequential_download);
+	bool sequentialMode = (selectedTorrent.flags() & lt::torrent_flags::sequential_download) != lt::torrent_flags_t{};
 	if (ImGui::Checkbox("Sequential Download", &sequentialMode))
 	{
 		if (sequentialMode)
