@@ -59,7 +59,14 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 	if (!selectedTorrent.is_valid())
 		return;
 
-	auto file_storage = selectedTorrent.torrent_file()->files();
+	auto torrentFile = selectedTorrent.torrent_file();
+	if (!torrentFile)
+	{
+		ImGui::Text("Metadata not available yet.");
+		return;
+	}
+
+	auto file_storage = torrentFile->files();
 	std::vector<std::int64_t> file_progress;
 	selectedTorrent.file_progress(file_progress);
 

@@ -54,7 +54,7 @@ class SearchEngine
 {
 public:
 	SearchEngine();
-	~SearchEngine() = default;
+	~SearchEngine();
 
 	// Core search functionality
 	Result searchTorrents(const SearchQuery &query, std::vector<TorrentSearchResult> &results);

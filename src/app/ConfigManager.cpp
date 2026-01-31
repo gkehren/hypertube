@@ -33,8 +33,7 @@ void ConfigManager::saveTorrents(const std::unordered_map<lt::sha1_hash, lt::tor
 
 		json torrentEntry = {
 			{"magnet_uri", magnetUri},
-			{"save_path", savePath}
-		};
+			{"save_path", savePath}};
 
 		auto it = torrentFilePaths.find(hash);
 		if (it != torrentFilePaths.end())
@@ -51,10 +50,34 @@ void ConfigManager::saveTorrents(const std::unordered_map<lt::sha1_hash, lt::tor
 std::vector<TorrentConfigData> ConfigManager::loadTorrents(const std::string &path)
 {
 	std::vector<TorrentConfigData> torrents;
-	if (!this->config.contains("torrents"))
+
+	json sourceConfig;
+	if (!path.empty())
+	{
+		std::ifstream file(path);
+		if (file.is_open())
+		{
+			try
+			{
+				file >> sourceConfig;
+			}
+			catch (const std::exception &)
+			{
+				sourceConfig = json{};
+			}
+			file.close();
+		}
+	}
+
+	if (sourceConfig.is_null() || sourceConfig.empty())
+	{
+		sourceConfig = this->config;
+	}
+
+	if (!sourceConfig.contains("torrents"))
 		return torrents;
 
-	const auto &torrentsJson = this->config["torrents"];
+	const auto &torrentsJson = sourceConfig["torrents"];
 	torrents.reserve(torrentsJson.size());
 	for (const auto &torrent : torrentsJson)
 	{

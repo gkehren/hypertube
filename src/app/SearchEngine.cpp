@@ -36,6 +36,11 @@ SearchEngine::SearchEngine()
 	curl_global_init(CURL_GLOBAL_DEFAULT);
 }
 
+SearchEngine::~SearchEngine()
+{
+	curl_global_cleanup();
+}
+
 Result SearchEngine::searchTorrents(const SearchQuery &query, std::vector<TorrentSearchResult> &results)
 {
 	if (searching)
