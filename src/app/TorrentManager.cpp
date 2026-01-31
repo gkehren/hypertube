@@ -185,3 +185,13 @@ bool TorrentManager::shouldRefreshCache() const
 	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastCacheRefresh);
 	return elapsed.count() >= cacheRefreshIntervalMs;
 }
+
+// Polls alerts from the libtorrent session. Returns a vector of alert pointers.
+// Note: The returned alert pointers are managed by libtorrent and should not be deleted.
+// They remain valid until the next call to pop_alerts() or until the session is destroyed.
+std::vector<lt::alert *> TorrentManager::pollAlerts()
+{
+	std::vector<lt::alert *> alerts;
+	session.pop_alerts(&alerts);
+	return alerts;
+}
