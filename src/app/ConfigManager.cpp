@@ -2,6 +2,7 @@
 #include "SearchEngine.hpp"
 #include <fstream>
 #include <iostream>
+#include <cstdlib>
 
 json ConfigManager::createDefaultConfig() const
 {
@@ -34,7 +35,6 @@ Result ConfigManager::load(const std::string &path, bool fullConfig)
 	try
 	{
 		file >> this->config;
-		file.close();
 
 		if (fullConfig)
 		{
@@ -59,13 +59,11 @@ Result ConfigManager::load(const std::string &path, bool fullConfig)
 	}
 	catch (const json::parse_error &e)
 	{
-		file.close();
 		this->config = fullConfig ? createDefaultConfig() : json{{"torrents", json::array()}};
 		return Result::Failure("Failed to parse configuration file: " + std::string(e.what()) + ". Using default values.");
 	}
 	catch (const std::exception &e)
 	{
-		file.close();
 		this->config = fullConfig ? createDefaultConfig() : json{{"torrents", json::array()}};
 		return Result::Failure("Error loading configuration: " + std::string(e.what()) + ". Using default values.");
 	}
@@ -131,16 +129,13 @@ Result ConfigManager::loadTorrents(const std::string &path, std::vector<TorrentC
 			try
 			{
 				file >> sourceConfig;
-				file.close();
 			}
 			catch (const json::parse_error &e)
 			{
-				file.close();
 				return Result::Failure("Failed to parse torrents configuration: " + std::string(e.what()));
 			}
 			catch (const std::exception &e)
 			{
-				file.close();
 				return Result::Failure("Error loading torrents configuration: " + std::string(e.what()));
 			}
 		}
@@ -516,7 +511,27 @@ int ConfigManager::getTheme() const
 
 void ConfigManager::applyDefaultConfig()
 {
+<<<<<<< HEAD
 	config = createDefaultConfig();
+=======
+	// Use platform-appropriate default download path
+	std::string defaultPath;
+#ifdef _WIN32
+	const char* userProfile = std::getenv("USERPROFILE");
+	defaultPath = userProfile ? std::string(userProfile) + "\\Downloads" : "C:\\Downloads";
+#else
+	const char* home = std::getenv("HOME");
+	defaultPath = home ? std::string(home) + "/Downloads" : "/tmp/downloads";
+#endif
+
+	config = {
+		{"speed_limits", {
+			{"download", 0},
+			{"upload", 0}
+		}},
+		{"download_path", defaultPath}
+	};
+>>>>>>> f88af97 (Address code review feedback: remove redundant file.close() and improve default path)
 }
 
 bool ConfigManager::validateConfig()
