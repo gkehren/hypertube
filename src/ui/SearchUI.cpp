@@ -43,13 +43,13 @@ void SearchUI::displayIntegratedSearch()
 		ImGui::Spacing();
 		ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Recent searches:");
 		ImGui::Indent(20.0f);
-		
+
 		// Display up to 5 recent searches
 		int displayCount = std::min(5, (int)history.size());
 		for (int i = 0; i < displayCount; ++i)
 		{
 			ImGui::PushID(i);
-			std::string buttonLabel = "🔍 " + history[i];
+			std::string buttonLabel = history[i];
 			if (ImGui::SmallButton(buttonLabel.c_str()))
 			{
 				// Copy to search buffer and perform search
@@ -134,12 +134,13 @@ void SearchUI::displayEnhancedSearchResults()
 	ImGui::Separator();
 
 	// Create a table for search results with improved styling
-	if (ImGui::BeginTable("SearchResultsTable", 11,
+	if (ImGui::BeginTable("SearchResultsTable", 10,
 						  ImGuiTableFlags_Borders |
 							  ImGuiTableFlags_Resizable |
 							  ImGuiTableFlags_Sortable |
 							  ImGuiTableFlags_ScrollY |
-							  ImGuiTableFlags_RowBg,
+							  ImGuiTableFlags_RowBg |
+							  ImGuiTableFlags_ContextMenuInBody,
 						  ImVec2(0, -50))) // Leave space for bottom pagination
 	{
 		// Setup columns with better widths and sorting
@@ -152,7 +153,6 @@ void SearchUI::displayEnhancedSearchResults()
 		ImGui::TableSetupColumn("Created", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending, 100);
 		ImGui::TableSetupColumn("Last Seen", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending, 100);
 		ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthFixed, 80);
-		ImGui::TableSetupColumn("Favorite", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 70);
 		ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 80);
 		ImGui::TableHeadersRow();
 
@@ -286,14 +286,14 @@ void SearchUI::displaySearchResults()
 void SearchUI::displayFavorites()
 {
 	const auto &favorites = searchEngine.getFavorites();
-	
+
 	// Favorites header
 	ImGui::Text("Favorite Torrents (%d saved):", (int)favorites.size());
 	ImGui::Separator();
 
 	if (favorites.empty())
 	{
-		ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No favorites yet. Click the star button (☆) in search results to add favorites.");
+		ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No favorites yet. Right-click on search results to add favorites.");
 		return;
 	}
 
@@ -503,18 +503,13 @@ void SearchUI::displayFavorites()
 
 			// Remove button
 			ImGui::TableSetColumnIndex(9);
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.84f, 0.0f, 1.0f));
-			if (ImGui::Button("★", ImVec2(-1, 0)))
+			if (ImGui::Button("Remove", ImVec2(-1, 0)))
 			{
 				searchEngine.removeFromFavorites(result.infoHash);
 			}
-			ImGui::PopStyleColor();
-			if (ImGui::IsItemHovered())
-			{
-				ImGui::BeginTooltip();
-				ImGui::Text("Remove from Favorites");
-				ImGui::EndTooltip();
-			}
+			ImGui::BeginTooltip();
+			ImGui::Text("Remove from Favorites");
+			ImGui::EndTooltip();
 
 			// Action button
 			ImGui::TableSetColumnIndex(10);
@@ -522,18 +517,21 @@ void SearchUI::displayFavorites()
 			{
 				handleSearchResultSelection(result);
 			}
-
-			ImGui::PopID();
 		}
 
-		ImGui::EndTable();
+		ImGui::PopID();
 	}
+
+	ImGui::EndTable();
 }
 
 void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result, int index)
 {
 	ImGui::TableNextRow();
 	ImGui::PushID(index);
+
+	// Check if this is a favorite (needed for context menu)
+	bool isFavorite = isInFavorites(result.infoHash);
 
 	// Name column with truncation for very long names
 	ImGui::TableSetColumnIndex(0);
@@ -546,6 +544,31 @@ void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result,
 	if (ImGui::Selectable(displayName.c_str(), false, ImGuiSelectableFlags_SpanAllColumns))
 	{
 		handleSearchResultSelection(result);
+	}
+
+	// Context menu for favorites
+	if (ImGui::BeginPopupContextItem())
+	{
+		if (isFavorite)
+		{
+			if (ImGui::MenuItem("Remove from Favorites"))
+			{
+				searchEngine.removeFromFavorites(result.infoHash);
+			}
+		}
+		else
+		{
+			if (ImGui::MenuItem("Add to Favorites"))
+			{
+				searchEngine.addToFavorites(result);
+			}
+		}
+		ImGui::Separator();
+		if (ImGui::MenuItem("Download"))
+		{
+			handleSearchResultSelection(result);
+		}
+		ImGui::EndPopup();
 	}
 
 	// Tooltip for full name if truncated
@@ -619,33 +642,8 @@ void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result,
 	ImGui::TableSetColumnIndex(8);
 	ImGui::Text("%s", result.category.c_str());
 
-	// Favorite button
-	ImGui::TableSetColumnIndex(9);
-	bool isFavorite = isInFavorites(result.infoHash);
-	const char* favLabel = isFavorite ? "★" : "☆";
-	ImVec4 favColor = isFavorite ? ImVec4(1.0f, 0.84f, 0.0f, 1.0f) : ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
-	ImGui::PushStyleColor(ImGuiCol_Text, favColor);
-	if (ImGui::Button(favLabel, ImVec2(-1, 0)))
-	{
-		if (isFavorite)
-		{
-			searchEngine.removeFromFavorites(result.infoHash);
-		}
-		else
-		{
-			searchEngine.addToFavorites(result);
-		}
-	}
-	ImGui::PopStyleColor();
-	if (ImGui::IsItemHovered())
-	{
-		ImGui::BeginTooltip();
-		ImGui::Text(isFavorite ? "Remove from Favorites" : "Add to Favorites");
-		ImGui::EndTooltip();
-	}
-
 	// Action button with improved styling
-	ImGui::TableSetColumnIndex(10);
+	ImGui::TableSetColumnIndex(9);
 	if (ImGui::Button("Download", ImVec2(-1, 0)))
 	{
 		handleSearchResultSelection(result);
