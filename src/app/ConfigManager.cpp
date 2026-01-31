@@ -513,8 +513,8 @@ void ConfigManager::applyDefaultConfig()
 	std::string default_path;
 #ifdef _WIN32
 	const char* user_profile = std::getenv("USERPROFILE");
-	// Validate that the environment variable was retrieved successfully
-	if (user_profile && std::string(user_profile).length() > 0) {
+	// Validate that the environment variable was retrieved successfully and is non-empty
+	if (user_profile && user_profile[0] != '\0') {
 		default_path = std::string(user_profile) + "\\Downloads";
 	} else {
 		// Safe fallback that should exist on all Windows systems
@@ -522,8 +522,8 @@ void ConfigManager::applyDefaultConfig()
 	}
 #else
 	const char* home_dir = std::getenv("HOME");
-	// Validate that the environment variable was retrieved successfully
-	if (home_dir && std::string(home_dir).length() > 0) {
+	// Validate that the environment variable was retrieved successfully and is non-empty
+	if (home_dir && home_dir[0] != '\0') {
 		default_path = std::string(home_dir) + "/Downloads";
 	} else {
 		// Use XDG_DOWNLOAD_DIR standard location as fallback
