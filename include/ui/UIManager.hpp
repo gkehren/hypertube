@@ -40,7 +40,7 @@ struct TorrentRemovalInfo
 class UIManager
 {
 public:
-	UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine, ConfigManager &configManager);
+	UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine, ConfigManager &settingsConfigManager);
 	~UIManager() = default;
 
 	void init(GLFWwindow *window);
@@ -78,7 +78,7 @@ private:
 
 	TorrentManager &torrentManager;
 	SearchEngine &searchEngine;
-	ConfigManager &configManager;
+	ConfigManager &settingsConfigManager;
 
 	// Core UI methods
 	void displayCategories();

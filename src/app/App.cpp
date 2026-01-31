@@ -7,7 +7,7 @@ static void glfw_error_callback(int error, const char *description)
 	std::cerr << "GLFW Error " << error << ": " << description << std::endl;
 }
 
-App::App() : uiManager(torrentManager, searchEngine, configManager)
+App::App() : uiManager(torrentManager, searchEngine, settingsConfigManager)
 {
 	glfwSetErrorCallback(glfw_error_callback);
 	if (!glfwInit())
@@ -26,13 +26,13 @@ App::App() : uiManager(torrentManager, searchEngine, configManager)
 	glfwMakeContextCurrent(window);
 	glfwSwapInterval(1); // Enable vsync
 
-	configManager.load("./config/torrents.json");
-	torrentManager.addTorrentsFromConfig(configManager.loadTorrents("./config/torrents.json"));
+	torrentsConfigManager.load("./config/torrents.json");
+	torrentManager.addTorrentsFromConfig(torrentsConfigManager.loadTorrents("./config/torrents.json"));
 }
 
 App::~App()
 {
-	configManager.saveTorrents(torrentManager.getTorrents(), torrentManager.getTorrentFilePaths());
+	torrentsConfigManager.saveTorrents(torrentManager.getTorrents(), torrentManager.getTorrentFilePaths());
 	glfwDestroyWindow(window);
 	glfwTerminate();
 }

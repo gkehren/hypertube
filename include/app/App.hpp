@@ -15,7 +15,8 @@ public:
 
 private:
 	GLFWwindow *window;
-	ConfigManager configManager;
+	ConfigManager torrentsConfigManager;
+	ConfigManager settingsConfigManager;
 	TorrentManager torrentManager;
 	SearchEngine searchEngine;
 	UIManager uiManager;

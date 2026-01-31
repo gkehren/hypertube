@@ -4,8 +4,8 @@
 #include <iostream>
 #include <memory>
 
-UIManager::UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine, ConfigManager &configManager)
-	: torrentManager(torrentManager), searchEngine(searchEngine), configManager(configManager)
+UIManager::UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine, ConfigManager &settingsConfigManager)
+	: torrentManager(torrentManager), searchEngine(searchEngine), settingsConfigManager(settingsConfigManager)
 {
 	// Initialize UI components
 	torrentTableUI = std::make_unique<TorrentTableUI>(torrentManager);
@@ -324,8 +324,8 @@ void UIManager::displayPreferencesDialog()
 		ImGui::OpenPopup("Preferences");
 		showPreferencesDialog = false;
 		// Load current values when opening dialog
-		tempDownloadSpeedLimit = configManager.getDownloadSpeedLimit();
-		tempUploadSpeedLimit = configManager.getUploadSpeedLimit();
+		tempDownloadSpeedLimit = settingsConfigManager.getDownloadSpeedLimit();
+		tempUploadSpeedLimit = settingsConfigManager.getUploadSpeedLimit();
 	}
 
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -374,9 +374,9 @@ void UIManager::displayPreferencesDialog()
 		if (ImGui::Button("Apply", ImVec2(120, 0)))
 		{
 			// Save to config
-			configManager.setDownloadSpeedLimit(tempDownloadSpeedLimit);
-			configManager.setUploadSpeedLimit(tempUploadSpeedLimit);
-			configManager.save("./config/settings.json");
+			settingsConfigManager.setDownloadSpeedLimit(tempDownloadSpeedLimit);
+			settingsConfigManager.setUploadSpeedLimit(tempUploadSpeedLimit);
+			settingsConfigManager.save("./config/settings.json");
 
 			// Apply to torrent manager
 			applySpeedLimits();
@@ -395,13 +395,13 @@ void UIManager::displayPreferencesDialog()
 
 void UIManager::loadSpeedLimitsFromConfig()
 {
-	configManager.load("./config/settings.json");
+	settingsConfigManager.load("./config/settings.json");
 }
 
 void UIManager::applySpeedLimits()
 {
-	int downloadLimit = configManager.getDownloadSpeedLimit();
-	int uploadLimit = configManager.getUploadSpeedLimit();
+	int downloadLimit = settingsConfigManager.getDownloadSpeedLimit();
+	int uploadLimit = settingsConfigManager.getUploadSpeedLimit();
 
 	torrentManager.setDownloadSpeedLimit(downloadLimit);
 	torrentManager.setUploadSpeedLimit(uploadLimit);
