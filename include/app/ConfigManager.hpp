@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <json.hpp>
 #include "TorrentManager.hpp"
+#include "Result.hpp"
 
 using json = nlohmann::json;
 
@@ -17,11 +18,11 @@ struct TorrentConfigData {
 class ConfigManager
 {
 public:
-	void load(const std::string &path);
+	Result load(const std::string &path);
 	void save(const std::string &path);
 
 	void saveTorrents(const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &torrents, const std::unordered_map<lt::sha1_hash, std::string> &torrentFilePaths);
-	std::vector<TorrentConfigData> loadTorrents(const std::string &path);
+	Result loadTorrents(const std::string &path, std::vector<TorrentConfigData> &outTorrents);
 
 	// Speed limit configuration
 	void setDownloadSpeedLimit(int bytesPerSecond);
@@ -33,4 +34,6 @@ public:
 
 private:
 	json config;
+	void applyDefaultConfig();
+	bool validateConfig();
 };
