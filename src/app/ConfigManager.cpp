@@ -507,7 +507,34 @@ int ConfigManager::getTheme() const
 
 void ConfigManager::applyDefaultConfig()
 {
-	config = createDefaultConfig();
+	// Use platform-appropriate default download path
+	// Note: This is just a fallback default. The actual download path
+	// is typically managed by UIManager::setDefaultSavePath()
+	std::string default_path;
+#ifdef _WIN32
+	const char* user_profile = std::getenv("USERPROFILE");
+	// Validate that the environment variable was retrieved successfully
+	if (user_profile && std::string(user_profile).length() > 0) {
+		default_path = std::string(user_profile) + "\\Downloads";
+	} else {
+		// Safe fallback that should exist on all Windows systems
+		default_path = "C:\\Users\\Public\\Downloads";
+	}
+#else
+	const char* home_dir = std::getenv("HOME");
+	// Validate that the environment variable was retrieved successfully
+	if (home_dir && std::string(home_dir).length() > 0) {
+		default_path = std::string(home_dir) + "/Downloads";
+	} else {
+		// Use XDG_DOWNLOAD_DIR standard location as fallback
+		default_path = "/var/tmp";
+	}
+#endif
+
+	json defaultConfig = createDefaultConfig();
+	// Update the download path in the default config with the platform-appropriate path
+	defaultConfig["settings"]["download_path"] = default_path;
+	config = defaultConfig;
 }
 
 bool ConfigManager::validateConfig()
