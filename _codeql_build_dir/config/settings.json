@@ -1,0 +1,13 @@
+{
+    "version": 1,
+    "settings": {
+        "speed_limits": {
+            "download": 0,
+            "upload": 0
+        },
+        "download_path": "~/Downloads",
+        "enable_dht": true,
+        "enable_upnp": true,
+        "enable_natpmp": true
+    }
+}

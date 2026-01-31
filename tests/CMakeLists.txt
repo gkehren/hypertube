@@ -13,11 +13,28 @@ add_executable(unit_tests
     test_string_utils.cpp
 )
 
+add_executable(config_tests
+    test_config_manager.cpp
+)
+
+target_include_directories(config_tests PRIVATE
+    "${CMAKE_SOURCE_DIR}/include"
+    "${CMAKE_SOURCE_DIR}/include/app"
+    "${json_SOURCE_DIR}/single_include/nlohmann"
+)
+
 target_link_libraries(unit_tests
     PRIVATE
     gtest_main
     hypertube_utils
 )
 
+target_link_libraries(config_tests
+    PRIVATE
+    gtest_main
+    hypertube_config
+)
+
 include(GoogleTest)
 gtest_discover_tests(unit_tests)
+gtest_discover_tests(config_tests)

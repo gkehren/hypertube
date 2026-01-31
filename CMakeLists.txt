@@ -82,6 +82,22 @@ add_library(hypertube_utils STATIC
     src/utils/StringUtils.cpp
 )
 
+# Create the config library for testing
+add_library(hypertube_config STATIC
+    src/app/ConfigManager.cpp
+)
+
+target_include_directories(hypertube_config PUBLIC
+    "include"
+    "include/app"
+    "${json_SOURCE_DIR}/single_include/nlohmann"
+)
+
+target_link_libraries(hypertube_config PUBLIC
+    LibtorrentRasterbar::torrent-rasterbar
+    nlohmann_json::nlohmann_json
+)
+
 target_include_directories(hypertube_utils PUBLIC
     "include"
     "include/utils"
