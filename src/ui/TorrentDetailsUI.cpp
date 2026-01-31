@@ -56,6 +56,12 @@ void TorrentDetailsUI::displayTorrentDetails(const lt::torrent_handle &selectedT
 				ImGui::EndTabItem();
 			}
 
+			if (ImGui::BeginTabItem("Settings"))
+			{
+				displayTorrentDetails_Settings(selectedTorrent);
+				ImGui::EndTabItem();
+			}
+
 			ImGui::EndTabBar();
 		}
 	}
@@ -88,11 +94,12 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 	std::vector<std::int64_t> file_progress;
 	selectedTorrent.file_progress(file_progress);
 
-	if (ImGui::BeginTable("Files", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+	if (ImGui::BeginTable("Files", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
 	{
 		ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
 		ImGui::TableSetupColumn("Size");
 		ImGui::TableSetupColumn("Progress");
+		ImGui::TableSetupColumn("Priority");
 		ImGui::TableHeadersRow();
 
 		for (int i = 0; i < file_storage.num_files(); ++i)
@@ -111,6 +118,33 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 				ImGui::ProgressBar(static_cast<float>(file_progress[i]) / file_storage.file_size(index));
 			else
 				ImGui::ProgressBar(0.0f);
+
+			ImGui::TableSetColumnIndex(3);
+			// Get current priority
+			lt::download_priority_t current_priority = selectedTorrent.file_priority(index);
+			int priority_index = 0;
+			if (current_priority == lt::dont_download) priority_index = 0;
+			else if (current_priority == lt::low_priority) priority_index = 1;
+			else if (current_priority == lt::default_priority) priority_index = 2;
+			else if (current_priority >= lt::top_priority) priority_index = 3;
+
+			const char* priority_items[] = { "Don't Download", "Low", "Normal", "High" };
+			ImGui::SetNextItemWidth(120.0f);
+			std::string combo_id = "##priority" + std::to_string(i);
+			if (ImGui::Combo(combo_id.c_str(), &priority_index, priority_items, IM_ARRAYSIZE(priority_items)))
+			{
+				// Set the new priority
+				lt::download_priority_t new_priority;
+				switch (priority_index)
+				{
+					case 0: new_priority = lt::dont_download; break;
+					case 1: new_priority = lt::low_priority; break;
+					case 2: new_priority = lt::default_priority; break;
+					case 3: new_priority = lt::top_priority; break;
+					default: new_priority = lt::default_priority; break;
+				}
+				selectedTorrent.file_priority(index, new_priority);
+			}
 		}
 
 		ImGui::EndTable();
@@ -247,4 +281,81 @@ std::string TorrentDetailsUI::computeETA(const lt::torrent_status &status) const
 	char buf[64];
 	Utils::computeETA(status, buf, sizeof(buf));
 	return std::string(buf);
+}
+
+void TorrentDetailsUI::displayTorrentDetails_Settings(const lt::torrent_handle &selectedTorrent)
+{
+	if (!selectedTorrent.is_valid())
+		return;
+
+	ImGui::Text("Per-Torrent Settings");
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	// Speed limits section
+	ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Speed Limits:");
+	ImGui::Spacing();
+
+	// Get current limits (convert from bytes/s to KB/s)
+	int downloadLimit = selectedTorrent.download_limit() / 1024;
+	int uploadLimit = selectedTorrent.upload_limit() / 1024;
+
+	// Download limit
+	ImGui::Text("Download Limit (KB/s):");
+	ImGui::SetNextItemWidth(150);
+	if (ImGui::InputInt("##TorrentDownloadLimit", &downloadLimit, 1, 100))
+	{
+		if (downloadLimit < 0)
+			downloadLimit = 0;
+		selectedTorrent.set_download_limit(downloadLimit * 1024);
+	}
+	ImGui::SameLine();
+	ImGui::TextDisabled("(0 = unlimited)");
+
+	ImGui::Spacing();
+
+	// Upload limit
+	ImGui::Text("Upload Limit (KB/s):  ");
+	ImGui::SetNextItemWidth(150);
+	if (ImGui::InputInt("##TorrentUploadLimit", &uploadLimit, 1, 100))
+	{
+		if (uploadLimit < 0)
+			uploadLimit = 0;
+		selectedTorrent.set_upload_limit(uploadLimit * 1024);
+	}
+	ImGui::SameLine();
+	ImGui::TextDisabled("(0 = unlimited)");
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	// Sequential download section
+	ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Download Mode:");
+	ImGui::Spacing();
+
+	bool sequentialMode = (selectedTorrent.flags() & lt::torrent_flags::sequential_download);
+	if (ImGui::Checkbox("Sequential Download", &sequentialMode))
+	{
+		if (sequentialMode)
+			selectedTorrent.set_flags(lt::torrent_flags::sequential_download);
+		else
+			selectedTorrent.unset_flags(lt::torrent_flags::sequential_download);
+	}
+	ImGui::SameLine();
+	ImGui::TextDisabled("(?)");
+	if (ImGui::IsItemHovered())
+	{
+		ImGui::BeginTooltip();
+		ImGui::Text("Sequential mode downloads pieces in order,");
+		ImGui::Text("useful for streaming video files.");
+		ImGui::EndTooltip();
+	}
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	// Info text
+	ImGui::TextWrapped("Note: Changes to speed limits and sequential mode are applied immediately.");
 }

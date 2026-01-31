@@ -22,6 +22,7 @@ public:
 	void displayTorrentDetails_Files(const lt::torrent_handle &selectedTorrent);
 	void displayTorrentDetails_Peers(const lt::torrent_handle &selectedTorrent);
 	void displayTorrentDetails_Trackers(const lt::torrent_handle &selectedTorrent);
+	void displayTorrentDetails_Settings(const lt::torrent_handle &selectedTorrent);
 
 	// Utility methods
 	void displayTorrentDetailsContent(const lt::torrent_status &status, const lt::torrent_handle &handle);
