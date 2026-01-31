@@ -17,7 +17,7 @@ Result ConfigManager::load(const std::string &path)
 	try
 	{
 		file >> this->config;
-		file.close();
+		// File will be automatically closed by destructor (RAII)
 
 		// Validate the loaded config
 		if (!validateConfig())
@@ -176,13 +176,13 @@ int ConfigManager::getUploadSpeedLimit() const
 void ConfigManager::applyDefaultConfig()
 {
 	// Use platform-appropriate default download path
-	std::string defaultPath;
+	std::string default_path;
 #ifdef _WIN32
-	const char* userProfile = std::getenv("USERPROFILE");
-	defaultPath = userProfile ? std::string(userProfile) + "\\Downloads" : "C:\\Downloads";
+	const char* user_profile = std::getenv("USERPROFILE");
+	default_path = user_profile ? std::string(user_profile) + "\\Downloads" : "C:\\Downloads";
 #else
-	const char* home = std::getenv("HOME");
-	defaultPath = home ? std::string(home) + "/Downloads" : "/tmp/downloads";
+	const char* home_dir = std::getenv("HOME");
+	default_path = home_dir ? std::string(home_dir) + "/Downloads" : "/tmp/downloads";
 #endif
 
 	config = {
@@ -190,7 +190,7 @@ void ConfigManager::applyDefaultConfig()
 			{"download", 0},
 			{"upload", 0}
 		}},
-		{"download_path", defaultPath}
+		{"download_path", default_path}
 	};
 }
 
