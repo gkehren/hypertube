@@ -97,7 +97,8 @@ Result TorrentManager::removeTorrent(const lt::sha1_hash hash, RemoveTorrentType
 		// Also clean up path if it wasn't removed above (e.g. for other remove types)
 		// Although removeType check implies we only delete file on specific flags,
 		// we should probably always stop tracking the file path when the torrent is removed from session.
-		if (this->torrentFilePaths.count(hash)) {
+		if (this->torrentFilePaths.count(hash))
+		{
 			this->torrentFilePaths.erase(hash);
 		}
 
@@ -141,4 +142,46 @@ int TorrentManager::getDownloadSpeedLimit() const
 int TorrentManager::getUploadSpeedLimit() const
 {
 	return session.get_settings().get_int(lt::settings_pack::upload_rate_limit);
+}
+
+const lt::torrent_status *TorrentManager::getCachedStatus(const lt::sha1_hash &hash) const
+{
+	std::lock_guard<std::mutex> lock(cacheMutex);
+	auto it = statusCache.find(hash);
+	if (it != statusCache.end())
+	{
+		return &it->second;
+	}
+	return nullptr;
+}
+
+void TorrentManager::refreshStatusCache()
+{
+	std::lock_guard<std::mutex> lock(cacheMutex);
+
+	// Clear old cache
+	statusCache.clear();
+
+	// Refresh all torrent statuses
+	for (const auto &[hash, handle] : torrents)
+	{
+		if (handle.is_valid())
+		{
+			statusCache[hash] = handle.status();
+		}
+	}
+
+	lastCacheRefresh = std::chrono::steady_clock::now();
+}
+
+void TorrentManager::setCacheRefreshInterval(int milliseconds)
+{
+	cacheRefreshIntervalMs = milliseconds;
+}
+
+bool TorrentManager::shouldRefreshCache() const
+{
+	auto now = std::chrono::steady_clock::now();
+	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastCacheRefresh);
+	return elapsed.count() >= cacheRefreshIntervalMs;
 }

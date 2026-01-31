@@ -9,6 +9,8 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <chrono>
+#include <mutex>
 
 // Forward declaration
 struct TorrentConfigData;
@@ -37,8 +39,20 @@ public:
 	int getDownloadSpeedLimit() const;
 	int getUploadSpeedLimit() const;
 
+	// Status cache methods
+	const lt::torrent_status *getCachedStatus(const lt::sha1_hash &hash) const;
+	void refreshStatusCache();
+	void setCacheRefreshInterval(int milliseconds);
+	bool shouldRefreshCache() const;
+
 private:
 	lt::session session;
 	std::unordered_map<lt::sha1_hash, lt::torrent_handle> torrents;
 	std::unordered_map<lt::sha1_hash, std::string> torrentFilePaths;
+
+	// Status cache
+	mutable std::mutex cacheMutex;
+	std::unordered_map<lt::sha1_hash, lt::torrent_status> statusCache;
+	std::chrono::steady_clock::time_point lastCacheRefresh;
+	int cacheRefreshIntervalMs = 250; // Default 250ms
 };

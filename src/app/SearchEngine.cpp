@@ -26,6 +26,18 @@ static size_t WriteCallback(void *contents, size_t size, size_t nmemb, std::stri
 	}
 }
 
+// Progress callback for cURL to support cancellation
+static int ProgressCallback(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
+{
+	SearchEngine *engine = static_cast<SearchEngine *>(clientp);
+	// Return non-zero to abort the transfer if cancellation was requested
+	if (engine && engine->isCancellationRequested())
+	{
+		return 1; // Abort transfer
+	}
+	return 0; // Continue transfer
+}
+
 SearchEngine::SearchEngine()
 	: apiUrl("https://torrents-csv.com/service/search"),
 	  timeoutSeconds(30),
@@ -130,10 +142,22 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
 
+	// Enable progress callback for cancellation support
+	curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, ProgressCallback);
+	curl_easy_setopt(curl, CURLOPT_XFERINFODATA, this);
+	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+
 	// Perform the request
 	for (int attempt = 0; attempt < maxRetries; ++attempt)
 	{
 		res = curl_easy_perform(curl);
+
+		// Check if operation was cancelled
+		if (res == CURLE_ABORTED_BY_CALLBACK)
+		{
+			curl_easy_cleanup(curl);
+			return Result::Failure("Search cancelled by user");
+		}
 
 		if (res == CURLE_OK)
 		{
@@ -670,33 +694,43 @@ void SearchEngine::searchTorrentsAsyncThreaded(const SearchQuery &query, std::fu
 		response.nextToken.clear();
 		response.hasMore = false;
 
-		// Perform the search directly (bypass the searching flag check)
-		std::string url = buildSearchUrl(query);
-		std::cout << "Searching with URL: " << url << std::endl;
-		std::string httpResponse;
-
-		Result httpResult = makeHttpRequest(url, httpResponse);
 		Result result = Result::Failure("Unknown error");
 
-		if (httpResult)
+		// Check cancellation before starting
+		if (cancelRequested.load())
 		{
-			result = parseSearchResponse(httpResponse, response);
-			if (result)
-			{
-				addToSearchHistory(query.query);
-			}
+			result = Result::Failure("Search cancelled");
 		}
 		else
 		{
-			result = httpResult;
+			// Perform the search directly (bypass the searching flag check)
+			std::string url = buildSearchUrl(query);
+			std::cout << "Searching with URL: " << url << std::endl;
+			std::string httpResponse;
+
+			Result httpResult = makeHttpRequest(url, httpResponse);
+
+			// Check cancellation after HTTP request
+			if (cancelRequested.load())
+			{
+				result = Result::Failure("Search cancelled");
+			}
+			else if (httpResult)
+			{
+				result = parseSearchResponse(httpResponse, response);
+				if (result)
+				{
+					addToSearchHistory(query.query);
+				}
+			}
+			else
+			{
+				result = httpResult;
+			}
 		}
 
 		searching = false;
 
-		// Call the callback with results (will be executed in worker thread)
-		// Note: UI updates must be handled by the caller
-		if (!cancelRequested.load())
-		{
-			callback(result, response);
-		} });
+		// Always call the callback to reset UI state, even if cancelled
+		callback(result, response); });
 }

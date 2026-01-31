@@ -40,6 +40,11 @@ void SearchUI::displayIntegratedSearch()
 	if (isSearching)
 	{
 		ImGui::Text("Searching...");
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel"))
+		{
+			searchEngine.cancelCurrentSearch();
+		}
 		ImGui::ProgressBar(-1.0f * ImGui::GetTime(), ImVec2(0.0f, 0.0f), "");
 	}
 
@@ -555,10 +560,15 @@ void SearchUI::processPendingResults()
 
 		if (!pendingResult.has_value() || !pendingResult.value())
 		{
-			if (onShowFailurePopup)
+			std::string errorMsg = pendingResult.has_value() ? pendingResult.value().message : "Unknown error";
+
+			// Don't show error popup for cancelled searches
+			if (errorMsg.find("cancelled") == std::string::npos && errorMsg.find("cancelled") == std::string::npos)
 			{
-				std::string errorMsg = pendingResult.has_value() ? pendingResult.value().message : "Unknown error";
-				onShowFailurePopup("Search failed: " + errorMsg);
+				if (onShowFailurePopup)
+				{
+					onShowFailurePopup("Search failed: " + errorMsg);
+				}
 			}
 		}
 		else

@@ -84,6 +84,7 @@ public:
 	// Status
 	bool isSearching() const;
 	void cancelCurrentSearch();
+	bool isCancellationRequested() const { return cancelRequested.load(); }
 
 private:
 	std::string apiUrl;

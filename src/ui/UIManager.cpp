@@ -9,7 +9,7 @@ UIManager::UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine,
 {
 	// Initialize UI components
 	torrentTableUI = std::make_unique<TorrentTableUI>(torrentManager);
-	torrentDetailsUI = std::make_unique<TorrentDetailsUI>();
+	torrentDetailsUI = std::make_unique<TorrentDetailsUI>(torrentManager);
 	searchUI = std::make_unique<SearchUI>(searchEngine);
 	modalDialogs = std::make_unique<ModalDialogs>(torrentManager);
 

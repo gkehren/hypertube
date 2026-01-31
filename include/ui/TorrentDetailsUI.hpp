@@ -6,10 +6,12 @@
 #include <string>
 #include <functional>
 
+class TorrentManager;
+
 class TorrentDetailsUI
 {
 public:
-	TorrentDetailsUI() = default;
+	TorrentDetailsUI(TorrentManager &torrentManager);
 	~TorrentDetailsUI() = default;
 
 	// Main display method
@@ -28,6 +30,9 @@ public:
 	std::string formatBytes(size_t bytes, bool speed);
 	std::string torrentStateToString(lt::torrent_status::state_t state, lt::torrent_flags_t flags);
 	std::string computeETA(const lt::torrent_status &status) const;
+
+private:
+	TorrentManager &torrentManager;
 
 private:
 	// No private members needed for this stateless UI class

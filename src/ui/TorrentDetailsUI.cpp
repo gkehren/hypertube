@@ -1,8 +1,14 @@
 #include "TorrentDetailsUI.hpp"
+#include "TorrentManager.hpp"
 #include "StringUtils.hpp"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+
+TorrentDetailsUI::TorrentDetailsUI(TorrentManager &torrentManager)
+	: torrentManager(torrentManager)
+{
+}
 
 void TorrentDetailsUI::displayTorrentDetails(const lt::torrent_handle &selectedTorrent)
 {
@@ -10,7 +16,19 @@ void TorrentDetailsUI::displayTorrentDetails(const lt::torrent_handle &selectedT
 
 	if (selectedTorrent.is_valid())
 	{
-		lt::torrent_status status = selectedTorrent.status();
+		// Try to get cached status
+		const lt::torrent_status *cachedStatus = torrentManager.getCachedStatus(selectedTorrent.info_hash());
+		lt::torrent_status status;
+
+		if (cachedStatus)
+		{
+			status = *cachedStatus;
+		}
+		else
+		{
+			// Fallback to live query
+			status = selectedTorrent.status();
+		}
 
 		if (ImGui::BeginTabBar("TorrentDetailsTabBar"))
 		{

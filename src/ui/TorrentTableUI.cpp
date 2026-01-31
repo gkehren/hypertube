@@ -14,6 +14,12 @@ TorrentTableUI::TorrentTableUI(TorrentManager &torrentManager)
 
 void TorrentTableUI::displayTorrentTable()
 {
+	// Refresh cache if needed before rendering
+	if (torrentManager.shouldRefreshCache())
+	{
+		torrentManager.refreshStatusCache();
+	}
+
 	if (ImGui::BeginTable("Torrents", 9, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
 	{
 		displayTorrentTableHeader();
@@ -63,19 +69,32 @@ void TorrentTableUI::displayTorrentTableBody()
 
 void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash)
 {
-	lt::torrent_status status = handle.status();
+	// Try to get cached status first
+	const lt::torrent_status *cachedStatus = torrentManager.getCachedStatus(info_hash);
+	lt::torrent_status status;
+
+	if (cachedStatus)
+	{
+		status = *cachedStatus;
+	}
+	else
+	{
+		// Fallback to live query if cache miss (shouldn't happen normally)
+		status = handle.status();
+	}
+
 	ImGui::PushID(&handle);
 	ImGui::TableNextRow();
 
 	char buf[128];
-	const char* cell_text = buf;
+	const char *cell_text = buf;
 
 	for (int col = 0; col < 9; col++)
 	{
 		ImGui::TableSetColumnIndex(col);
 
 		// Optimization: Construct text into buffer directly to avoid std::string allocation
-		buf[0] = '\0'; // clear buffer
+		buf[0] = '\0';	 // clear buffer
 		cell_text = buf; // Default to buffer
 
 		switch (col)
@@ -102,12 +121,12 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 			Utils::computeETA(status, buf, sizeof(buf));
 			break;
 		case 8: // Seeds/Peers
-			{
-				float ratio = status.num_peers > 0 ? (float)status.num_seeds / (float)status.num_peers : 0.0f;
-				// Use default float formatting to match std::to_string approximately or just %f
-				snprintf(buf, sizeof(buf), "%d/%d (%f)", status.num_seeds, status.num_peers, ratio);
-			}
-			break;
+		{
+			float ratio = status.num_peers > 0 ? (float)status.num_seeds / (float)status.num_peers : 0.0f;
+			// Use default float formatting to match std::to_string approximately or just %f
+			snprintf(buf, sizeof(buf), "%d/%d (%f)", status.num_seeds, status.num_peers, ratio);
+		}
+		break;
 		case 3:
 			// Handled separately below
 			break;
@@ -162,11 +181,11 @@ std::string TorrentTableUI::getTorrentCellText(const lt::torrent_status &status,
 		Utils::computeETA(status, buf, sizeof(buf));
 		return std::string(buf);
 	case 8: // Seeds/Peers
-		{
-			float ratio = status.num_peers > 0 ? (float)status.num_seeds / (float)status.num_peers : 0.0f;
-			snprintf(buf, sizeof(buf), "%d/%d (%f)", status.num_seeds, status.num_peers, ratio);
-			return std::string(buf);
-		}
+	{
+		float ratio = status.num_peers > 0 ? (float)status.num_seeds / (float)status.num_peers : 0.0f;
+		snprintf(buf, sizeof(buf), "%d/%d (%f)", status.num_seeds, status.num_peers, ratio);
+		return std::string(buf);
+	}
 	default:
 		return "";
 	}
