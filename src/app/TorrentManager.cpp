@@ -185,3 +185,15 @@ bool TorrentManager::shouldRefreshCache() const
 	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastCacheRefresh);
 	return elapsed.count() >= cacheRefreshIntervalMs;
 }
+
+std::vector<lt::alert *> TorrentManager::pollAlerts()
+{
+	std::vector<lt::alert *> alerts;
+	session.pop_alerts(&alerts);
+	return alerts;
+}
+
+lt::session_stats_metrics TorrentManager::getSessionStats() const
+{
+	return session.session_state();
+}

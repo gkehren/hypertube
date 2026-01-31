@@ -12,6 +12,7 @@ UIManager::UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine,
 	torrentDetailsUI = std::make_unique<TorrentDetailsUI>(torrentManager);
 	searchUI = std::make_unique<SearchUI>(searchEngine);
 	modalDialogs = std::make_unique<ModalDialogs>(torrentManager);
+	logsUI = std::make_unique<LogsUI>(torrentManager);
 
 	// Setup callbacks
 	setupUICallbacks();
@@ -158,6 +159,10 @@ void UIManager::renderFrame(GLFWwindow *window, const ImVec4 &clear_color)
 	// Use the new TorrentDetailsUI component
 	torrentDetailsUI->displayTorrentDetails(torrentTableUI->getSelectedTorrent());
 
+	// Update and display logs
+	logsUI->updateLogs();
+	logsUI->displayLogsWindow();
+
 	handleModals();
 
 	displayPreferencesDialog();
@@ -205,9 +210,15 @@ void UIManager::setupDocking(ImGuiID dockspace_id)
 	ImGuiID dock_bottom_id;
 	ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.4f, &dock_bottom_id, &dock_top_id);
 
+	// Split the bottom area to make room for logs
+	ImGuiID dock_details_id;
+	ImGuiID dock_logs_id;
+	ImGui::DockBuilderSplitNode(dock_bottom_id, ImGuiDir_Right, 0.5f, &dock_logs_id, &dock_details_id);
+
 	ImGui::DockBuilderDockWindow("Categories", dock_left_id);
 	ImGui::DockBuilderDockWindow("Torrent Management", dock_top_id);
-	ImGui::DockBuilderDockWindow("Torrent Details", dock_bottom_id);
+	ImGui::DockBuilderDockWindow("Torrent Details", dock_details_id);
+	ImGui::DockBuilderDockWindow("Logs", dock_logs_id);
 
 	ImGui::DockBuilderFinish(dockspace_id);
 }

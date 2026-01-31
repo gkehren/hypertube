@@ -45,6 +45,12 @@ public:
 	void setCacheRefreshInterval(int milliseconds);
 	bool shouldRefreshCache() const;
 
+	// Alert polling methods
+	std::vector<lt::alert *> pollAlerts();
+	
+	// Session statistics methods
+	lt::session_stats_metrics getSessionStats() const;
+
 private:
 	lt::session session;
 	std::unordered_map<lt::sha1_hash, lt::torrent_handle> torrents;
