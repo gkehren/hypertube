@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <cstdlib>
+#include <algorithm>
 
 json ConfigManager::createDefaultConfig() const
 {
@@ -194,30 +195,24 @@ void ConfigManager::ensureSettingsStructure()
 
 void ConfigManager::setDownloadSpeedLimit(int bytesPerSecond)
 {
-	// Validate: must be non-negative
-	if (bytesPerSecond < 0)
-		bytesPerSecond = 0;
-	
+	// Validate: must be non-negative (0 means unlimited)
 	ensureSettingsStructure();
 	if (!config["settings"].contains("speed_limits"))
 	{
 		config["settings"]["speed_limits"] = json::object();
 	}
-	config["settings"]["speed_limits"]["download"] = bytesPerSecond;
+	config["settings"]["speed_limits"]["download"] = std::max(bytesPerSecond, 0);
 }
 
 void ConfigManager::setUploadSpeedLimit(int bytesPerSecond)
 {
-	// Validate: must be non-negative
-	if (bytesPerSecond < 0)
-		bytesPerSecond = 0;
-	
+	// Validate: must be non-negative (0 means unlimited)
 	ensureSettingsStructure();
 	if (!config["settings"].contains("speed_limits"))
 	{
 		config["settings"]["speed_limits"] = json::object();
 	}
-	config["settings"]["speed_limits"]["upload"] = bytesPerSecond;
+	config["settings"]["speed_limits"]["upload"] = std::max(bytesPerSecond, 0);
 }
 
 int ConfigManager::getDownloadSpeedLimit() const
