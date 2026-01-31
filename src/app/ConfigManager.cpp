@@ -2,6 +2,7 @@
 #include <fstream>
 #include <iostream>
 #include <cstdlib>
+#include <algorithm>
 
 Result ConfigManager::load(const std::string &path)
 {
@@ -144,20 +145,14 @@ json &ConfigManager::getConfig()
 
 void ConfigManager::setDownloadSpeedLimit(int bytesPerSecond)
 {
-	// Validate: must be non-negative
-	if (bytesPerSecond < 0)
-		bytesPerSecond = 0;
-	
-	config["speed_limits"]["download"] = bytesPerSecond;
+	// Validate: must be non-negative (0 means unlimited)
+	config["speed_limits"]["download"] = std::max(bytesPerSecond, 0);
 }
 
 void ConfigManager::setUploadSpeedLimit(int bytesPerSecond)
 {
-	// Validate: must be non-negative
-	if (bytesPerSecond < 0)
-		bytesPerSecond = 0;
-	
-	config["speed_limits"]["upload"] = bytesPerSecond;
+	// Validate: must be non-negative (0 means unlimited)
+	config["speed_limits"]["upload"] = std::max(bytesPerSecond, 0);
 }
 
 int ConfigManager::getDownloadSpeedLimit() const
