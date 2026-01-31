@@ -29,8 +29,26 @@ public:
 	int getDownloadSpeedLimit() const;
 	int getUploadSpeedLimit() const;
 
+	// New settings configuration
+	void setDownloadPath(const std::string &path);
+	std::string getDownloadPath() const;
+	void setEnableDHT(bool enable);
+	bool getEnableDHT() const;
+	void setEnableUPnP(bool enable);
+	bool getEnableUPnP() const;
+	void setEnableNATPMP(bool enable);
+	bool getEnableNATPMP() const;
+
+	// Schema management
+	int getConfigVersion() const;
+	void ensureDefaultConfig();
+	void migrateConfig(int fromVersion, int toVersion);
+
 	json &getConfig();
 
 private:
 	json config;
+	static constexpr int CURRENT_CONFIG_VERSION = 1;
+	
+	json createDefaultConfig() const;
 };
