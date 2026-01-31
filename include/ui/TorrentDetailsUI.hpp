@@ -34,7 +34,13 @@ public:
 
 private:
 	TorrentManager &torrentManager;
-
-private:
-	// No private members needed for this stateless UI class
+	
+	// Settings tab state (per-torrent hash to settings map)
+	struct SettingsState
+	{
+		int downloadLimit = 0;
+		int uploadLimit = 0;
+		lt::sha1_hash lastTorrentHash;
+	};
+	SettingsState settingsState;
 };

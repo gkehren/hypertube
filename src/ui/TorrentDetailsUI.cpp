@@ -120,13 +120,17 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 				ImGui::ProgressBar(0.0f);
 
 			ImGui::TableSetColumnIndex(3);
-			// Get current priority
+			// Get current priority and map to combo index
 			lt::download_priority_t current_priority = selectedTorrent.file_priority(index);
-			int priority_index = 0;
-			if (current_priority == lt::dont_download) priority_index = 0;
-			else if (current_priority == lt::low_priority) priority_index = 1;
-			else if (current_priority == lt::default_priority) priority_index = 2;
-			else if (current_priority >= lt::top_priority) priority_index = 3;
+			int priority_index;
+			if (current_priority == lt::dont_download)
+				priority_index = 0;
+			else if (current_priority == lt::low_priority)
+				priority_index = 1;
+			else if (current_priority >= lt::top_priority)
+				priority_index = 3;
+			else
+				priority_index = 2; // default_priority
 
 			const char* priority_items[] = { "Don't Download", "Low", "Normal", "High" };
 			ImGui::SetNextItemWidth(120.0f);
@@ -292,22 +296,27 @@ void TorrentDetailsUI::displayTorrentDetails_Settings(const lt::torrent_handle &
 	ImGui::Separator();
 	ImGui::Spacing();
 
+	// Check if we're viewing a different torrent - if so, reload settings
+	lt::sha1_hash currentHash = selectedTorrent.info_hash();
+	if (settingsState.lastTorrentHash != currentHash)
+	{
+		settingsState.lastTorrentHash = currentHash;
+		settingsState.downloadLimit = selectedTorrent.download_limit() / 1024;
+		settingsState.uploadLimit = selectedTorrent.upload_limit() / 1024;
+	}
+
 	// Speed limits section
 	ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Speed Limits:");
 	ImGui::Spacing();
 
-	// Get current limits (convert from bytes/s to KB/s)
-	int downloadLimit = selectedTorrent.download_limit() / 1024;
-	int uploadLimit = selectedTorrent.upload_limit() / 1024;
-
 	// Download limit
 	ImGui::Text("Download Limit (KB/s):");
 	ImGui::SetNextItemWidth(150);
-	if (ImGui::InputInt("##TorrentDownloadLimit", &downloadLimit, 1, 100))
+	if (ImGui::InputInt("##TorrentDownloadLimit", &settingsState.downloadLimit, 1, 100))
 	{
-		if (downloadLimit < 0)
-			downloadLimit = 0;
-		selectedTorrent.set_download_limit(downloadLimit * 1024);
+		if (settingsState.downloadLimit < 0)
+			settingsState.downloadLimit = 0;
+		selectedTorrent.set_download_limit(settingsState.downloadLimit * 1024);
 	}
 	ImGui::SameLine();
 	ImGui::TextDisabled("(0 = unlimited)");
@@ -315,13 +324,13 @@ void TorrentDetailsUI::displayTorrentDetails_Settings(const lt::torrent_handle &
 	ImGui::Spacing();
 
 	// Upload limit
-	ImGui::Text("Upload Limit (KB/s):  ");
+	ImGui::Text("Upload Limit (KB/s):");
 	ImGui::SetNextItemWidth(150);
-	if (ImGui::InputInt("##TorrentUploadLimit", &uploadLimit, 1, 100))
+	if (ImGui::InputInt("##TorrentUploadLimit", &settingsState.uploadLimit, 1, 100))
 	{
-		if (uploadLimit < 0)
-			uploadLimit = 0;
-		selectedTorrent.set_upload_limit(uploadLimit * 1024);
+		if (settingsState.uploadLimit < 0)
+			settingsState.uploadLimit = 0;
+		selectedTorrent.set_upload_limit(settingsState.uploadLimit * 1024);
 	}
 	ImGui::SameLine();
 	ImGui::TextDisabled("(0 = unlimited)");
