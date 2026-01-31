@@ -8,7 +8,8 @@
 
 using json = nlohmann::json;
 
-struct TorrentConfigData {
+struct TorrentConfigData
+{
 	std::string magnetUri;
 	std::string savePath;
 	std::string torrentFilePath;
@@ -28,6 +29,10 @@ public:
 	void setUploadSpeedLimit(int bytesPerSecond);
 	int getDownloadSpeedLimit() const;
 	int getUploadSpeedLimit() const;
+
+	// Theme configuration
+	void setTheme(int themeIndex);
+	int getTheme() const;
 
 	json &getConfig();
 

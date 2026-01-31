@@ -1,0 +1,11 @@
+{
+    "download_speed_limit": 0,
+    "favorites": [],
+    "search_history": [],
+    "speed_limits": {
+        "download": 0,
+        "upload": 0
+    },
+    "theme": 4,
+    "upload_speed_limit": 0
+}

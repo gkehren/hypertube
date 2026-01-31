@@ -1,5 +1,6 @@
 #include "SearchUI.hpp"
 #include "StringUtils.hpp"
+#include "Theme.hpp"
 #include <algorithm>
 #include <iostream>
 #include <iomanip>
@@ -17,38 +18,50 @@ void SearchUI::displayIntegratedSearch()
 	// Process any pending results from async search
 	processPendingResults();
 
-	// Search input section
-	ImGui::Text("Search for Torrents:");
-	ImGui::Separator();
+	// Search input section with styled header
+	HypertubeTheme::drawSectionHeader("Torrent Search");
 
 	// Search input with better styling
-	ImGui::Text("Query:");
-	ImGui::SameLine();
-	ImGui::PushItemWidth(-150.0f); // Leave space for search button
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 20.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(16.0f, 8.0f));
+	ImGui::PushItemWidth(-160.0f); // Leave space for search button
 	bool enterPressed = ImGui::InputText("##search", searchQueryBuffer, sizeof(searchQueryBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
 	ImGui::PopItemWidth();
+	ImGui::PopStyleVar(2);
 
 	ImGui::SameLine();
-	bool searchClicked = ImGui::Button("Search", ImVec2(140, 0));
+	bool searchClicked = HypertubeTheme::drawStyledButton("Search", ImVec2(140, 32), true);
 
 	if (enterPressed || searchClicked)
 	{
 		performSearch(std::string(searchQueryBuffer));
 	}
 
-	// Show search status
+	// Show search status with animated indicator
 	if (isSearching)
 	{
+		ImGui::Spacing();
+		float pulse = HypertubeTheme::pulse(3.0f);
+		ImVec4 loadingColor = HypertubeTheme::lerpColor(
+			HypertubeTheme::getCurrentPalette().textSecondary,
+			HypertubeTheme::getCurrentPalette().primary,
+			pulse);
+		ImGui::PushStyleColor(ImGuiCol_Text, loadingColor);
 		ImGui::Text("Searching...");
+		ImGui::PopStyleColor();
 		ImGui::SameLine();
-		if (ImGui::Button("Cancel"))
+		if (HypertubeTheme::drawStyledButton("Cancel", ImVec2(80, 0), false))
 		{
 			searchEngine.cancelCurrentSearch();
 		}
-		ImGui::ProgressBar(-1.0f * ImGui::GetTime(), ImVec2(0.0f, 0.0f), "");
+		ImGui::PushStyleColor(ImGuiCol_PlotHistogram, HypertubeTheme::getCurrentPalette().primary);
+		ImGui::ProgressBar(-1.0f * (float)ImGui::GetTime(), ImVec2(200.0f, 4.0f), "");
+		ImGui::PopStyleColor();
 	}
 
+	ImGui::Spacing();
 	ImGui::Separator();
+	ImGui::Spacing();
 
 	// Display search results if available
 	if (!searchResults.empty() || !currentSearchQuery.empty())
@@ -57,7 +70,9 @@ void SearchUI::displayIntegratedSearch()
 	}
 	else if (!isSearching)
 	{
-		ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Enter a search query to find torrents...");
+		ImGui::PushStyleColor(ImGuiCol_Text, HypertubeTheme::getCurrentPalette().textSecondary);
+		ImGui::Text("Enter a search query to find torrents...");
+		ImGui::PopStyleColor();
 	}
 }
 
@@ -288,12 +303,13 @@ void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result,
 
 	// Seeders with color coding
 	ImGui::TableSetColumnIndex(2);
+	const auto &palette = HypertubeTheme::getCurrentPalette();
 	if (result.seeders >= 10)
-		ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "%d", result.seeders);
+		ImGui::TextColored(palette.success, "%d", result.seeders);
 	else if (result.seeders >= 1)
-		ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "%d", result.seeders);
+		ImGui::TextColored(palette.warning, "%d", result.seeders);
 	else
-		ImGui::TextColored(ImVec4(0.8f, 0.0f, 0.0f, 1.0f), "%d", result.seeders);
+		ImGui::TextColored(palette.error, "%d", result.seeders);
 
 	// Leechers
 	ImGui::TableSetColumnIndex(3);
@@ -304,16 +320,12 @@ void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result,
 	if (result.leechers > 0)
 	{
 		float ratio = (float)result.seeders / result.leechers;
-		if (ratio >= 2.0f)
-			ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "%.1f", ratio);
-		else if (ratio >= 1.0f)
-			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "%.1f", ratio);
-		else
-			ImGui::TextColored(ImVec4(0.8f, 0.0f, 0.0f, 1.0f), "%.1f", ratio);
+		ImVec4 ratioColor = HypertubeTheme::getHealthColor(ratio);
+		ImGui::TextColored(ratioColor, "%.1f", ratio);
 	}
 	else if (result.seeders > 0)
 	{
-		ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "∞");
+		ImGui::TextColored(palette.success, "∞");
 	}
 	else
 	{
@@ -323,7 +335,7 @@ void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result,
 	// Completed count
 	ImGui::TableSetColumnIndex(5);
 	if (result.completed > 0)
-		ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "%d", result.completed);
+		ImGui::TextColored(palette.success, "%d", result.completed);
 	else
 		ImGui::Text("%d", result.completed);
 

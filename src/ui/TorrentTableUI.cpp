@@ -1,6 +1,7 @@
 #include "TorrentTableUI.hpp"
 #include "UIManager.hpp"
 #include "StringUtils.hpp"
+#include "Theme.hpp"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -20,7 +21,14 @@ void TorrentTableUI::displayTorrentTable()
 		torrentManager.refreshStatusCache();
 	}
 
-	if (ImGui::BeginTable("Torrents", 9, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+	ImGuiTableFlags tableFlags = ImGuiTableFlags_RowBg |
+								 ImGuiTableFlags_Resizable |
+								 ImGuiTableFlags_Reorderable |
+								 ImGuiTableFlags_Hideable |
+								 ImGuiTableFlags_BordersInnerV |
+								 ImGuiTableFlags_ScrollY;
+
+	if (ImGui::BeginTable("Torrents", 9, tableFlags))
 	{
 		displayTorrentTableHeader();
 		displayTorrentTableBody();
@@ -89,6 +97,13 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 	char buf[128];
 	const char *cell_text = buf;
 
+	// Determine if this row is selected
+	bool isSelected = (selectedTorrent == handle);
+
+	// Get status string for coloring
+	const char *statusStr = Utils::torrentStateToString(status.state, handle.flags());
+	ImVec4 statusColor = HypertubeTheme::getStatusColor(statusStr);
+
 	for (int col = 0; col < 9; col++)
 	{
 		ImGui::TableSetColumnIndex(col);
@@ -109,7 +124,7 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 			Utils::formatBytes(status.total_wanted, false, buf, sizeof(buf));
 			break;
 		case 4: // Status
-			cell_text = Utils::torrentStateToString(status.state, handle.flags());
+			cell_text = statusStr;
 			break;
 		case 5: // Download speed
 			Utils::formatBytes(status.download_payload_rate, true, buf, sizeof(buf));
@@ -123,8 +138,7 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 		case 8: // Seeds/Peers
 		{
 			float ratio = status.num_peers > 0 ? (float)status.num_seeds / (float)status.num_peers : 0.0f;
-			// Use default float formatting to match std::to_string approximately or just %f
-			snprintf(buf, sizeof(buf), "%d/%d (%f)", status.num_seeds, status.num_peers, ratio);
+			snprintf(buf, sizeof(buf), "%d / %d", status.num_seeds, status.num_peers);
 		}
 		break;
 		case 3:
@@ -134,16 +148,56 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 			break;
 		}
 
-		if (col != 3) // Progress column is handled differently
+		if (col == 3) // Progress column with colored bar
 		{
-			if (ImGui::Selectable(cell_text, selectedTorrent == handle, ImGuiSelectableFlags_SpanAllColumns))
+			// Choose progress bar color based on download/seeding state
+			ImVec4 progressColor;
+			if (status.state == lt::torrent_status::seeding)
+				progressColor = HypertubeTheme::getCurrentPalette().progressUpload;
+			else
+				progressColor = HypertubeTheme::getCurrentPalette().progressDownload;
+
+			// Draw progress bar
+			char progressText[32];
+			snprintf(progressText, sizeof(progressText), "%.1f%%", status.progress * 100.0f);
+
+			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, progressColor);
+			ImGui::ProgressBar(status.progress, ImVec2(-1, 0), progressText);
+			ImGui::PopStyleColor();
+		}
+		else if (col == 4) // Status column with colored text
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, statusColor);
+			if (ImGui::Selectable(cell_text, isSelected, ImGuiSelectableFlags_SpanAllColumns))
 			{
 				selectedTorrent = handle;
 			}
+			ImGui::PopStyleColor();
+		}
+		else if (col == 5 && status.download_payload_rate > 0) // Download speed with color
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, HypertubeTheme::getCurrentPalette().success);
+			if (ImGui::Selectable(cell_text, isSelected, ImGuiSelectableFlags_SpanAllColumns))
+			{
+				selectedTorrent = handle;
+			}
+			ImGui::PopStyleColor();
+		}
+		else if (col == 6 && status.upload_payload_rate > 0) // Upload speed with color
+		{
+			ImGui::PushStyleColor(ImGuiCol_Text, HypertubeTheme::getCurrentPalette().info);
+			if (ImGui::Selectable(cell_text, isSelected, ImGuiSelectableFlags_SpanAllColumns))
+			{
+				selectedTorrent = handle;
+			}
+			ImGui::PopStyleColor();
 		}
 		else
 		{
-			ImGui::ProgressBar(status.progress);
+			if (ImGui::Selectable(cell_text, isSelected, ImGuiSelectableFlags_SpanAllColumns))
+			{
+				selectedTorrent = handle;
+			}
 		}
 
 		ImGui::SameLine();

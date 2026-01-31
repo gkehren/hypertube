@@ -126,3 +126,36 @@ int ConfigManager::getUploadSpeedLimit() const
 	}
 	return 0; // 0 means unlimited
 }
+
+void ConfigManager::setTheme(int themeIndex)
+{
+	config["theme"] = themeIndex;
+}
+
+int ConfigManager::getTheme() const
+{
+	if (config.contains("theme"))
+	{
+		// Handle both string (legacy) and number formats
+		if (config["theme"].is_string())
+		{
+			std::string themeStr = config["theme"];
+			if (themeStr == "dark")
+				return 0;
+			if (themeStr == "ocean")
+				return 1;
+			if (themeStr == "nord")
+				return 2;
+			if (themeStr == "dracula")
+				return 3;
+			if (themeStr == "cyberpunk")
+				return 4;
+			return 0; // Default to dark if unknown
+		}
+		else if (config["theme"].is_number())
+		{
+			return config["theme"];
+		}
+	}
+	return 0; // Default to Dark theme
+}
