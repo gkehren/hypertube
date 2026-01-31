@@ -1,6 +1,7 @@
 #include "ConfigManager.hpp"
 #include <fstream>
 #include <iostream>
+#include <cstdlib>
 
 Result ConfigManager::load(const std::string &path)
 {
@@ -28,13 +29,11 @@ Result ConfigManager::load(const std::string &path)
 	}
 	catch (const json::parse_error &e)
 	{
-		file.close();
 		applyDefaultConfig();
 		return Result::Failure("Failed to parse configuration file: " + std::string(e.what()) + ". Using default values.");
 	}
 	catch (const std::exception &e)
 	{
-		file.close();
 		applyDefaultConfig();
 		return Result::Failure("Error loading configuration: " + std::string(e.what()) + ". Using default values.");
 	}
@@ -88,16 +87,13 @@ Result ConfigManager::loadTorrents(const std::string &path, std::vector<TorrentC
 			try
 			{
 				file >> sourceConfig;
-				file.close();
 			}
 			catch (const json::parse_error &e)
 			{
-				file.close();
 				return Result::Failure("Failed to parse torrents configuration: " + std::string(e.what()));
 			}
 			catch (const std::exception &e)
 			{
-				file.close();
 				return Result::Failure("Error loading torrents configuration: " + std::string(e.what()));
 			}
 		}
@@ -184,12 +180,22 @@ int ConfigManager::getUploadSpeedLimit() const
 
 void ConfigManager::applyDefaultConfig()
 {
+	// Use platform-appropriate default download path
+	std::string defaultPath;
+#ifdef _WIN32
+	const char* userProfile = std::getenv("USERPROFILE");
+	defaultPath = userProfile ? std::string(userProfile) + "\\Downloads" : "C:\\Downloads";
+#else
+	const char* home = std::getenv("HOME");
+	defaultPath = home ? std::string(home) + "/Downloads" : "/tmp/downloads";
+#endif
+
 	config = {
 		{"speed_limits", {
 			{"download", 0},
 			{"upload", 0}
 		}},
-		{"download_path", "/default/downloads"}
+		{"download_path", defaultPath}
 	};
 }
 
