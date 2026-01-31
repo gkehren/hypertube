@@ -36,6 +36,7 @@ Result ConfigManager::load(const std::string &path, bool fullConfig)
 	try
 	{
 		file >> this->config;
+		// File will be automatically closed by destructor (RAII)
 
 		if (fullConfig)
 		{
@@ -81,7 +82,7 @@ void ConfigManager::save(const std::string &path)
 			config["version"] = CURRENT_CONFIG_VERSION;
 		}
 		file << config.dump(4);
-		file.close();
+		// File will be automatically closed by destructor (RAII)
 	}
 }
 
@@ -113,7 +114,7 @@ void ConfigManager::saveTorrents(const std::unordered_map<lt::sha1_hash, lt::tor
 	if (file.is_open())
 	{
 		file << torrentsFile.dump(4);
-		file.close();
+		// File will be automatically closed by destructor (RAII)
 	}
 }
 
@@ -506,27 +507,7 @@ int ConfigManager::getTheme() const
 
 void ConfigManager::applyDefaultConfig()
 {
-<<<<<<< HEAD
 	config = createDefaultConfig();
-=======
-	// Use platform-appropriate default download path
-	std::string defaultPath;
-#ifdef _WIN32
-	const char* userProfile = std::getenv("USERPROFILE");
-	defaultPath = userProfile ? std::string(userProfile) + "\\Downloads" : "C:\\Downloads";
-#else
-	const char* home = std::getenv("HOME");
-	defaultPath = home ? std::string(home) + "/Downloads" : "/tmp/downloads";
-#endif
-
-	config = {
-		{"speed_limits", {
-			{"download", 0},
-			{"upload", 0}
-		}},
-		{"download_path", defaultPath}
-	};
->>>>>>> f88af97 (Address code review feedback: remove redundant file.close() and improve default path)
 }
 
 bool ConfigManager::validateConfig()
