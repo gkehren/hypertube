@@ -26,11 +26,31 @@ App::App() : uiManager(torrentManager, searchEngine, settingsConfigManager)
 	glfwMakeContextCurrent(window);
 	glfwSwapInterval(1); // Enable vsync
 
-	torrentsConfigManager.load("./config/torrents.json", false);
-	torrentManager.addTorrentsFromConfig(torrentsConfigManager.loadTorrents("./config/torrents.json"));
+	// Load torrents configuration
+	Result configLoadResult = torrentsConfigManager.load("./config/torrents.json", false);
+	if (!configLoadResult)
+	{
+		std::cerr << "Warning: " << configLoadResult.message << std::endl;
+	}
+
+	// Load torrents from config
+	std::vector<TorrentConfigData> torrents;
+	Result torrentsLoadResult = torrentsConfigManager.loadTorrents("./config/torrents.json", torrents);
+	if (torrentsLoadResult)
+	{
+		torrentManager.addTorrentsFromConfig(torrents);
+	}
+	else
+	{
+		std::cerr << "Warning: " << torrentsLoadResult.message << std::endl;
+	}
 
 	// Load favorites and search history
-	settingsConfigManager.load("./config/settings.json");
+	Result settingsLoadResult = settingsConfigManager.load("./config/settings.json");
+	if (!settingsLoadResult)
+	{
+		std::cerr << "Warning: " << settingsLoadResult.message << std::endl;
+	}
 	searchEngine.loadFavoritesAndHistory(settingsConfigManager);
 }
 

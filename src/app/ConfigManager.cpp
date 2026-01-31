@@ -21,38 +21,53 @@ json ConfigManager::createDefaultConfig() const
 	return defaultConfig;
 }
 
-void ConfigManager::load(const std::string &path, bool fullConfig)
+Result ConfigManager::load(const std::string &path, bool fullConfig)
 {
 	std::ifstream file(path);
-	if (file.is_open())
+	if (!file.is_open())
 	{
-		try
-		{
-			file >> this->config;
-			file.close();
-
-			if (fullConfig)
-			{
-				// Check if config needs migration
-				int currentVersion = getConfigVersion();
-				if (currentVersion < CURRENT_CONFIG_VERSION)
-				{
-					migrateConfig(currentVersion, CURRENT_CONFIG_VERSION);
-				}
-				// Ensure all default settings exist
-				ensureDefaultConfig();
-			}
-		}
-		catch (const std::exception &e)
-		{
-			std::cerr << "Error loading config: " << e.what() << std::endl;
-			this->config = fullConfig ? createDefaultConfig() : json{{"torrents", json::array()}};
-		}
-	}
-	else
-	{
-		// No config file exists
+		// If file doesn't exist, use default config
 		this->config = fullConfig ? createDefaultConfig() : json{{"torrents", json::array()}};
+		return Result::Success();
+	}
+
+	try
+	{
+		file >> this->config;
+		file.close();
+
+		if (fullConfig)
+		{
+			// Validate the loaded config
+			if (!validateConfig())
+			{
+				this->config = createDefaultConfig();
+				return Result::Failure("Invalid configuration detected. Using default values.");
+			}
+
+			// Check if config needs migration
+			int currentVersion = getConfigVersion();
+			if (currentVersion < CURRENT_CONFIG_VERSION)
+			{
+				migrateConfig(currentVersion, CURRENT_CONFIG_VERSION);
+			}
+			// Ensure all default settings exist
+			ensureDefaultConfig();
+		}
+
+		return Result::Success();
+	}
+	catch (const json::parse_error &e)
+	{
+		file.close();
+		this->config = fullConfig ? createDefaultConfig() : json{{"torrents", json::array()}};
+		return Result::Failure("Failed to parse configuration file: " + std::string(e.what()) + ". Using default values.");
+	}
+	catch (const std::exception &e)
+	{
+		file.close();
+		this->config = fullConfig ? createDefaultConfig() : json{{"torrents", json::array()}};
+		return Result::Failure("Error loading configuration: " + std::string(e.what()) + ". Using default values.");
 	}
 }
 
@@ -103,9 +118,9 @@ void ConfigManager::saveTorrents(const std::unordered_map<lt::sha1_hash, lt::tor
 	}
 }
 
-std::vector<TorrentConfigData> ConfigManager::loadTorrents(const std::string &path)
+Result ConfigManager::loadTorrents(const std::string &path, std::vector<TorrentConfigData> &outTorrents)
 {
-	std::vector<TorrentConfigData> torrents;
+	outTorrents.clear();
 
 	json sourceConfig;
 	if (!path.empty())
@@ -116,12 +131,18 @@ std::vector<TorrentConfigData> ConfigManager::loadTorrents(const std::string &pa
 			try
 			{
 				file >> sourceConfig;
+				file.close();
 			}
-			catch (const std::exception &)
+			catch (const json::parse_error &e)
 			{
-				sourceConfig = json{};
+				file.close();
+				return Result::Failure("Failed to parse torrents configuration: " + std::string(e.what()));
 			}
-			file.close();
+			catch (const std::exception &e)
+			{
+				file.close();
+				return Result::Failure("Error loading torrents configuration: " + std::string(e.what()));
+			}
 		}
 	}
 
@@ -131,23 +152,36 @@ std::vector<TorrentConfigData> ConfigManager::loadTorrents(const std::string &pa
 	}
 
 	if (!sourceConfig.contains("torrents"))
-		return torrents;
+		return Result::Success(); // No torrents to load is not an error
 
-	const auto &torrentsJson = sourceConfig["torrents"];
-	torrents.reserve(torrentsJson.size());
-	for (const auto &torrent : torrentsJson)
+	try
 	{
-		TorrentConfigData data;
-		if (torrent.contains("magnet_uri"))
-			data.magnetUri = torrent["magnet_uri"];
-		if (torrent.contains("save_path"))
-			data.savePath = torrent["save_path"];
-		if (torrent.contains("torrent_path"))
-			data.torrentFilePath = torrent["torrent_path"];
+		const auto &torrentsJson = sourceConfig["torrents"];
+		if (!torrentsJson.is_array())
+		{
+			return Result::Failure("Invalid torrents configuration: 'torrents' must be an array");
+		}
 
-		torrents.push_back(std::move(data));
+		outTorrents.reserve(torrentsJson.size());
+		for (const auto &torrent : torrentsJson)
+		{
+			TorrentConfigData data;
+			if (torrent.contains("magnet_uri") && torrent["magnet_uri"].is_string())
+				data.magnetUri = torrent["magnet_uri"];
+			if (torrent.contains("save_path") && torrent["save_path"].is_string())
+				data.savePath = torrent["save_path"];
+			if (torrent.contains("torrent_path") && torrent["torrent_path"].is_string())
+				data.torrentFilePath = torrent["torrent_path"];
+
+			outTorrents.push_back(std::move(data));
+		}
+		return Result::Success();
 	}
-	return torrents;
+	catch (const std::exception &e)
+	{
+		outTorrents.clear();
+		return Result::Failure("Error processing torrents: " + std::string(e.what()));
+	}
 }
 
 json &ConfigManager::getConfig()
@@ -165,6 +199,10 @@ void ConfigManager::ensureSettingsStructure()
 
 void ConfigManager::setDownloadSpeedLimit(int bytesPerSecond)
 {
+	// Validate: must be non-negative
+	if (bytesPerSecond < 0)
+		bytesPerSecond = 0;
+	
 	ensureSettingsStructure();
 	if (!config["settings"].contains("speed_limits"))
 	{
@@ -175,6 +213,10 @@ void ConfigManager::setDownloadSpeedLimit(int bytesPerSecond)
 
 void ConfigManager::setUploadSpeedLimit(int bytesPerSecond)
 {
+	// Validate: must be non-negative
+	if (bytesPerSecond < 0)
+		bytesPerSecond = 0;
+	
 	ensureSettingsStructure();
 	if (!config["settings"].contains("speed_limits"))
 	{
@@ -211,6 +253,7 @@ int ConfigManager::getUploadSpeedLimit() const
 	return 0; // 0 means unlimited
 }
 
+<<<<<<< HEAD
 void ConfigManager::setDownloadPath(const std::string &path)
 {
 	ensureSettingsStructure();
@@ -469,4 +512,94 @@ int ConfigManager::getTheme() const
 		}
 	}
 	return 0; // Default to Dark theme
+}
+
+void ConfigManager::applyDefaultConfig()
+{
+	config = createDefaultConfig();
+}
+
+bool ConfigManager::validateConfig()
+{
+	// If config is empty or not an object, it's invalid
+	if (config.is_null() || !config.is_object())
+	{
+		return false;
+	}
+
+	// Validate speed_limits if present (check both old and new structure)
+	if (config.contains("speed_limits"))
+	{
+		const auto &speedLimits = config["speed_limits"];
+		if (!speedLimits.is_object())
+		{
+			return false;
+		}
+
+		// Check download limit is a valid number if present
+		if (speedLimits.contains("download"))
+		{
+			if (!speedLimits["download"].is_number_integer())
+			{
+				return false;
+			}
+			int downloadLimit = speedLimits["download"];
+			if (downloadLimit < 0)
+			{
+				return false;
+			}
+		}
+
+		// Check upload limit is a valid number if present
+		if (speedLimits.contains("upload"))
+		{
+			if (!speedLimits["upload"].is_number_integer())
+			{
+				return false;
+			}
+			int uploadLimit = speedLimits["upload"];
+			if (uploadLimit < 0)
+			{
+				return false;
+			}
+		}
+	}
+
+	// Validate settings.speed_limits if present (new structure)
+	if (config.contains("settings") && config["settings"].is_object())
+	{
+		const auto &settings = config["settings"];
+		if (settings.contains("speed_limits") && settings["speed_limits"].is_object())
+		{
+			const auto &speedLimits = settings["speed_limits"];
+			
+			if (speedLimits.contains("download"))
+			{
+				if (!speedLimits["download"].is_number_integer())
+				{
+					return false;
+				}
+				int downloadLimit = speedLimits["download"];
+				if (downloadLimit < 0)
+				{
+					return false;
+				}
+			}
+
+			if (speedLimits.contains("upload"))
+			{
+				if (!speedLimits["upload"].is_number_integer())
+				{
+					return false;
+				}
+				int uploadLimit = speedLimits["upload"];
+				if (uploadLimit < 0)
+				{
+					return false;
+				}
+			}
+		}
+	}
+
+	return true;
 }

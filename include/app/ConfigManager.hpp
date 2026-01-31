@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <json.hpp>
 #include "TorrentManager.hpp"
+#include "Result.hpp"
 
 using json = nlohmann::json;
 
@@ -21,11 +22,11 @@ struct TorrentConfigData
 class ConfigManager
 {
 public:
-	void load(const std::string &path, bool fullConfig = true);
+	Result load(const std::string &path, bool fullConfig = true);
 	void save(const std::string &path);
 
 	void saveTorrents(const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &torrents, const std::unordered_map<lt::sha1_hash, std::string> &torrentFilePaths);
-	std::vector<TorrentConfigData> loadTorrents(const std::string &path);
+	Result loadTorrents(const std::string &path, std::vector<TorrentConfigData> &outTorrents);
 
 	// Favorites and search history
 	void saveFavoritesAndHistory(const std::vector<TorrentSearchResult> &favorites, const std::vector<std::string> &searchHistory);
@@ -63,4 +64,6 @@ private:
 
 	json createDefaultConfig() const;
 	void ensureSettingsStructure();
+	void applyDefaultConfig();
+	bool validateConfig();
 };
