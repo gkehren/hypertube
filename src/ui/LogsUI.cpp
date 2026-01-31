@@ -111,6 +111,8 @@ std::string LogsUI::formatTimestamp(const std::chrono::system_clock::time_point 
 	auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()) % 1000;
 	
 	std::stringstream ss;
+	// Note: std::localtime is used here for simplicity but is not thread-safe.
+	// In a multi-threaded context, consider using std::localtime_r (POSIX) or localtime_s (Windows)
 	ss << std::put_time(std::localtime(&time_t), "%H:%M:%S");
 	ss << '.' << std::setfill('0') << std::setw(3) << ms.count();
 	
@@ -125,25 +127,29 @@ void LogsUI::processAlert(lt::alert *alert)
 	// Process tracker errors
 	if (auto *te = lt::alert_cast<lt::tracker_error_alert>(alert))
 	{
-		std::string msg = std::string("Tracker error for '") + te->torrent_name() + "': " + te->error_message();
-		addLogEntry("Tracker", msg, ImVec4(1.0f, 0.4f, 0.4f, 1.0f)); // Red
+		std::stringstream ss;
+		ss << "Tracker error for '" << te->torrent_name() << "': " << te->error_message();
+		addLogEntry("Tracker", ss.str(), ImVec4(1.0f, 0.4f, 0.4f, 1.0f)); // Red
 	}
 	// Process tracker warnings
 	else if (auto *tw = lt::alert_cast<lt::tracker_warning_alert>(alert))
 	{
-		std::string msg = std::string("Tracker warning for '") + tw->torrent_name() + "': " + tw->warning_message();
-		addLogEntry("Tracker", msg, ImVec4(1.0f, 0.8f, 0.4f, 1.0f)); // Yellow
+		std::stringstream ss;
+		ss << "Tracker warning for '" << tw->torrent_name() << "': " << tw->warning_message();
+		addLogEntry("Tracker", ss.str(), ImVec4(1.0f, 0.8f, 0.4f, 1.0f)); // Yellow
 	}
 	// Process storage errors
 	else if (auto *fe = lt::alert_cast<lt::file_error_alert>(alert))
 	{
-		std::string msg = std::string("File error for '") + fe->torrent_name() + "': " + fe->error.message();
-		addLogEntry("Storage", msg, ImVec4(1.0f, 0.4f, 0.4f, 1.0f)); // Red
+		std::stringstream ss;
+		ss << "File error for '" << fe->torrent_name() << "': " << fe->error.message();
+		addLogEntry("Storage", ss.str(), ImVec4(1.0f, 0.4f, 0.4f, 1.0f)); // Red
 	}
 	else if (auto *smf = lt::alert_cast<lt::storage_moved_failed_alert>(alert))
 	{
-		std::string msg = std::string("Storage move failed for '") + smf->torrent_name() + "': " + smf->error.message();
-		addLogEntry("Storage", msg, ImVec4(1.0f, 0.4f, 0.4f, 1.0f)); // Red
+		std::stringstream ss;
+		ss << "Storage move failed for '" << smf->torrent_name() << "': " << smf->error.message();
+		addLogEntry("Storage", ss.str(), ImVec4(1.0f, 0.4f, 0.4f, 1.0f)); // Red
 	}
 	// Process session stats
 	else if (auto *stats = lt::alert_cast<lt::session_stats_alert>(alert))
@@ -159,32 +165,37 @@ void LogsUI::processAlert(lt::alert *alert)
 	{
 		if (ta->error)
 		{
-			std::string msg = std::string("Failed to add torrent: ") + ta->error.message();
-			addLogEntry("General", msg, ImVec4(1.0f, 0.4f, 0.4f, 1.0f)); // Red
+			std::stringstream ss;
+			ss << "Failed to add torrent: " << ta->error.message();
+			addLogEntry("General", ss.str(), ImVec4(1.0f, 0.4f, 0.4f, 1.0f)); // Red
 		}
 		else
 		{
-			std::string msg = std::string("Torrent added: ") + ta->torrent_name();
-			addLogEntry("General", msg, ImVec4(0.6f, 1.0f, 0.6f, 1.0f)); // Green
+			std::stringstream ss;
+			ss << "Torrent added: " << ta->torrent_name();
+			addLogEntry("General", ss.str(), ImVec4(0.6f, 1.0f, 0.6f, 1.0f)); // Green
 		}
 	}
 	// Process torrent finished
 	else if (auto *tf = lt::alert_cast<lt::torrent_finished_alert>(alert))
 	{
-		std::string msg = std::string("Torrent finished: ") + tf->torrent_name();
-		addLogEntry("General", msg, ImVec4(0.6f, 1.0f, 0.6f, 1.0f)); // Green
+		std::stringstream ss;
+		ss << "Torrent finished: " << tf->torrent_name();
+		addLogEntry("General", ss.str(), ImVec4(0.6f, 1.0f, 0.6f, 1.0f)); // Green
 	}
 	// Process metadata received (for magnet links)
 	else if (auto *mr = lt::alert_cast<lt::metadata_received_alert>(alert))
 	{
-		std::string msg = std::string("Metadata received for: ") + mr->torrent_name();
-		addLogEntry("General", msg, ImVec4(0.8f, 0.8f, 1.0f, 1.0f)); // Light purple
+		std::stringstream ss;
+		ss << "Metadata received for: " << mr->torrent_name();
+		addLogEntry("General", ss.str(), ImVec4(0.8f, 0.8f, 1.0f, 1.0f)); // Light purple
 	}
 	// Process peer errors
 	else if (auto *pe = lt::alert_cast<lt::peer_error_alert>(alert))
 	{
-		std::string msg = std::string("Peer error for '") + pe->torrent_name() + "': " + pe->error.message();
-		addLogEntry("General", msg, ImVec4(1.0f, 0.6f, 0.4f, 1.0f)); // Orange
+		std::stringstream ss;
+		ss << "Peer error for '" << pe->torrent_name() << "': " << pe->error.message();
+		addLogEntry("General", ss.str(), ImVec4(1.0f, 0.6f, 0.4f, 1.0f)); // Orange
 	}
 	// Process DHT events
 	else if (auto *dht_bootstrap = lt::alert_cast<lt::dht_bootstrap_alert>(alert))
