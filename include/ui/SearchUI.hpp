@@ -26,6 +26,7 @@ public:
 	// Search result display methods
 	void displaySearchResultRow(const TorrentSearchResult &result, int index);
 	void displayEnhancedSearchResultRow(const TorrentSearchResult &result, int index);
+	void displayFavoriteRow(const TorrentSearchResult &result, int index);
 
 	// Search functionality
 	void performSearch(const std::string &query);
