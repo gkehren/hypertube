@@ -21,6 +21,7 @@ public:
 	void displaySearchWindow();
 	void displaySearchResults();
 	void displayEnhancedSearchResults();
+	void displayFavorites();
 
 	// Search result display methods
 	void displaySearchResultRow(const TorrentSearchResult &result, int index);
@@ -75,4 +76,5 @@ private:
 
 	// Internal methods
 	void processPendingResults();
+	bool isInFavorites(const std::string &infoHash) const;
 };

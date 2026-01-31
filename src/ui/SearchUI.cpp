@@ -37,6 +37,34 @@ void SearchUI::displayIntegratedSearch()
 		performSearch(std::string(searchQueryBuffer));
 	}
 
+	// Display search history as clickable suggestions
+	const auto &history = searchEngine.getSearchHistory();
+	if (!history.empty() && !isSearching)
+	{
+		ImGui::Spacing();
+		ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Recent searches:");
+		ImGui::Indent(20.0f);
+
+		// Display up to 5 recent searches
+		int displayCount = std::min(5, (int)history.size());
+		for (int i = 0; i < displayCount; ++i)
+		{
+			ImGui::PushID(i);
+			std::string buttonLabel = history[i];
+			if (ImGui::SmallButton(buttonLabel.c_str()))
+			{
+				// Copy to search buffer and perform search
+				strncpy(searchQueryBuffer, history[i].c_str(), sizeof(searchQueryBuffer) - 1);
+				searchQueryBuffer[sizeof(searchQueryBuffer) - 1] = '\0';
+				performSearch(history[i]);
+			}
+			ImGui::SameLine();
+			ImGui::PopID();
+		}
+		ImGui::NewLine();
+		ImGui::Unindent(20.0f);
+	}
+
 	// Show search status with animated indicator
 	if (isSearching)
 	{
@@ -126,7 +154,8 @@ void SearchUI::displayEnhancedSearchResults()
 							  ImGuiTableFlags_Resizable |
 							  ImGuiTableFlags_Sortable |
 							  ImGuiTableFlags_ScrollY |
-							  ImGuiTableFlags_RowBg,
+							  ImGuiTableFlags_RowBg |
+							  ImGuiTableFlags_ContextMenuInBody,
 						  ImVec2(0, -50))) // Leave space for bottom pagination
 	{
 		// Setup columns with better widths and sorting
@@ -271,13 +300,139 @@ void SearchUI::displaySearchResults()
 
 void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result, int index)
 {
-	const float rowHeight = 26.0f;
-	ImGui::TableNextRow(ImGuiTableRowFlags_None, rowHeight);
+	ImGui::TableNextRow();
 	ImGui::PushID(index);
+
+	// Check if this is a favorite (needed for context menu)
+	bool isFavorite = isInFavorites(result.infoHash);
 
 	// Calculate vertical centering offset
 	float textHeight = ImGui::GetTextLineHeight();
 	float verticalPadding = (rowHeight - textHeight) * 0.5f;
+
+			// Name column
+			ImGui::TableSetColumnIndex(0);
+			std::string displayName = result.name;
+			if (displayName.length() > 60)
+			{
+				displayName = displayName.substr(0, 57) + "...";
+			}
+
+			if (ImGui::Selectable(displayName.c_str(), false, ImGuiSelectableFlags_SpanAllColumns))
+			{
+				handleSearchResultSelection(result);
+			}
+
+			// Context menu for removal
+			if (ImGui::BeginPopupContextItem())
+			{
+				if (ImGui::MenuItem("Remove from Favorites"))
+				{
+					searchEngine.removeFromFavorites(result.infoHash);
+				}
+				ImGui::EndPopup();
+			}
+
+			// Tooltip for full name if truncated
+			if (ImGui::IsItemHovered() && result.name.length() > 60)
+			{
+				ImGui::BeginTooltip();
+				ImGui::Text("%s", result.name.c_str());
+				ImGui::EndTooltip();
+			}
+
+			// Size
+			ImGui::TableSetColumnIndex(1);
+			char sizeBuf[64];
+			formatBytes(result.sizeBytes, false, sizeBuf, sizeof(sizeBuf));
+			ImGui::Text("%s", sizeBuf);
+
+			// Seeders with color coding
+			ImGui::TableSetColumnIndex(2);
+			if (result.seeders >= 10)
+				ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "%d", result.seeders);
+			else if (result.seeders >= 1)
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "%d", result.seeders);
+			else
+				ImGui::TextColored(ImVec4(0.8f, 0.0f, 0.0f, 1.0f), "%d", result.seeders);
+
+			// Leechers
+			ImGui::TableSetColumnIndex(3);
+			ImGui::Text("%d", result.leechers);
+
+			// Seed/Leech ratio
+			ImGui::TableSetColumnIndex(4);
+			if (result.leechers > 0)
+			{
+				float ratio = (float)result.seeders / result.leechers;
+				if (ratio >= 2.0f)
+					ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "%.1f", ratio);
+				else if (ratio >= 1.0f)
+					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "%.1f", ratio);
+				else
+					ImGui::TextColored(ImVec4(0.8f, 0.0f, 0.0f, 1.0f), "%.1f", ratio);
+			}
+			else if (result.seeders > 0)
+			{
+				ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "∞");
+			}
+			else
+			{
+				ImGui::Text("-");
+			}
+
+			// Completed count
+			ImGui::TableSetColumnIndex(5);
+			if (result.completed > 0)
+				ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "%d", result.completed);
+			else
+				ImGui::Text("%d", result.completed);
+
+			// Created date
+			ImGui::TableSetColumnIndex(6);
+			char createdDate[32];
+			formatUnixTime(result.createdUnix, createdDate, sizeof(createdDate));
+			ImGui::Text("%s", createdDate);
+
+			// Last seen (scraped date)
+			ImGui::TableSetColumnIndex(7);
+			char scrapedDate[32];
+			formatUnixTime(result.scrapedDate, scrapedDate, sizeof(scrapedDate));
+			ImGui::Text("%s", scrapedDate);
+
+			// Category
+			ImGui::TableSetColumnIndex(8);
+			ImGui::Text("%s", result.category.c_str());
+
+			// Remove button
+			ImGui::TableSetColumnIndex(9);
+			if (ImGui::Button("Remove", ImVec2(-1, 0)))
+			{
+				searchEngine.removeFromFavorites(result.infoHash);
+			}
+			ImGui::BeginTooltip();
+			ImGui::Text("Remove from Favorites");
+			ImGui::EndTooltip();
+
+			// Action button
+			ImGui::TableSetColumnIndex(10);
+			if (ImGui::Button("Download", ImVec2(-1, 0)))
+			{
+				handleSearchResultSelection(result);
+			}
+		}
+
+		ImGui::PopID();
+	}
+
+	ImGui::EndTable();
+}
+
+void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result, int index)
+{
+	const float rowHeight = 26.0f;
+	ImGui::TableNextRow(ImGuiTableRowFlags_None, rowHeight);
+	ImGui::PushID(index);
 
 	// Name column with truncation for very long names
 	ImGui::TableSetColumnIndex(0);
@@ -291,6 +446,31 @@ void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result,
 	if (ImGui::Selectable(displayName.c_str(), false, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap, ImVec2(0, rowHeight - verticalPadding)))
 	{
 		handleSearchResultSelection(result);
+	}
+
+	// Context menu for favorites
+	if (ImGui::BeginPopupContextItem())
+	{
+		if (isFavorite)
+		{
+			if (ImGui::MenuItem("Remove from Favorites"))
+			{
+				searchEngine.removeFromFavorites(result.infoHash);
+			}
+		}
+		else
+		{
+			if (ImGui::MenuItem("Add to Favorites"))
+			{
+				searchEngine.addToFavorites(result);
+			}
+		}
+		ImGui::Separator();
+		if (ImGui::MenuItem("Download"))
+		{
+			handleSearchResultSelection(result);
+		}
+		ImGui::EndPopup();
 	}
 
 	// Tooltip for full name if truncated
@@ -653,4 +833,14 @@ void SearchUI::processPendingResults()
 		hasPendingResults = false;
 		pendingResult.reset();
 	}
+}
+
+bool SearchUI::isInFavorites(const std::string &infoHash) const
+{
+	const auto &favorites = searchEngine.getFavorites();
+	return std::find_if(favorites.begin(), favorites.end(),
+						[&infoHash](const TorrentSearchResult &fav)
+						{
+							return fav.infoHash == infoHash;
+						}) != favorites.end();
 }

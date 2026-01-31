@@ -28,11 +28,19 @@ App::App() : uiManager(torrentManager, searchEngine, settingsConfigManager)
 
 	torrentsConfigManager.load("./config/torrents.json");
 	torrentManager.addTorrentsFromConfig(torrentsConfigManager.loadTorrents("./config/torrents.json"));
+
+	// Load favorites and search history
+	settingsConfigManager.load("./config/settings.json");
+	searchEngine.loadFavoritesAndHistory(settingsConfigManager);
 }
 
 App::~App()
 {
 	torrentsConfigManager.saveTorrents(torrentManager.getTorrents(), torrentManager.getTorrentFilePaths());
+
+	// Save favorites and search history
+	searchEngine.saveFavoritesAndHistory(settingsConfigManager);
+
 	glfwDestroyWindow(window);
 	glfwTerminate();
 }

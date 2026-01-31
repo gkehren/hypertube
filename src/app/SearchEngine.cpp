@@ -1,4 +1,5 @@
 #include "SearchEngine.hpp"
+#include "ConfigManager.hpp"
 #include <curl/curl.h>
 #include <json.hpp>
 #include <iostream>
@@ -624,6 +625,16 @@ void SearchEngine::removeFromFavorites(const std::string &infoHash)
 const std::vector<TorrentSearchResult> &SearchEngine::getFavorites() const
 {
 	return favorites;
+}
+
+void SearchEngine::saveFavoritesAndHistory(ConfigManager &configManager)
+{
+	configManager.saveFavoritesAndHistory(favorites, searchHistory);
+}
+
+void SearchEngine::loadFavoritesAndHistory(ConfigManager &configManager)
+{
+	configManager.loadFavoritesAndHistory(favorites, searchHistory);
 }
 
 void SearchEngine::setApiUrl(const std::string &url)

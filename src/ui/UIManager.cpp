@@ -281,6 +281,13 @@ void UIManager::displayTorrentManagement()
 				ImGui::EndTabItem();
 			}
 
+			// Favorites Tab
+			if (ImGui::BeginTabItem("Favorites"))
+			{
+				searchUI->displayFavorites();
+				ImGui::EndTabItem();
+			}
+
 			ImGui::EndTabBar();
 		}
 	}
