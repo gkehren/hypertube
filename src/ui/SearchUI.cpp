@@ -36,6 +36,34 @@ void SearchUI::displayIntegratedSearch()
 		performSearch(std::string(searchQueryBuffer));
 	}
 
+	// Display search history as clickable suggestions
+	const auto &history = searchEngine.getSearchHistory();
+	if (!history.empty() && !isSearching)
+	{
+		ImGui::Spacing();
+		ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Recent searches:");
+		ImGui::Indent(20.0f);
+
+		// Display up to 5 recent searches
+		int displayCount = std::min(5, (int)history.size());
+		for (int i = 0; i < displayCount; ++i)
+		{
+			ImGui::PushID(i);
+			std::string buttonLabel = history[i];
+			if (ImGui::SmallButton(buttonLabel.c_str()))
+			{
+				// Copy to search buffer and perform search
+				strncpy(searchQueryBuffer, history[i].c_str(), sizeof(searchQueryBuffer) - 1);
+				searchQueryBuffer[sizeof(searchQueryBuffer) - 1] = '\0';
+				performSearch(history[i]);
+			}
+			ImGui::SameLine();
+			ImGui::PopID();
+		}
+		ImGui::NewLine();
+		ImGui::Unindent(20.0f);
+	}
+
 	// Show search status
 	if (isSearching)
 	{
@@ -111,7 +139,8 @@ void SearchUI::displayEnhancedSearchResults()
 							  ImGuiTableFlags_Resizable |
 							  ImGuiTableFlags_Sortable |
 							  ImGuiTableFlags_ScrollY |
-							  ImGuiTableFlags_RowBg,
+							  ImGuiTableFlags_RowBg |
+							  ImGuiTableFlags_ContextMenuInBody,
 						  ImVec2(0, -50))) // Leave space for bottom pagination
 	{
 		// Setup columns with better widths and sorting
@@ -254,10 +283,255 @@ void SearchUI::displaySearchResults()
 	ImGui::PopID();
 }
 
+void SearchUI::displayFavorites()
+{
+	const auto &favorites = searchEngine.getFavorites();
+
+	// Favorites header
+	ImGui::Text("Favorite Torrents (%d saved):", (int)favorites.size());
+	ImGui::Separator();
+
+	if (favorites.empty())
+	{
+		ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No favorites yet. Right-click on search results to add favorites.");
+		return;
+	}
+
+	// Create a table for favorites with the same structure as search results
+	if (ImGui::BeginTable("FavoritesTable", 11,
+						  ImGuiTableFlags_Borders |
+							  ImGuiTableFlags_Resizable |
+							  ImGuiTableFlags_Sortable |
+							  ImGuiTableFlags_ScrollY |
+							  ImGuiTableFlags_RowBg |
+							  ImGuiTableFlags_ContextMenuInBody,
+						  ImVec2(0, 0)))
+	{
+		// Setup columns (same as search results)
+		ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_DefaultSort);
+		ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending, 90);
+		ImGui::TableSetupColumn("Seeds", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending, 60);
+		ImGui::TableSetupColumn("Leech", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending, 60);
+		ImGui::TableSetupColumn("Ratio", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending, 60);
+		ImGui::TableSetupColumn("Completed", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending, 80);
+		ImGui::TableSetupColumn("Created", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending, 100);
+		ImGui::TableSetupColumn("Last Seen", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending, 100);
+		ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthFixed, 80);
+		ImGui::TableSetupColumn("Remove", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 70);
+		ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 80);
+		ImGui::TableHeadersRow();
+
+		// Display favorites (create a copy for potential sorting)
+		std::vector<TorrentSearchResult> favoritesDisplay = favorites;
+
+		// Handle sorting (reuse same logic as search results)
+		if (ImGuiTableSortSpecs *sort_specs = ImGui::TableGetSortSpecs())
+		{
+			if (sort_specs->SpecsDirty)
+			{
+				if (sort_specs->SpecsCount > 0)
+				{
+					const ImGuiTableColumnSortSpecs *spec = &sort_specs->Specs[0];
+
+					std::stable_sort(favoritesDisplay.begin(), favoritesDisplay.end(), [spec](const TorrentSearchResult &a, const TorrentSearchResult &b)
+									 {
+                        int result = 0;
+                        switch (spec->ColumnIndex)
+                        {
+                            case 0: // Name
+                                result = a.name.compare(b.name);
+                                break;
+                            case 1: // Size
+                                if (a.sizeBytes < b.sizeBytes) result = -1;
+                                else if (a.sizeBytes > b.sizeBytes) result = 1;
+                                else result = 0;
+                                break;
+                            case 2: // Seeds
+                                if (a.seeders < b.seeders) result = -1;
+                                else if (a.seeders > b.seeders) result = 1;
+                                else result = 0;
+                                break;
+                            case 3: // Leechers
+                                if (a.leechers < b.leechers) result = -1;
+                                else if (a.leechers > b.leechers) result = 1;
+                                else result = 0;
+                                break;
+                            case 4: // Ratio
+                            {
+                                float ratioA = (a.leechers > 0) ? (float)a.seeders / a.leechers : (a.seeders > 0 ? 1000.0f : 0.0f);
+                                float ratioB = (b.leechers > 0) ? (float)b.seeders / b.leechers : (b.seeders > 0 ? 1000.0f : 0.0f);
+
+                                if (ratioA < ratioB) result = -1;
+                                else if (ratioA > ratioB) result = 1;
+                                else result = 0;
+                                break;
+                            }
+                            case 5: // Completed
+                                if (a.completed < b.completed) result = -1;
+                                else if (a.completed > b.completed) result = 1;
+                                else result = 0;
+                                break;
+                            case 6: // Created
+                                if (a.createdUnix < b.createdUnix) result = -1;
+                                else if (a.createdUnix > b.createdUnix) result = 1;
+                                else result = 0;
+                                break;
+                            case 7: // Last Seen
+                                if (a.scrapedDate < b.scrapedDate) result = -1;
+                                else if (a.scrapedDate > b.scrapedDate) result = 1;
+                                else result = 0;
+                                break;
+                            case 8: // Category
+                                result = a.category.compare(b.category);
+                                break;
+                            default:
+                                result = 0;
+                                break;
+                        }
+
+                        // Apply sort direction
+                        if (spec->SortDirection == ImGuiSortDirection_Descending) {
+                            result = -result;
+                        }
+
+                        return result < 0; });
+				}
+				sort_specs->SpecsDirty = false;
+			}
+		}
+
+		// Display each favorite
+		for (int i = 0; i < (int)favoritesDisplay.size(); ++i)
+		{
+			const auto &result = favoritesDisplay[i];
+			ImGui::TableNextRow();
+			ImGui::PushID(i);
+
+			// Name column
+			ImGui::TableSetColumnIndex(0);
+			std::string displayName = result.name;
+			if (displayName.length() > 60)
+			{
+				displayName = displayName.substr(0, 57) + "...";
+			}
+
+			if (ImGui::Selectable(displayName.c_str(), false, ImGuiSelectableFlags_SpanAllColumns))
+			{
+				handleSearchResultSelection(result);
+			}
+
+			// Context menu for removal
+			if (ImGui::BeginPopupContextItem())
+			{
+				if (ImGui::MenuItem("Remove from Favorites"))
+				{
+					searchEngine.removeFromFavorites(result.infoHash);
+				}
+				ImGui::EndPopup();
+			}
+
+			// Tooltip for full name if truncated
+			if (ImGui::IsItemHovered() && result.name.length() > 60)
+			{
+				ImGui::BeginTooltip();
+				ImGui::Text("%s", result.name.c_str());
+				ImGui::EndTooltip();
+			}
+
+			// Size
+			ImGui::TableSetColumnIndex(1);
+			char sizeBuf[64];
+			formatBytes(result.sizeBytes, false, sizeBuf, sizeof(sizeBuf));
+			ImGui::Text("%s", sizeBuf);
+
+			// Seeders with color coding
+			ImGui::TableSetColumnIndex(2);
+			if (result.seeders >= 10)
+				ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "%d", result.seeders);
+			else if (result.seeders >= 1)
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "%d", result.seeders);
+			else
+				ImGui::TextColored(ImVec4(0.8f, 0.0f, 0.0f, 1.0f), "%d", result.seeders);
+
+			// Leechers
+			ImGui::TableSetColumnIndex(3);
+			ImGui::Text("%d", result.leechers);
+
+			// Seed/Leech ratio
+			ImGui::TableSetColumnIndex(4);
+			if (result.leechers > 0)
+			{
+				float ratio = (float)result.seeders / result.leechers;
+				if (ratio >= 2.0f)
+					ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "%.1f", ratio);
+				else if (ratio >= 1.0f)
+					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "%.1f", ratio);
+				else
+					ImGui::TextColored(ImVec4(0.8f, 0.0f, 0.0f, 1.0f), "%.1f", ratio);
+			}
+			else if (result.seeders > 0)
+			{
+				ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "∞");
+			}
+			else
+			{
+				ImGui::Text("-");
+			}
+
+			// Completed count
+			ImGui::TableSetColumnIndex(5);
+			if (result.completed > 0)
+				ImGui::TextColored(ImVec4(0.0f, 0.8f, 0.0f, 1.0f), "%d", result.completed);
+			else
+				ImGui::Text("%d", result.completed);
+
+			// Created date
+			ImGui::TableSetColumnIndex(6);
+			char createdDate[32];
+			formatUnixTime(result.createdUnix, createdDate, sizeof(createdDate));
+			ImGui::Text("%s", createdDate);
+
+			// Last seen (scraped date)
+			ImGui::TableSetColumnIndex(7);
+			char scrapedDate[32];
+			formatUnixTime(result.scrapedDate, scrapedDate, sizeof(scrapedDate));
+			ImGui::Text("%s", scrapedDate);
+
+			// Category
+			ImGui::TableSetColumnIndex(8);
+			ImGui::Text("%s", result.category.c_str());
+
+			// Remove button
+			ImGui::TableSetColumnIndex(9);
+			if (ImGui::Button("Remove", ImVec2(-1, 0)))
+			{
+				searchEngine.removeFromFavorites(result.infoHash);
+			}
+			ImGui::BeginTooltip();
+			ImGui::Text("Remove from Favorites");
+			ImGui::EndTooltip();
+
+			// Action button
+			ImGui::TableSetColumnIndex(10);
+			if (ImGui::Button("Download", ImVec2(-1, 0)))
+			{
+				handleSearchResultSelection(result);
+			}
+		}
+
+		ImGui::PopID();
+	}
+
+	ImGui::EndTable();
+}
+
 void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result, int index)
 {
 	ImGui::TableNextRow();
 	ImGui::PushID(index);
+
+	// Check if this is a favorite (needed for context menu)
+	bool isFavorite = isInFavorites(result.infoHash);
 
 	// Name column with truncation for very long names
 	ImGui::TableSetColumnIndex(0);
@@ -270,6 +544,31 @@ void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result,
 	if (ImGui::Selectable(displayName.c_str(), false, ImGuiSelectableFlags_SpanAllColumns))
 	{
 		handleSearchResultSelection(result);
+	}
+
+	// Context menu for favorites
+	if (ImGui::BeginPopupContextItem())
+	{
+		if (isFavorite)
+		{
+			if (ImGui::MenuItem("Remove from Favorites"))
+			{
+				searchEngine.removeFromFavorites(result.infoHash);
+			}
+		}
+		else
+		{
+			if (ImGui::MenuItem("Add to Favorites"))
+			{
+				searchEngine.addToFavorites(result);
+			}
+		}
+		ImGui::Separator();
+		if (ImGui::MenuItem("Download"))
+		{
+			handleSearchResultSelection(result);
+		}
+		ImGui::EndPopup();
 	}
 
 	// Tooltip for full name if truncated
@@ -596,4 +895,14 @@ void SearchUI::processPendingResults()
 		hasPendingResults = false;
 		pendingResult.reset();
 	}
+}
+
+bool SearchUI::isInFavorites(const std::string &infoHash) const
+{
+	const auto &favorites = searchEngine.getFavorites();
+	return std::find_if(favorites.begin(), favorites.end(),
+						[&infoHash](const TorrentSearchResult &fav)
+						{
+							return fav.infoHash == infoHash;
+						}) != favorites.end();
 }
