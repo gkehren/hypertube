@@ -1,7 +1,6 @@
 #include "ConfigManager.hpp"
 #include <fstream>
 #include <iostream>
-#include <sys/stat.h>
 
 json ConfigManager::createDefaultConfig() const
 {
@@ -146,12 +145,17 @@ json &ConfigManager::getConfig()
 	return this->config;
 }
 
-void ConfigManager::setDownloadSpeedLimit(int bytesPerSecond)
+void ConfigManager::ensureSettingsStructure()
 {
 	if (!config.contains("settings"))
 	{
 		config["settings"] = json::object();
 	}
+}
+
+void ConfigManager::setDownloadSpeedLimit(int bytesPerSecond)
+{
+	ensureSettingsStructure();
 	if (!config["settings"].contains("speed_limits"))
 	{
 		config["settings"]["speed_limits"] = json::object();
@@ -161,10 +165,7 @@ void ConfigManager::setDownloadSpeedLimit(int bytesPerSecond)
 
 void ConfigManager::setUploadSpeedLimit(int bytesPerSecond)
 {
-	if (!config.contains("settings"))
-	{
-		config["settings"] = json::object();
-	}
+	ensureSettingsStructure();
 	if (!config["settings"].contains("speed_limits"))
 	{
 		config["settings"]["speed_limits"] = json::object();
@@ -202,10 +203,7 @@ int ConfigManager::getUploadSpeedLimit() const
 
 void ConfigManager::setDownloadPath(const std::string &path)
 {
-	if (!config.contains("settings"))
-	{
-		config["settings"] = json::object();
-	}
+	ensureSettingsStructure();
 	config["settings"]["download_path"] = path;
 }
 
@@ -220,10 +218,7 @@ std::string ConfigManager::getDownloadPath() const
 
 void ConfigManager::setEnableDHT(bool enable)
 {
-	if (!config.contains("settings"))
-	{
-		config["settings"] = json::object();
-	}
+	ensureSettingsStructure();
 	config["settings"]["enable_dht"] = enable;
 }
 
@@ -238,10 +233,7 @@ bool ConfigManager::getEnableDHT() const
 
 void ConfigManager::setEnableUPnP(bool enable)
 {
-	if (!config.contains("settings"))
-	{
-		config["settings"] = json::object();
-	}
+	ensureSettingsStructure();
 	config["settings"]["enable_upnp"] = enable;
 }
 
@@ -256,10 +248,7 @@ bool ConfigManager::getEnableUPnP() const
 
 void ConfigManager::setEnableNATPMP(bool enable)
 {
-	if (!config.contains("settings"))
-	{
-		config["settings"] = json::object();
-	}
+	ensureSettingsStructure();
 	config["settings"]["enable_natpmp"] = enable;
 }
 

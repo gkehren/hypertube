@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <fstream>
 #include <filesystem>
+#include <random>
 #include "../include/app/ConfigManager.hpp"
 
 namespace fs = std::filesystem;
@@ -10,8 +11,12 @@ class ConfigManagerTest : public ::testing::Test
 protected:
 	void SetUp() override
 	{
-		// Create a temporary directory for test configs
-		testDir = "/tmp/hypertube_config_test";
+		// Create a unique temporary directory for test configs
+		fs::path tempBase = fs::temp_directory_path();
+		std::random_device rd;
+		std::mt19937 gen(rd());
+		std::uniform_int_distribution<> dis(1000, 9999);
+		testDir = tempBase / ("hypertube_config_test_" + std::to_string(dis(gen)));
 		fs::create_directories(testDir);
 	}
 
@@ -24,13 +29,13 @@ protected:
 		}
 	}
 
-	std::string testDir;
+	fs::path testDir;
 };
 
 TEST_F(ConfigManagerTest, CreateDefaultConfig)
 {
 	ConfigManager manager;
-	std::string configPath = testDir + "/settings.json";
+	std::string configPath = (testDir / "settings.json").string();
 
 	// Load config (should create default since file doesn't exist)
 	manager.load(configPath);
@@ -50,7 +55,7 @@ TEST_F(ConfigManagerTest, CreateDefaultConfig)
 TEST_F(ConfigManagerTest, SaveAndLoadConfig)
 {
 	ConfigManager manager;
-	std::string configPath = testDir + "/settings.json";
+	std::string configPath = (testDir / "settings.json").string();
 
 	// Set some values
 	manager.setDownloadSpeedLimit(1024000);
@@ -78,7 +83,7 @@ TEST_F(ConfigManagerTest, SaveAndLoadConfig)
 
 TEST_F(ConfigManagerTest, MigrateFromLegacyConfig)
 {
-	std::string configPath = testDir + "/legacy.json";
+	std::string configPath = (testDir / "legacy.json").string();
 
 	// Create a legacy (version 0) config file
 	{
@@ -115,7 +120,7 @@ TEST_F(ConfigManagerTest, MigrateFromLegacyConfig)
 TEST_F(ConfigManagerTest, ConfigVersionPersists)
 {
 	ConfigManager manager;
-	std::string configPath = testDir + "/versioned.json";
+	std::string configPath = (testDir / "versioned.json").string();
 
 	// Load default config and save
 	manager.load(configPath);

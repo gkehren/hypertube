@@ -51,4 +51,5 @@ private:
 	static constexpr int CURRENT_CONFIG_VERSION = 1;
 	
 	json createDefaultConfig() const;
+	void ensureSettingsStructure();
 };
