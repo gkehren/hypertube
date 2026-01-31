@@ -5,6 +5,9 @@
 #include <vector>
 #include <memory>
 #include <functional>
+#include <thread>
+#include <mutex>
+#include <atomic>
 
 struct TorrentSearchResult
 {
@@ -61,6 +64,9 @@ public:
 	Result searchTorrents(const SearchQuery &query, SearchResponse &response);
 	Result searchTorrentsAsync(const SearchQuery &query, std::function<void(const std::vector<TorrentSearchResult> &)> callback);
 
+	// New async search with proper threading
+	void searchTorrentsAsyncThreaded(const SearchQuery &query, std::function<void(Result, SearchResponse)> callback);
+
 	// Search history and favorites
 	void addToSearchHistory(const std::string &query);
 	const std::vector<std::string> &getSearchHistory() const;
@@ -83,7 +89,11 @@ private:
 	std::string apiUrl;
 	int timeoutSeconds;
 	int maxRetries;
-	bool searching;
+	std::atomic<bool> searching;
+	std::atomic<bool> cancelRequested;
+
+	std::mutex searchMutex;
+	std::thread searchThread;
 
 	std::vector<std::string> searchHistory;
 	std::vector<TorrentSearchResult> favorites;

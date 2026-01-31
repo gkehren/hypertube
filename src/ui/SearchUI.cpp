@@ -8,12 +8,15 @@
 #include <cstring>
 
 SearchUI::SearchUI(SearchEngine &searchEngine)
-	: searchEngine(searchEngine)
+	: searchEngine(searchEngine), isSearching(false)
 {
 }
 
 void SearchUI::displayIntegratedSearch()
 {
+	// Process any pending results from async search
+	processPendingResults();
+
 	// Search input section
 	ImGui::Text("Search for Torrents:");
 	ImGui::Separator();
@@ -407,7 +410,7 @@ void SearchUI::handleSearchResultSelection(const TorrentSearchResult &result)
 
 void SearchUI::performSearch(const std::string &query)
 {
-	if (query.empty() || isSearching)
+	if (query.empty() || isSearching.load())
 		return;
 
 	isSearching = true;
@@ -416,25 +419,18 @@ void SearchUI::performSearch(const std::string &query)
 	nextToken.clear();
 	hasMoreResults = true;
 
-	SearchResponse response;
 	SearchQuery searchQuery(query);
-	Result result = searchEngine.searchTorrents(searchQuery, response);
 
-	isSearching = false;
-
-	if (!result)
-	{
-		if (onShowFailurePopup)
-		{
-			onShowFailurePopup("Search failed: " + result.message);
-		}
-	}
-	else
-	{
-		searchResults = response.torrents;
-		nextToken = response.nextToken;
-		hasMoreResults = response.hasMore;
-	}
+	// Launch async search
+	searchEngine.searchTorrentsAsyncThreaded(searchQuery,
+											 [this](Result result, SearchResponse response)
+											 {
+												 // This callback runs in worker thread, so we need to store results safely
+												 std::lock_guard<std::mutex> lock(resultsMutex);
+												 pendingResult = result;
+												 pendingResponse = response;
+												 hasPendingResults = true;
+											 });
 }
 
 void SearchUI::displayPaginationControls()
@@ -468,35 +464,21 @@ void SearchUI::displayPaginationControls()
 
 void SearchUI::loadMoreResults()
 {
-	if (hasMoreResults && !isSearching && !currentSearchQuery.empty() && !nextToken.empty())
+	if (hasMoreResults && !isSearching.load() && !currentSearchQuery.empty() && !nextToken.empty())
 	{
 		isSearching = true;
-		SearchResponse response;
-
 		SearchQuery searchQuery(currentSearchQuery, 0, nextToken);
-		Result result = searchEngine.searchTorrents(searchQuery, response);
 
-		isSearching = false;
-
-		if (result && !response.torrents.empty())
-		{
-			// Append new results to existing ones
-			searchResults.insert(searchResults.end(), response.torrents.begin(), response.torrents.end());
-			nextToken = response.nextToken;
-			hasMoreResults = response.hasMore;
-		}
-		else if (!result)
-		{
-			if (onShowFailurePopup)
-			{
-				onShowFailurePopup("Failed to load more results: " + result.message);
-			}
-		}
-		else
-		{
-			// No more results
-			hasMoreResults = false;
-		}
+		// Launch async search for more results
+		searchEngine.searchTorrentsAsyncThreaded(searchQuery,
+												 [this](Result result, SearchResponse response)
+												 {
+													 // This callback runs in worker thread
+													 std::lock_guard<std::mutex> lock(resultsMutex);
+													 pendingResult = result;
+													 pendingResponse = response;
+													 hasPendingResults = true;
+												 });
 	}
 }
 
@@ -560,4 +542,48 @@ void SearchUI::setSearchResultSelectedCallback(std::function<void(const TorrentS
 void SearchUI::setShowFailurePopupCallback(std::function<void(const std::string &)> callback)
 {
 	onShowFailurePopup = callback;
+}
+
+void SearchUI::processPendingResults()
+{
+	// Check if we have pending results from async search (must run in UI thread)
+	std::lock_guard<std::mutex> lock(resultsMutex);
+
+	if (hasPendingResults)
+	{
+		isSearching = false;
+
+		if (!pendingResult.has_value() || !pendingResult.value())
+		{
+			if (onShowFailurePopup)
+			{
+				std::string errorMsg = pendingResult.has_value() ? pendingResult.value().message : "Unknown error";
+				onShowFailurePopup("Search failed: " + errorMsg);
+			}
+		}
+		else
+		{
+			// Check if this is a "load more" request by seeing if we already have results
+			bool isLoadMore = !searchResults.empty() && !pendingResponse.torrents.empty();
+
+			if (isLoadMore)
+			{
+				// Append new results
+				searchResults.insert(searchResults.end(),
+									 pendingResponse.torrents.begin(),
+									 pendingResponse.torrents.end());
+			}
+			else
+			{
+				// Replace results (new search)
+				searchResults = pendingResponse.torrents;
+			}
+
+			nextToken = pendingResponse.nextToken;
+			hasMoreResults = pendingResponse.hasMore;
+		}
+
+		hasPendingResults = false;
+		pendingResult.reset();
+	}
 }

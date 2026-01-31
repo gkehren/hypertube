@@ -4,6 +4,9 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <mutex>
+#include <atomic>
+#include <optional>
 #include "SearchEngine.hpp"
 #include "Result.hpp"
 
@@ -54,12 +57,22 @@ private:
 	std::vector<TorrentSearchResult> searchResults;
 	TorrentSearchResult selectedSearchResult;
 	bool showSearchWindow = false;
-	bool isSearching = false;
+	std::atomic<bool> isSearching;
 	std::string currentSearchQuery;
 	std::string nextToken;
 	bool hasMoreResults = true;
 
+	// Async search state (protected by mutex)
+	std::mutex resultsMutex;
+	bool hasPendingResults = false;
+	SearchResponse pendingResponse;
+	std::optional<Result> pendingResult;
+	std::string pendingErrorMessage;
+
 	// Callbacks
 	std::function<void(const TorrentSearchResult &)> onSearchResultSelected;
 	std::function<void(const std::string &)> onShowFailurePopup;
+
+	// Internal methods
+	void processPendingResults();
 };

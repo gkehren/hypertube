@@ -30,7 +30,8 @@ SearchEngine::SearchEngine()
 	: apiUrl("https://torrents-csv.com/service/search"),
 	  timeoutSeconds(30),
 	  maxRetries(3),
-	  searching(false)
+	  searching(false),
+	  cancelRequested(false)
 {
 	// Initialize cURL globally
 	curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -38,6 +39,12 @@ SearchEngine::SearchEngine()
 
 SearchEngine::~SearchEngine()
 {
+	// Cancel any ongoing search and wait for thread to finish
+	cancelCurrentSearch();
+	if (searchThread.joinable())
+	{
+		searchThread.join();
+	}
 	curl_global_cleanup();
 }
 
@@ -617,7 +624,7 @@ bool SearchEngine::isSearching() const
 
 void SearchEngine::cancelCurrentSearch()
 {
-	searching = false;
+	cancelRequested = true;
 }
 
 // Async search implementation (simplified - would need proper threading in production)
@@ -634,4 +641,62 @@ Result SearchEngine::searchTorrentsAsync(const SearchQuery &query, std::function
 	}
 
 	return searchResult;
+}
+
+// New threaded async search implementation
+void SearchEngine::searchTorrentsAsyncThreaded(const SearchQuery &query, std::function<void(Result, SearchResponse)> callback)
+{
+	// If already searching, ignore this request
+	if (searching.load())
+	{
+		return;
+	}
+
+	// Join previous thread if it exists
+	if (searchThread.joinable())
+	{
+		searchThread.join();
+	}
+
+	// Reset cancellation flag
+	cancelRequested = false;
+
+	// Launch search in separate thread
+	searchThread = std::thread([this, query, callback]()
+							   {
+		searching = true;
+		SearchResponse response;
+		response.torrents.clear();
+		response.nextToken.clear();
+		response.hasMore = false;
+
+		// Perform the search directly (bypass the searching flag check)
+		std::string url = buildSearchUrl(query);
+		std::cout << "Searching with URL: " << url << std::endl;
+		std::string httpResponse;
+
+		Result httpResult = makeHttpRequest(url, httpResponse);
+		Result result = Result::Failure("Unknown error");
+
+		if (httpResult)
+		{
+			result = parseSearchResponse(httpResponse, response);
+			if (result)
+			{
+				addToSearchHistory(query.query);
+			}
+		}
+		else
+		{
+			result = httpResult;
+		}
+
+		searching = false;
+
+		// Call the callback with results (will be executed in worker thread)
+		// Note: UI updates must be handled by the caller
+		if (!cancelRequested.load())
+		{
+			callback(result, response);
+		} });
 }
