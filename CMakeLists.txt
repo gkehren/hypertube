@@ -66,6 +66,7 @@ set(SOURCES
     src/ui/SearchUI.cpp
     src/ui/ModalDialogs.cpp
     src/ui/LogsUI.cpp
+    src/ui/Theme.cpp
     # Add core ImGui sources
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_demo.cpp

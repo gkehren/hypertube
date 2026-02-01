@@ -76,6 +76,10 @@ public:
 	void removeFromFavorites(const std::string &infoHash);
 	const std::vector<TorrentSearchResult> &getFavorites() const;
 
+	// Persistence
+	void saveFavoritesAndHistory(class ConfigManager &configManager);
+	void loadFavoritesAndHistory(class ConfigManager &configManager);
+
 	// Configuration
 	void setApiUrl(const std::string &url);
 	void setTimeout(int seconds);

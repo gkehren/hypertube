@@ -1,6 +1,7 @@
 #include "TorrentDetailsUI.hpp"
 #include "TorrentManager.hpp"
 #include "StringUtils.hpp"
+#include "Theme.hpp"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -30,7 +31,15 @@ void TorrentDetailsUI::displayTorrentDetails(const lt::torrent_handle &selectedT
 			status = selectedTorrent.status();
 		}
 
-		if (ImGui::BeginTabBar("TorrentDetailsTabBar"))
+		// Display torrent name as header
+		ImGui::PushStyleColor(ImGuiCol_Text, HypertubeTheme::getCurrentPalette().primary);
+		ImGui::TextWrapped("%s", status.name.c_str());
+		ImGui::PopStyleColor();
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		if (ImGui::BeginTabBar("TorrentDetailsTabBar", ImGuiTabBarFlags_FittingPolicyScroll))
 		{
 			if (ImGui::BeginTabItem("General"))
 			{
@@ -61,7 +70,13 @@ void TorrentDetailsUI::displayTorrentDetails(const lt::torrent_handle &selectedT
 	}
 	else
 	{
-		ImGui::Text("No torrent selected");
+		// Centered empty state message
+		ImVec2 windowSize = ImGui::GetWindowSize();
+		ImVec2 textSize = ImGui::CalcTextSize("Select a torrent to view details");
+		ImGui::SetCursorPos(ImVec2((windowSize.x - textSize.x) * 0.5f, windowSize.y * 0.4f));
+		ImGui::PushStyleColor(ImGuiCol_Text, HypertubeTheme::getCurrentPalette().textSecondary);
+		ImGui::Text("Select a torrent to view details");
+		ImGui::PopStyleColor();
 	}
 
 	ImGui::End();
@@ -80,7 +95,9 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 	auto torrentFile = selectedTorrent.torrent_file();
 	if (!torrentFile)
 	{
+		ImGui::PushStyleColor(ImGuiCol_Text, HypertubeTheme::getCurrentPalette().textSecondary);
 		ImGui::Text("Metadata not available yet.");
+		ImGui::PopStyleColor();
 		return;
 	}
 
@@ -88,12 +105,19 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 	std::vector<std::int64_t> file_progress;
 	selectedTorrent.file_progress(file_progress);
 
-	if (ImGui::BeginTable("Files", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+	ImGuiTableFlags tableFlags = ImGuiTableFlags_RowBg |
+								 ImGuiTableFlags_Resizable |
+								 ImGuiTableFlags_ScrollY |
+								 ImGuiTableFlags_BordersInnerV;
+
+	if (ImGui::BeginTable("Files", 3, tableFlags))
 	{
 		ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-		ImGui::TableSetupColumn("Size");
-		ImGui::TableSetupColumn("Progress");
+		ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+		ImGui::TableSetupColumn("Progress", ImGuiTableColumnFlags_WidthFixed, 150.0f);
 		ImGui::TableHeadersRow();
+
+		const auto &palette = HypertubeTheme::getCurrentPalette();
 
 		for (int i = 0; i < file_storage.num_files(); ++i)
 		{
@@ -107,10 +131,24 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 			ImGui::Text("%s", formatBytes(file_storage.file_size(index), false).c_str());
 
 			ImGui::TableSetColumnIndex(2);
+			float progress = 0.0f;
 			if (file_storage.file_size(index) > 0)
-				ImGui::ProgressBar(static_cast<float>(file_progress[i]) / file_storage.file_size(index));
+				progress = static_cast<float>(file_progress[i]) / file_storage.file_size(index);
+
+			// Color code based on completion
+			ImVec4 progressColor;
+			if (progress >= 1.0f)
+				progressColor = palette.success;
+			else if (progress > 0.0f)
+				progressColor = palette.progressDownload;
 			else
-				ImGui::ProgressBar(0.0f);
+				progressColor = palette.surface;
+
+			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, progressColor);
+			char progressText[16];
+			snprintf(progressText, sizeof(progressText), "%.0f%%", progress * 100.0f);
+			ImGui::ProgressBar(progress, ImVec2(-1, 0), progressText);
+			ImGui::PopStyleColor();
 		}
 
 		ImGui::EndTable();
@@ -125,13 +163,24 @@ void TorrentDetailsUI::displayTorrentDetails_Peers(const lt::torrent_handle &sel
 	std::vector<lt::peer_info> peers;
 	selectedTorrent.get_peer_info(peers);
 
-	if (ImGui::BeginTable("Peers", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+	const auto &palette = HypertubeTheme::getCurrentPalette();
+
+	// Show peer count
+	ImGui::TextColored(palette.textSecondary, "Connected Peers: %d", (int)peers.size());
+	ImGui::Spacing();
+
+	ImGuiTableFlags tableFlags = ImGuiTableFlags_RowBg |
+								 ImGuiTableFlags_Resizable |
+								 ImGuiTableFlags_ScrollY |
+								 ImGuiTableFlags_BordersInnerV;
+
+	if (ImGui::BeginTable("Peers", 5, tableFlags))
 	{
-		ImGui::TableSetupColumn("IP");
-		ImGui::TableSetupColumn("Client");
-		ImGui::TableSetupColumn("Flags");
-		ImGui::TableSetupColumn("Down Speed");
-		ImGui::TableSetupColumn("Up Speed");
+		ImGui::TableSetupColumn("IP", ImGuiTableColumnFlags_WidthFixed, 140.0f);
+		ImGui::TableSetupColumn("Client", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+		ImGui::TableSetupColumn("Flags", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+		ImGui::TableSetupColumn("Down Speed", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+		ImGui::TableSetupColumn("Up Speed", ImGuiTableColumnFlags_WidthFixed, 90.0f);
 		ImGui::TableHeadersRow();
 
 		for (const auto &peer : peers)
@@ -144,9 +193,9 @@ void TorrentDetailsUI::displayTorrentDetails_Peers(const lt::torrent_handle &sel
 			ImGui::TableSetColumnIndex(1);
 			// Safely display peer client by limiting length and handling non-printable chars
 			std::string client = peer.client;
-			if (client.length() > 8)
+			if (client.length() > 12)
 			{
-				client = client.substr(0, 8);
+				client = client.substr(0, 12);
 			}
 			// Replace any non-printable characters with '.'
 			for (char &c : client)
@@ -164,10 +213,16 @@ void TorrentDetailsUI::displayTorrentDetails_Peers(const lt::torrent_handle &sel
 			ImGui::Text("%s", flagsBuf);
 
 			ImGui::TableSetColumnIndex(3);
-			ImGui::Text("%s", formatBytes(peer.payload_down_speed, true).c_str());
+			if (peer.payload_down_speed > 0)
+				ImGui::TextColored(palette.success, "%s", formatBytes(peer.payload_down_speed, true).c_str());
+			else
+				ImGui::Text("%s", formatBytes(peer.payload_down_speed, true).c_str());
 
 			ImGui::TableSetColumnIndex(4);
-			ImGui::Text("%s", formatBytes(peer.payload_up_speed, true).c_str());
+			if (peer.payload_up_speed > 0)
+				ImGui::TextColored(palette.info, "%s", formatBytes(peer.payload_up_speed, true).c_str());
+			else
+				ImGui::Text("%s", formatBytes(peer.payload_up_speed, true).c_str());
 		}
 
 		ImGui::EndTable();
@@ -181,10 +236,21 @@ void TorrentDetailsUI::displayTorrentDetails_Trackers(const lt::torrent_handle &
 
 	auto trackers = selectedTorrent.trackers();
 
-	if (ImGui::BeginTable("Trackers", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+	const auto &palette = HypertubeTheme::getCurrentPalette();
+
+	// Show tracker count
+	ImGui::TextColored(palette.textSecondary, "Trackers: %d", (int)trackers.size());
+	ImGui::Spacing();
+
+	ImGuiTableFlags tableFlags = ImGuiTableFlags_RowBg |
+								 ImGuiTableFlags_Resizable |
+								 ImGuiTableFlags_ScrollY |
+								 ImGuiTableFlags_BordersInnerV;
+
+	if (ImGui::BeginTable("Trackers", 2, tableFlags))
 	{
-		ImGui::TableSetupColumn("URL");
-		ImGui::TableSetupColumn("Status");
+		ImGui::TableSetupColumn("URL", ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 100.0f);
 		ImGui::TableHeadersRow();
 
 		for (const auto &tracker : trackers)
@@ -195,7 +261,10 @@ void TorrentDetailsUI::displayTorrentDetails_Trackers(const lt::torrent_handle &
 			ImGui::Text("%s", tracker.url.c_str());
 
 			ImGui::TableSetColumnIndex(1);
-			ImGui::Text("%s", tracker.verified ? "Verified" : "Not Verified");
+			if (tracker.verified)
+				ImGui::TextColored(palette.success, "Verified");
+			else
+				ImGui::TextColored(palette.textSecondary, "Not Verified");
 		}
 
 		ImGui::EndTable();
@@ -204,29 +273,99 @@ void TorrentDetailsUI::displayTorrentDetails_Trackers(const lt::torrent_handle &
 
 void TorrentDetailsUI::displayTorrentDetailsContent(const lt::torrent_status &status, const lt::torrent_handle &handle)
 {
-	const std::vector<std::pair<std::string, std::function<std::string()>>> details = {
-		{"Name", [&]()
-		 { return status.name; }},
-		{"Size", [&]()
-		 { return formatBytes(status.total_wanted, false); }},
-		{"Progress", [&]()
-		 { return std::to_string(status.progress * 100) + "%%"; }},
-		{"Status", [&]()
-		 { return torrentStateToString(status.state, handle.flags()); }},
-		{"Down Speed", [&]()
-		 { return formatBytes(status.download_payload_rate, true); }},
-		{"Up Speed", [&]()
-		 { return formatBytes(status.upload_payload_rate, true); }},
-		{"ETA", [&]()
-		 { return computeETA(status); }},
-		{"Seeds/Peers", [&]()
-		 { return std::to_string(status.num_seeds) + "/" + std::to_string(status.num_peers) +
-				  " (" + std::to_string(status.num_seeds / (float)status.num_peers) + ")"; }},
-	};
+	const auto &palette = HypertubeTheme::getCurrentPalette();
 
-	for (const auto &detail : details)
+	// Create a two-column layout for details
+	if (ImGui::BeginTable("DetailsTable", 2, ImGuiTableFlags_SizingStretchProp))
 	{
-		ImGui::Text("%s: %s", detail.first.c_str(), detail.second().c_str());
+		ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+		// Size
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::TextColored(palette.textSecondary, "Size:");
+		ImGui::TableSetColumnIndex(1);
+		ImGui::Text("%s", formatBytes(status.total_wanted, false).c_str());
+
+		// Progress with colored bar
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::TextColored(palette.textSecondary, "Progress:");
+		ImGui::TableSetColumnIndex(1);
+		ImVec4 progressColor = (status.state == lt::torrent_status::seeding) ? palette.progressUpload : palette.progressDownload;
+		ImGui::PushStyleColor(ImGuiCol_PlotHistogram, progressColor);
+		char progressText[32];
+		snprintf(progressText, sizeof(progressText), "%.1f%%", status.progress * 100.0f);
+		ImGui::ProgressBar(status.progress, ImVec2(-1, 0), progressText);
+		ImGui::PopStyleColor();
+
+		// Status
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::TextColored(palette.textSecondary, "Status:");
+		ImGui::TableSetColumnIndex(1);
+		const char *statusStr = Utils::torrentStateToString(status.state, handle.flags());
+		ImVec4 statusColor = HypertubeTheme::getStatusColor(statusStr);
+		ImGui::TextColored(statusColor, "%s", statusStr);
+
+		// Download Speed
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::TextColored(palette.textSecondary, "Down Speed:");
+		ImGui::TableSetColumnIndex(1);
+		if (status.download_payload_rate > 0)
+			ImGui::TextColored(palette.success, "%s", formatBytes(status.download_payload_rate, true).c_str());
+		else
+			ImGui::Text("%s", formatBytes(status.download_payload_rate, true).c_str());
+
+		// Upload Speed
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::TextColored(palette.textSecondary, "Up Speed:");
+		ImGui::TableSetColumnIndex(1);
+		if (status.upload_payload_rate > 0)
+			ImGui::TextColored(palette.info, "%s", formatBytes(status.upload_payload_rate, true).c_str());
+		else
+			ImGui::Text("%s", formatBytes(status.upload_payload_rate, true).c_str());
+
+		// ETA
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::TextColored(palette.textSecondary, "ETA:");
+		ImGui::TableSetColumnIndex(1);
+		ImGui::Text("%s", computeETA(status).c_str());
+
+		// Seeds/Peers
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::TextColored(palette.textSecondary, "Seeds/Peers:");
+		ImGui::TableSetColumnIndex(1);
+		float ratio = status.num_peers > 0 ? (float)status.num_seeds / (float)status.num_peers : 0.0f;
+		ImVec4 ratioColor = HypertubeTheme::getHealthColor(ratio);
+		ImGui::TextColored(ratioColor, "%d / %d", status.num_seeds, status.num_peers);
+
+		// Downloaded/Uploaded
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::TextColored(palette.textSecondary, "Downloaded:");
+		ImGui::TableSetColumnIndex(1);
+		ImGui::Text("%s", formatBytes(status.total_done, false).c_str());
+
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::TextColored(palette.textSecondary, "Uploaded:");
+		ImGui::TableSetColumnIndex(1);
+		ImGui::Text("%s", formatBytes(status.all_time_upload, false).c_str());
+
+		// Save Path
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::TextColored(palette.textSecondary, "Save Path:");
+		ImGui::TableSetColumnIndex(1);
+		ImGui::TextWrapped("%s", status.save_path.c_str());
+
+		ImGui::EndTable();
 	}
 }
 

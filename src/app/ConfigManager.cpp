@@ -1,4 +1,5 @@
 #include "ConfigManager.hpp"
+#include "SearchEngine.hpp"
 #include <fstream>
 #include <iostream>
 
@@ -125,4 +126,116 @@ int ConfigManager::getUploadSpeedLimit() const
 		return config["speed_limits"]["upload"];
 	}
 	return 0; // 0 means unlimited
+}
+
+void ConfigManager::saveFavoritesAndHistory(const std::vector<TorrentSearchResult> &favorites, const std::vector<std::string> &searchHistory)
+{
+	// Save favorites
+	json favoritesJson = json::array();
+	for (const auto &fav : favorites)
+	{
+		json favEntry = {
+			{"name", fav.name},
+			{"magnet_uri", fav.magnetUri},
+			{"info_hash", fav.infoHash},
+			{"size_bytes", fav.sizeBytes},
+			{"seeders", fav.seeders},
+			{"leechers", fav.leechers},
+			{"date_uploaded", fav.dateUploaded},
+			{"category", fav.category},
+			{"created_unix", fav.createdUnix},
+			{"scraped_date", fav.scrapedDate},
+			{"completed", fav.completed}};
+		favoritesJson.push_back(favEntry);
+	}
+	config["favorites"] = favoritesJson;
+
+	// Save search history
+	config["search_history"] = searchHistory;
+
+	// Save to file
+	save("./config/settings.json");
+}
+
+void ConfigManager::loadFavoritesAndHistory(std::vector<TorrentSearchResult> &favorites, std::vector<std::string> &searchHistory)
+{
+	favorites.clear();
+	searchHistory.clear();
+
+	// Load favorites
+	if (config.contains("favorites") && config["favorites"].is_array())
+	{
+		for (const auto &favJson : config["favorites"])
+		{
+			TorrentSearchResult fav;
+			if (favJson.contains("name"))
+				fav.name = favJson["name"];
+			if (favJson.contains("magnet_uri"))
+				fav.magnetUri = favJson["magnet_uri"];
+			if (favJson.contains("info_hash"))
+				fav.infoHash = favJson["info_hash"];
+			if (favJson.contains("size_bytes"))
+				fav.sizeBytes = favJson["size_bytes"];
+			if (favJson.contains("seeders"))
+				fav.seeders = favJson["seeders"];
+			if (favJson.contains("leechers"))
+				fav.leechers = favJson["leechers"];
+			if (favJson.contains("date_uploaded"))
+				fav.dateUploaded = favJson["date_uploaded"];
+			if (favJson.contains("category"))
+				fav.category = favJson["category"];
+			if (favJson.contains("created_unix"))
+				fav.createdUnix = favJson["created_unix"];
+			if (favJson.contains("scraped_date"))
+				fav.scrapedDate = favJson["scraped_date"];
+			if (favJson.contains("completed"))
+				fav.completed = favJson["completed"];
+			favorites.push_back(fav);
+		}
+	}
+
+	// Load search history
+	if (config.contains("search_history") && config["search_history"].is_array())
+	{
+		for (const auto &historyItem : config["search_history"])
+		{
+			if (historyItem.is_string())
+			{
+				searchHistory.push_back(historyItem);
+			}
+		}
+	}
+}
+
+void ConfigManager::setTheme(int themeIndex)
+{
+	config["theme"] = themeIndex;
+}
+
+int ConfigManager::getTheme() const
+{
+	if (config.contains("theme"))
+	{
+		// Handle both string (legacy) and number formats
+		if (config["theme"].is_string())
+		{
+			std::string themeStr = config["theme"];
+			if (themeStr == "dark")
+				return 0;
+			if (themeStr == "ocean")
+				return 1;
+			if (themeStr == "nord")
+				return 2;
+			if (themeStr == "dracula")
+				return 3;
+			if (themeStr == "cyberpunk")
+				return 4;
+			return 0; // Default to dark if unknown
+		}
+		else if (config["theme"].is_number())
+		{
+			return config["theme"];
+		}
+	}
+	return 0; // Default to Dark theme
 }

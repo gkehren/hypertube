@@ -77,6 +77,8 @@ private:
 	bool showMagnetTorrentPopup = false;
 	int tempDownloadSpeedLimit = 0;
 	int tempUploadSpeedLimit = 0;
+	int tempSelectedTheme = 0;
+	int currentTheme = 0;
 
 	TorrentManager &torrentManager;
 	SearchEngine &searchEngine;
