@@ -244,7 +244,6 @@ int ConfigManager::getUploadSpeedLimit() const
 	return 0; // 0 means unlimited
 }
 
-<<<<<<< HEAD
 void ConfigManager::setDownloadPath(const std::string &path)
 {
 	ensureSettingsStructure();
