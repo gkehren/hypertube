@@ -65,6 +65,7 @@ set(SOURCES
     src/ui/TorrentDetailsUI.cpp
     src/ui/SearchUI.cpp
     src/ui/ModalDialogs.cpp
+    src/ui/LogsUI.cpp
     src/ui/Theme.cpp
     # Add core ImGui sources
     ${imgui_SOURCE_DIR}/imgui.cpp
