@@ -495,7 +495,12 @@ void UIManager::displayPreferencesDialog()
 
 void UIManager::loadSpeedLimitsFromConfig()
 {
-	settingsConfigManager.load("./config/settings.json");
+	Result result = settingsConfigManager.load("./config/settings.json");
+	if (!result)
+	{
+		// Show error popup to user
+		showFailurePopupWithMessage("Configuration Error: " + result.message);
+	}
 }
 
 void UIManager::applySpeedLimits()
