@@ -22,6 +22,7 @@ public:
 	void displayTorrentDetails_Files(const lt::torrent_handle &selectedTorrent);
 	void displayTorrentDetails_Peers(const lt::torrent_handle &selectedTorrent);
 	void displayTorrentDetails_Trackers(const lt::torrent_handle &selectedTorrent);
+	void displayTorrentDetails_Settings(const lt::torrent_handle &selectedTorrent);
 
 	// Utility methods
 	void displayTorrentDetailsContent(const lt::torrent_status &status, const lt::torrent_handle &handle);
@@ -33,7 +34,13 @@ public:
 
 private:
 	TorrentManager &torrentManager;
-
-private:
-	// No private members needed for this stateless UI class
+	
+	// Settings tab state (per-torrent hash to settings map)
+	struct SettingsState
+	{
+		int downloadLimit = 0;
+		int uploadLimit = 0;
+		lt::sha1_hash lastTorrentHash;
+	};
+	SettingsState settingsState;
 };

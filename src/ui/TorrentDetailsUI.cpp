@@ -65,6 +65,12 @@ void TorrentDetailsUI::displayTorrentDetails(const lt::torrent_handle &selectedT
 				ImGui::EndTabItem();
 			}
 
+			if (ImGui::BeginTabItem("Settings"))
+			{
+				displayTorrentDetails_Settings(selectedTorrent);
+				ImGui::EndTabItem();
+			}
+
 			ImGui::EndTabBar();
 		}
 	}
@@ -105,16 +111,12 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 	std::vector<std::int64_t> file_progress;
 	selectedTorrent.file_progress(file_progress);
 
-	ImGuiTableFlags tableFlags = ImGuiTableFlags_RowBg |
-								 ImGuiTableFlags_Resizable |
-								 ImGuiTableFlags_ScrollY |
-								 ImGuiTableFlags_BordersInnerV;
-
-	if (ImGui::BeginTable("Files", 3, tableFlags))
+	if (ImGui::BeginTable("Files", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
 	{
 		ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-		ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 100.0f);
-		ImGui::TableSetupColumn("Progress", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+		ImGui::TableSetupColumn("Size");
+		ImGui::TableSetupColumn("Progress");
+		ImGui::TableSetupColumn("Priority");
 		ImGui::TableHeadersRow();
 
 		const auto &palette = HypertubeTheme::getCurrentPalette();
@@ -142,6 +144,38 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 			else if (progress > 0.0f)
 				progressColor = palette.progressDownload;
 			else
+				ImGui::ProgressBar(0.0f);
+
+			ImGui::TableSetColumnIndex(3);
+			// Get current priority and map to combo index
+			lt::download_priority_t current_priority = selectedTorrent.file_priority(index);
+			int priority_index;
+			if (current_priority == lt::dont_download)
+				priority_index = 0;
+			else if (current_priority == lt::low_priority)
+				priority_index = 1;
+			else if (current_priority >= lt::top_priority)
+				priority_index = 3;
+			else
+				priority_index = 2; // default_priority
+
+			const char* priority_items[] = { "Don't Download", "Low", "Normal", "High" };
+			ImGui::SetNextItemWidth(120.0f);
+			std::string combo_id = "##priority" + std::to_string(i);
+			if (ImGui::Combo(combo_id.c_str(), &priority_index, priority_items, IM_ARRAYSIZE(priority_items)))
+			{
+				// Set the new priority
+				lt::download_priority_t new_priority;
+				switch (priority_index)
+				{
+					case 0: new_priority = lt::dont_download; break;
+					case 1: new_priority = lt::low_priority; break;
+					case 2: new_priority = lt::default_priority; break;
+					case 3: new_priority = lt::top_priority; break;
+					default: new_priority = lt::default_priority; break;
+				}
+				selectedTorrent.file_priority(index, new_priority);
+			}
 				progressColor = palette.surface;
 
 			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, progressColor);
@@ -386,4 +420,87 @@ std::string TorrentDetailsUI::computeETA(const lt::torrent_status &status) const
 	char buf[64];
 	Utils::computeETA(status, buf, sizeof(buf));
 	return std::string(buf);
+}
+
+void TorrentDetailsUI::displayTorrentDetails_Settings(const lt::torrent_handle &selectedTorrent)
+{
+	if (!selectedTorrent.is_valid())
+		return;
+
+	ImGui::Text("Per-Torrent Settings");
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	// Check if we're viewing a different torrent - if so, reload settings
+	lt::sha1_hash currentHash = selectedTorrent.info_hash();
+	if (settingsState.lastTorrentHash != currentHash)
+	{
+		settingsState.lastTorrentHash = currentHash;
+		// Convert from bytes/s to KB/s (note: this truncates to KB/s granularity)
+		settingsState.downloadLimit = selectedTorrent.download_limit() / 1024;
+		settingsState.uploadLimit = selectedTorrent.upload_limit() / 1024;
+	}
+
+	// Speed limits section
+	ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Speed Limits:");
+	ImGui::Spacing();
+
+	// Download limit
+	ImGui::Text("Download Limit (KB/s):");
+	ImGui::SetNextItemWidth(150);
+	if (ImGui::InputInt("##TorrentDownloadLimit", &settingsState.downloadLimit, 1, 100))
+	{
+		if (settingsState.downloadLimit < 0)
+			settingsState.downloadLimit = 0;
+		selectedTorrent.set_download_limit(settingsState.downloadLimit * 1024);
+	}
+	ImGui::SameLine();
+	ImGui::TextDisabled("(0 = unlimited)");
+
+	ImGui::Spacing();
+
+	// Upload limit
+	ImGui::Text("Upload Limit (KB/s):");
+	ImGui::SetNextItemWidth(150);
+	if (ImGui::InputInt("##TorrentUploadLimit", &settingsState.uploadLimit, 1, 100))
+	{
+		if (settingsState.uploadLimit < 0)
+			settingsState.uploadLimit = 0;
+		selectedTorrent.set_upload_limit(settingsState.uploadLimit * 1024);
+	}
+	ImGui::SameLine();
+	ImGui::TextDisabled("(0 = unlimited)");
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	// Sequential download section
+	ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Download Mode:");
+	ImGui::Spacing();
+
+	bool sequentialMode = (selectedTorrent.flags() & lt::torrent_flags::sequential_download) != lt::torrent_flags_t{};
+	if (ImGui::Checkbox("Sequential Download", &sequentialMode))
+	{
+		if (sequentialMode)
+			selectedTorrent.set_flags(lt::torrent_flags::sequential_download);
+		else
+			selectedTorrent.unset_flags(lt::torrent_flags::sequential_download);
+	}
+	ImGui::SameLine();
+	ImGui::TextDisabled("(?)");
+	if (ImGui::IsItemHovered())
+	{
+		ImGui::BeginTooltip();
+		ImGui::Text("Sequential mode downloads pieces in order,");
+		ImGui::Text("useful for streaming video files.");
+		ImGui::EndTooltip();
+	}
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	// Info text
+	ImGui::TextWrapped("Note: Changes to speed limits and sequential mode are applied immediately.");
 }
