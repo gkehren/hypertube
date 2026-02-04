@@ -1,6 +1,7 @@
 #include "TorrentTableUI.hpp"
 #include "UIManager.hpp"
 #include "StringUtils.hpp"
+#include "Theme.hpp"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -20,7 +21,14 @@ void TorrentTableUI::displayTorrentTable()
 		torrentManager.refreshStatusCache();
 	}
 
-	if (ImGui::BeginTable("Torrents", 9, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+	ImGuiTableFlags tableFlags = ImGuiTableFlags_RowBg |
+								 ImGuiTableFlags_Resizable |
+								 ImGuiTableFlags_Reorderable |
+								 ImGuiTableFlags_Hideable |
+								 ImGuiTableFlags_BordersInnerV |
+								 ImGuiTableFlags_ScrollY;
+
+	if (ImGui::BeginTable("Torrents", 9, tableFlags))
 	{
 		displayTorrentTableHeader();
 		displayTorrentTableBody();
@@ -84,70 +92,99 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 	}
 
 	ImGui::PushID(&handle);
-	ImGui::TableNextRow();
+	ImGui::TableNextRow(ImGuiTableRowFlags_None, 28.0f); // Fixed row height for consistency
 
-	char buf[128];
-	const char *cell_text = buf;
+	// Determine if this row is selected
+	bool isSelected = (selectedTorrent == handle);
 
-	for (int col = 0; col < 9; col++)
+	// Get status string for coloring
+	const char *statusStr = Utils::torrentStateToString(status.state, handle.flags());
+	ImVec4 statusColor = HypertubeTheme::getStatusColor(statusStr);
+	const auto &palette = HypertubeTheme::getCurrentPalette();
+
+	// Store the row rect for selection detection
+	ImGui::TableSetColumnIndex(0);
+	float rowStartY = ImGui::GetCursorScreenPos().y;
+	float rowMinX = ImGui::GetCursorScreenPos().x;
+
+	// Column 0: Queue position
+	ImGui::AlignTextToFramePadding();
+	ImGui::Text("%d", static_cast<int>(status.queue_position) + 1);
+
+	// Column 1: Name - Use selectable for row selection
+	ImGui::TableSetColumnIndex(1);
+	ImGui::AlignTextToFramePadding();
+	if (ImGui::Selectable(status.name.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap))
 	{
-		ImGui::TableSetColumnIndex(col);
-
-		// Optimization: Construct text into buffer directly to avoid std::string allocation
-		buf[0] = '\0';	 // clear buffer
-		cell_text = buf; // Default to buffer
-
-		switch (col)
-		{
-		case 0: // Queue position
-			snprintf(buf, sizeof(buf), "%d", static_cast<int>(status.queue_position) + 1);
-			break;
-		case 1: // Name
-			cell_text = status.name.c_str();
-			break;
-		case 2: // Size
-			Utils::formatBytes(status.total_wanted, false, buf, sizeof(buf));
-			break;
-		case 4: // Status
-			cell_text = Utils::torrentStateToString(status.state, handle.flags());
-			break;
-		case 5: // Download speed
-			Utils::formatBytes(status.download_payload_rate, true, buf, sizeof(buf));
-			break;
-		case 6: // Upload speed
-			Utils::formatBytes(status.upload_payload_rate, true, buf, sizeof(buf));
-			break;
-		case 7: // ETA
-			Utils::computeETA(status, buf, sizeof(buf));
-			break;
-		case 8: // Seeds/Peers
-		{
-			float ratio = status.num_peers > 0 ? (float)status.num_seeds / (float)status.num_peers : 0.0f;
-			// Use default float formatting to match std::to_string approximately or just %f
-			snprintf(buf, sizeof(buf), "%d/%d (%f)", status.num_seeds, status.num_peers, ratio);
-		}
-		break;
-		case 3:
-			// Handled separately below
-			break;
-		default:
-			break;
-		}
-
-		if (col != 3) // Progress column is handled differently
-		{
-			if (ImGui::Selectable(cell_text, selectedTorrent == handle, ImGuiSelectableFlags_SpanAllColumns))
-			{
-				selectedTorrent = handle;
-			}
-		}
-		else
-		{
-			ImGui::ProgressBar(status.progress);
-		}
-
-		ImGui::SameLine();
+		selectedTorrent = handle;
 	}
+
+	// Column 2: Size
+	ImGui::TableSetColumnIndex(2);
+	ImGui::AlignTextToFramePadding();
+	char sizeBuf[64];
+	Utils::formatBytes(status.total_wanted, false, sizeBuf, sizeof(sizeBuf));
+	ImGui::Text("%s", sizeBuf);
+
+	// Column 3: Progress bar
+	ImGui::TableSetColumnIndex(3);
+	float progressBarHeight = 16.0f;
+	float rowHeight = 28.0f;
+	float progressVerticalPadding = (rowHeight - progressBarHeight) * 0.5f;
+	ImGui::SetCursorPosY(ImGui::GetCursorPosY() + progressVerticalPadding);
+
+	ImVec4 progressColor;
+	if (status.state == lt::torrent_status::seeding)
+		progressColor = palette.progressUpload;
+	else
+		progressColor = palette.progressDownload;
+
+	char progressText[32];
+	snprintf(progressText, sizeof(progressText), "%.1f%%", status.progress * 100.0f);
+
+	ImGui::PushStyleColor(ImGuiCol_PlotHistogram, progressColor);
+	ImGui::PushStyleColor(ImGuiCol_FrameBg, palette.progressBackground);
+	ImGui::ProgressBar(status.progress, ImVec2(-1, progressBarHeight), progressText);
+	ImGui::PopStyleColor(2);
+
+	// Column 4: Status
+	ImGui::TableSetColumnIndex(4);
+	ImGui::AlignTextToFramePadding();
+	ImGui::TextColored(statusColor, "%s", statusStr);
+
+	// Column 5: Download speed
+	ImGui::TableSetColumnIndex(5);
+	ImGui::AlignTextToFramePadding();
+	char downSpeedBuf[64];
+	Utils::formatBytes(status.download_payload_rate, true, downSpeedBuf, sizeof(downSpeedBuf));
+	if (status.download_payload_rate > 0)
+		ImGui::TextColored(palette.success, "%s", downSpeedBuf);
+	else
+		ImGui::Text("%s", downSpeedBuf);
+
+	// Column 6: Upload speed
+	ImGui::TableSetColumnIndex(6);
+	ImGui::AlignTextToFramePadding();
+	char upSpeedBuf[64];
+	Utils::formatBytes(status.upload_payload_rate, true, upSpeedBuf, sizeof(upSpeedBuf));
+	if (status.upload_payload_rate > 0)
+		ImGui::TextColored(palette.info, "%s", upSpeedBuf);
+	else
+		ImGui::Text("%s", upSpeedBuf);
+
+	// Column 7: ETA
+	ImGui::TableSetColumnIndex(7);
+	ImGui::AlignTextToFramePadding();
+	char etaBuf[64];
+	Utils::computeETA(status, etaBuf, sizeof(etaBuf));
+	ImGui::Text("%s", etaBuf);
+
+	// Column 8: Seeds/Peers
+	ImGui::TableSetColumnIndex(8);
+	ImGui::AlignTextToFramePadding();
+	float ratio = status.num_peers > 0 ? (float)status.num_seeds / (float)status.num_peers : 0.0f;
+	ImVec4 ratioColor = HypertubeTheme::getHealthColor(ratio);
+	ImGui::TextColored(ratioColor, "%d / %d", status.num_seeds, status.num_peers);
 
 	displayTorrentContextMenu(handle, info_hash);
 	ImGui::PopID();

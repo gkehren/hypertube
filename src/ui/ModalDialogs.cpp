@@ -1,5 +1,6 @@
 #include "ModalDialogs.hpp"
 #include "UIManager.hpp"
+#include "Theme.hpp"
 #include <cstring>
 #include <iostream>
 
@@ -46,14 +47,27 @@ void ModalDialogs::handleAddMagnetTorrentModal(bool &showMagnetTorrentPopup)
 
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(500, 180), ImGuiCond_Appearing);
 
-	if (ImGui::BeginPopupModal("Add Magnet Torrent", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	if (ImGui::BeginPopupModal("Add Magnet Torrent", NULL, ImGuiWindowFlags_NoResize))
 	{
-		ImGui::Text("Enter the magnet link:");
-		ImGui::Separator();
-		ImGui::InputText("##MagnetLink", magnetLinkBuffer, IM_ARRAYSIZE(magnetLinkBuffer));
+		HypertubeTheme::drawSectionHeader("Magnet Link");
 
-		if (ImGui::Button("OK", ImVec2(120, 0)))
+		ImGui::PushItemWidth(-1);
+		ImGui::InputTextMultiline("##MagnetLink", magnetLinkBuffer, IM_ARRAYSIZE(magnetLinkBuffer),
+								  ImVec2(-1, 50), ImGuiInputTextFlags_None);
+		ImGui::PopItemWidth();
+
+		ImGui::Spacing();
+		ImGui::Spacing();
+
+		float buttonWidth = 130.0f;
+		float spacing = 15.0f;
+		float totalWidth = buttonWidth * 2 + spacing;
+		float startX = (ImGui::GetWindowWidth() - totalWidth) * 0.5f;
+		ImGui::SetCursorPosX(startX);
+
+		if (HypertubeTheme::drawStyledButton("Add", ImVec2(buttonWidth, 35), true))
 		{
 			torrentToAdd.first = true; // Is a magnet link
 			torrentToAdd.second = std::string(magnetLinkBuffer);
@@ -61,8 +75,8 @@ void ModalDialogs::handleAddMagnetTorrentModal(bool &showMagnetTorrentPopup)
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SetItemDefaultFocus();
-		ImGui::SameLine();
-		if (ImGui::Button("Cancel", ImVec2(120, 0)))
+		ImGui::SameLine(0, spacing);
+		if (HypertubeTheme::drawStyledButton("Cancel", ImVec2(buttonWidth, 35), false))
 		{
 			ImGui::CloseCurrentPopup();
 		}
@@ -146,22 +160,29 @@ void ModalDialogs::renderPopupFailure(const std::string &message)
 {
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(400, 150), ImGuiCond_Appearing);
 
-	if (ImGui::BeginPopupModal("Failure", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	if (ImGui::BeginPopupModal("Failure", NULL, ImGuiWindowFlags_NoResize))
 	{
-		ImGui::Text("%s", message.c_str());
-		ImGui::Separator();
+		const auto &palette = HypertubeTheme::getCurrentPalette();
 
-		if (ImGui::Button("OK"))
+		ImGui::Spacing();
+		ImGui::PushStyleColor(ImGuiCol_Text, palette.error);
+		ImGui::TextWrapped("%s", message.c_str());
+		ImGui::PopStyleColor();
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		float buttonWidth = 130.0f;
+		float startX = (ImGui::GetWindowWidth() - buttonWidth) * 0.5f;
+		ImGui::SetCursorPosX(startX);
+
+		if (HypertubeTheme::drawStyledButton("OK", ImVec2(buttonWidth, 35), true))
 		{
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SetItemDefaultFocus();
-		ImGui::SameLine();
-		if (ImGui::Button("Cancel", ImVec2(120, 0)))
-		{
-			ImGui::CloseCurrentPopup();
-		}
 		ImGui::EndPopup();
 	}
 }
@@ -170,13 +191,31 @@ void ModalDialogs::removeTorrentModal()
 {
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(420, 150), ImGuiCond_Appearing);
 
-	if (ImGui::BeginPopupModal("Remove Torrent", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	if (ImGui::BeginPopupModal("Remove Torrent", NULL, ImGuiWindowFlags_NoResize))
 	{
-		ImGui::Text("Are you sure you want to remove the selected torrent?");
-		ImGui::Separator();
+		const auto &palette = HypertubeTheme::getCurrentPalette();
 
-		if (ImGui::Button("OK", ImVec2(120, 0)))
+		ImGui::Spacing();
+		ImGui::PushStyleColor(ImGuiCol_Text, palette.warning);
+		ImGui::TextWrapped("Are you sure you want to remove the selected torrent?");
+		ImGui::PopStyleColor();
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		float buttonWidth = 130.0f;
+		float spacing = 15.0f;
+		float totalWidth = buttonWidth * 2 + spacing;
+		float startX = (ImGui::GetWindowWidth() - totalWidth) * 0.5f;
+		ImGui::SetCursorPosX(startX);
+
+		// Use error color for Remove button
+		ImGui::PushStyleColor(ImGuiCol_Button, palette.error);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(palette.error.x * 1.1f, palette.error.y * 1.1f, palette.error.z * 1.1f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(palette.error.x * 0.9f, palette.error.y * 0.9f, palette.error.z * 0.9f, 1.0f));
+		if (ImGui::Button("Remove", ImVec2(buttonWidth, 35)))
 		{
 			if (onRemoveCompleted)
 			{
@@ -184,9 +223,11 @@ void ModalDialogs::removeTorrentModal()
 			}
 			ImGui::CloseCurrentPopup();
 		}
+		ImGui::PopStyleColor(3);
+
 		ImGui::SetItemDefaultFocus();
-		ImGui::SameLine();
-		if (ImGui::Button("Cancel", ImVec2(120, 0)))
+		ImGui::SameLine(0, spacing);
+		if (HypertubeTheme::drawStyledButton("Cancel", ImVec2(buttonWidth, 35), false))
 		{
 			if (onRemoveCancelled)
 			{

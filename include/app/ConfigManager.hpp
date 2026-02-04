@@ -8,7 +8,11 @@
 
 using json = nlohmann::json;
 
-struct TorrentConfigData {
+// Forward declarations
+struct TorrentSearchResult;
+
+struct TorrentConfigData
+{
 	std::string magnetUri;
 	std::string savePath;
 	std::string torrentFilePath;
@@ -22,6 +26,10 @@ public:
 
 	void saveTorrents(const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &torrents, const std::unordered_map<lt::sha1_hash, std::string> &torrentFilePaths);
 	std::vector<TorrentConfigData> loadTorrents(const std::string &path);
+
+	// Favorites and search history
+	void saveFavoritesAndHistory(const std::vector<TorrentSearchResult> &favorites, const std::vector<std::string> &searchHistory);
+	void loadFavoritesAndHistory(std::vector<TorrentSearchResult> &favorites, std::vector<std::string> &searchHistory);
 
 	// Speed limit configuration
 	void setDownloadSpeedLimit(int bytesPerSecond);
@@ -43,6 +51,9 @@ public:
 	int getConfigVersion() const;
 	void ensureDefaultConfig();
 	void migrateConfig(int fromVersion, int toVersion);
+	// Theme configuration
+	void setTheme(int themeIndex);
+	int getTheme() const;
 
 	json &getConfig();
 
