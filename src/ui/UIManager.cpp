@@ -1,4 +1,5 @@
 #include "UIManager.hpp"
+#include "Theme.hpp"
 #include "imgui_internal.h"
 #include <filesystem>
 #include <iostream>
@@ -12,6 +13,7 @@ UIManager::UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine,
 	torrentDetailsUI = std::make_unique<TorrentDetailsUI>(torrentManager);
 	searchUI = std::make_unique<SearchUI>(searchEngine);
 	modalDialogs = std::make_unique<ModalDialogs>(torrentManager);
+	logsUI = std::make_unique<LogsUI>(torrentManager);
 
 	// Setup callbacks
 	setupUICallbacks();
@@ -50,8 +52,10 @@ void UIManager::initImGui(GLFWwindow *window)
 	io_ref.IniFilename = NULL;
 	this->io = io_ref;
 
-	// Setup ImGui style
-	ImGui::StyleColorsDark();
+	// Load and apply saved theme
+	loadSpeedLimitsFromConfig();
+	currentTheme = settingsConfigManager.getTheme();
+	HypertubeTheme::applyTheme(static_cast<HypertubeTheme::ThemeType>(currentTheme));
 
 	ImGuiStyle &style = ImGui::GetStyle();
 	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
@@ -158,6 +162,10 @@ void UIManager::renderFrame(GLFWwindow *window, const ImVec4 &clear_color)
 	// Use the new TorrentDetailsUI component
 	torrentDetailsUI->displayTorrentDetails(torrentTableUI->getSelectedTorrent());
 
+	// Update and display logs
+	logsUI->updateLogs();
+	logsUI->displayLogsWindow();
+
 	handleModals();
 
 	displayPreferencesDialog();
@@ -205,9 +213,15 @@ void UIManager::setupDocking(ImGuiID dockspace_id)
 	ImGuiID dock_bottom_id;
 	ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.4f, &dock_bottom_id, &dock_top_id);
 
+	// Split the bottom area to make room for logs
+	ImGuiID dock_details_id;
+	ImGuiID dock_logs_id;
+	ImGui::DockBuilderSplitNode(dock_bottom_id, ImGuiDir_Right, 0.5f, &dock_logs_id, &dock_details_id);
+
 	ImGui::DockBuilderDockWindow("Categories", dock_left_id);
 	ImGui::DockBuilderDockWindow("Torrent Management", dock_top_id);
-	ImGui::DockBuilderDockWindow("Torrent Details", dock_bottom_id);
+	ImGui::DockBuilderDockWindow("Torrent Details", dock_details_id);
+	ImGui::DockBuilderDockWindow("Logs", dock_logs_id);
 
 	ImGui::DockBuilderFinish(dockspace_id);
 }
@@ -278,6 +292,13 @@ void UIManager::displayTorrentManagement()
 				ImGui::EndTabItem();
 			}
 
+			// Favorites Tab
+			if (ImGui::BeginTabItem("Favorites"))
+			{
+				searchUI->displayFavorites();
+				ImGui::EndTabItem();
+			}
+
 			ImGui::EndTabBar();
 		}
 	}
@@ -287,13 +308,60 @@ void UIManager::displayTorrentManagement()
 void UIManager::displayCategories()
 {
 	ImGui::Begin("Categories");
-	ImGui::Text("All");
-	ImGui::Text("Downloading");
-	ImGui::Text("Seeding");
-	ImGui::Text("Completed");
-	ImGui::Text("Paused");
-	ImGui::Text("Active");
-	ImGui::Text("Inactive");
+
+	// Section header
+	HypertubeTheme::drawSectionHeader("Filter Torrents");
+
+	static int selectedCategory = 0;
+
+	// Get torrent counts for each category
+	auto &torrents = torrentManager.getTorrents();
+	int allCount = static_cast<int>(torrents.size());
+	int downloadingCount = 0;
+	int seedingCount = 0;
+	int completedCount = 0;
+	int pausedCount = 0;
+	int activeCount = 0;
+	int inactiveCount = 0;
+
+	for (const auto &[hash, handle] : torrents)
+	{
+		if (!handle.is_valid())
+			continue;
+		const lt::torrent_status *status = torrentManager.getCachedStatus(hash);
+		if (!status)
+			continue;
+
+		if (status->state == lt::torrent_status::downloading ||
+			status->state == lt::torrent_status::downloading_metadata)
+			downloadingCount++;
+		if (status->state == lt::torrent_status::seeding)
+			seedingCount++;
+		if (status->is_finished)
+			completedCount++;
+		if (handle.flags() & lt::torrent_flags::paused)
+			pausedCount++;
+		if (status->download_payload_rate > 0 || status->upload_payload_rate > 0)
+			activeCount++;
+		else
+			inactiveCount++;
+	}
+
+	if (HypertubeTheme::drawCategoryItem("All Torrents", "", selectedCategory == 0, allCount))
+		selectedCategory = 0;
+	if (HypertubeTheme::drawCategoryItem("Downloading", "", selectedCategory == 1, downloadingCount))
+		selectedCategory = 1;
+	if (HypertubeTheme::drawCategoryItem("Seeding", "", selectedCategory == 2, seedingCount))
+		selectedCategory = 2;
+	if (HypertubeTheme::drawCategoryItem("Completed", "", selectedCategory == 3, completedCount))
+		selectedCategory = 3;
+	if (HypertubeTheme::drawCategoryItem("Paused", "", selectedCategory == 4, pausedCount))
+		selectedCategory = 4;
+	if (HypertubeTheme::drawCategoryItem("Active", "", selectedCategory == 5, activeCount))
+		selectedCategory = 5;
+	if (HypertubeTheme::drawCategoryItem("Inactive", "", selectedCategory == 6, inactiveCount))
+		selectedCategory = 6;
+
 	ImGui::End();
 }
 
@@ -326,21 +394,39 @@ void UIManager::displayPreferencesDialog()
 		// Load current values when opening dialog
 		tempDownloadSpeedLimit = settingsConfigManager.getDownloadSpeedLimit();
 		tempUploadSpeedLimit = settingsConfigManager.getUploadSpeedLimit();
+		tempSelectedTheme = currentTheme;
 	}
 
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(400, 250), ImGuiCond_Appearing);
+	ImGui::SetNextWindowSize(ImVec2(450, 380), ImGuiCond_Appearing);
 
-	if (ImGui::BeginPopupModal("Preferences", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+	if (ImGui::BeginPopupModal("Preferences", NULL, ImGuiWindowFlags_NoResize))
 	{
-		ImGui::Text("Speed Limits");
-		ImGui::Separator();
+		// Theme Section
+		HypertubeTheme::drawSectionHeader("Appearance");
+
+		ImGui::Text("Theme:");
+		ImGui::SameLine(250);
+		ImGui::SetNextItemWidth(170);
+		const char *themeNames[] = {"Dark", "Ocean", "Nord", "Dracula", "CyberPunk"};
+		if (ImGui::Combo("##ThemeCombo", &tempSelectedTheme, themeNames, IM_ARRAYSIZE(themeNames)))
+		{
+			// Preview theme immediately
+			HypertubeTheme::applyTheme(static_cast<HypertubeTheme::ThemeType>(tempSelectedTheme));
+		}
+		HypertubeTheme::drawTooltip("Choose the color theme for the application");
+
 		ImGui::Spacing();
+		ImGui::Spacing();
+
+		// Speed Limits Section
+		HypertubeTheme::drawSectionHeader("Speed Limits");
 
 		// Download speed limit
 		ImGui::Text("Download Speed Limit (KB/s):");
-		ImGui::SetNextItemWidth(150);
+		ImGui::SameLine(250);
+		ImGui::SetNextItemWidth(120);
 		int downloadKBps = tempDownloadSpeedLimit / 1024;
 		if (ImGui::InputInt("##DownloadLimit", &downloadKBps, 1, 100))
 		{
@@ -348,14 +434,15 @@ void UIManager::displayPreferencesDialog()
 				downloadKBps = 0;
 			tempDownloadSpeedLimit = downloadKBps * 1024;
 		}
-		ImGui::SameLine();
-		ImGui::TextDisabled("(0 = unlimited)");
+		HypertubeTheme::drawTooltip("Set to 0 for unlimited download speed");
 
+		ImGui::Spacing();
 		ImGui::Spacing();
 
 		// Upload speed limit
-		ImGui::Text("Upload Speed Limit (KB/s):  ");
-		ImGui::SetNextItemWidth(150);
+		ImGui::Text("Upload Speed Limit (KB/s):");
+		ImGui::SameLine(250);
+		ImGui::SetNextItemWidth(120);
 		int uploadKBps = tempUploadSpeedLimit / 1024;
 		if (ImGui::InputInt("##UploadLimit", &uploadKBps, 1, 100))
 		{
@@ -363,17 +450,28 @@ void UIManager::displayPreferencesDialog()
 				uploadKBps = 0;
 			tempUploadSpeedLimit = uploadKBps * 1024;
 		}
-		ImGui::SameLine();
-		ImGui::TextDisabled("(0 = unlimited)");
+		HypertubeTheme::drawTooltip("Set to 0 for unlimited upload speed");
 
+		ImGui::Spacing();
 		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::Spacing();
+		ImGui::Spacing();
 
-		// Buttons
-		if (ImGui::Button("Apply", ImVec2(120, 0)))
+		// Centered buttons
+		float buttonWidth = 130.0f;
+		float spacing = 15.0f;
+		float totalWidth = buttonWidth * 2 + spacing;
+		float startX = (ImGui::GetWindowWidth() - totalWidth) * 0.5f;
+		ImGui::SetCursorPosX(startX);
+
+		if (HypertubeTheme::drawStyledButton("Apply", ImVec2(buttonWidth, 35), true))
 		{
-			// Save to config
+			// Save theme
+			currentTheme = tempSelectedTheme;
+			settingsConfigManager.setTheme(currentTheme);
+
+			// Save speed limits
 			settingsConfigManager.setDownloadSpeedLimit(tempDownloadSpeedLimit);
 			settingsConfigManager.setUploadSpeedLimit(tempUploadSpeedLimit);
 			settingsConfigManager.save("./config/settings.json");
@@ -384,9 +482,11 @@ void UIManager::displayPreferencesDialog()
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SetItemDefaultFocus();
-		ImGui::SameLine();
-		if (ImGui::Button("Cancel", ImVec2(120, 0)))
+		ImGui::SameLine(0, spacing);
+		if (HypertubeTheme::drawStyledButton("Cancel", ImVec2(buttonWidth, 35), false))
 		{
+			// Revert theme preview if cancelled
+			HypertubeTheme::applyTheme(static_cast<HypertubeTheme::ThemeType>(currentTheme));
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
@@ -395,7 +495,12 @@ void UIManager::displayPreferencesDialog()
 
 void UIManager::loadSpeedLimitsFromConfig()
 {
-	settingsConfigManager.load("./config/settings.json");
+	Result result = settingsConfigManager.load("./config/settings.json");
+	if (!result)
+	{
+		// Show error popup to user
+		showFailurePopupWithMessage("Configuration Error: " + result.message);
+	}
 }
 
 void UIManager::applySpeedLimits()

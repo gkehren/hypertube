@@ -18,6 +18,7 @@
 #include "SearchUI.hpp"
 #include "ModalDialogs.hpp"
 #include "ConfigManager.hpp"
+#include "LogsUI.hpp"
 
 class UIManager;
 
@@ -61,6 +62,7 @@ private:
 	std::unique_ptr<TorrentDetailsUI> torrentDetailsUI;
 	std::unique_ptr<SearchUI> searchUI;
 	std::unique_ptr<ModalDialogs> modalDialogs;
+	std::unique_ptr<LogsUI> logsUI;
 
 	// Failure popup state
 	bool showFailurePopup = false;
@@ -75,6 +77,8 @@ private:
 	bool showMagnetTorrentPopup = false;
 	int tempDownloadSpeedLimit = 0;
 	int tempUploadSpeedLimit = 0;
+	int tempSelectedTheme = 0;
+	int currentTheme = 0;
 
 	TorrentManager &torrentManager;
 	SearchEngine &searchEngine;

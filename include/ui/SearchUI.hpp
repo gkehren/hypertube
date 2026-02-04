@@ -21,10 +21,12 @@ public:
 	void displaySearchWindow();
 	void displaySearchResults();
 	void displayEnhancedSearchResults();
+	void displayFavorites();
 
 	// Search result display methods
 	void displaySearchResultRow(const TorrentSearchResult &result, int index);
 	void displayEnhancedSearchResultRow(const TorrentSearchResult &result, int index);
+	void displayFavoriteRow(const TorrentSearchResult &result, int index);
 
 	// Search functionality
 	void performSearch(const std::string &query);
@@ -75,4 +77,5 @@ private:
 
 	// Internal methods
 	void processPendingResults();
+	bool isInFavorites(const std::string &infoHash) const;
 };
