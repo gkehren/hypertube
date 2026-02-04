@@ -21,7 +21,7 @@ struct TorrentConfigData
 class ConfigManager
 {
 public:
-	void load(const std::string &path);
+	void load(const std::string &path, bool fullConfig = true);
 	void save(const std::string &path);
 
 	void saveTorrents(const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &torrents, const std::unordered_map<lt::sha1_hash, std::string> &torrentFilePaths);
@@ -37,6 +37,20 @@ public:
 	int getDownloadSpeedLimit() const;
 	int getUploadSpeedLimit() const;
 
+	// New settings configuration
+	void setDownloadPath(const std::string &path);
+	std::string getDownloadPath() const;
+	void setEnableDHT(bool enable);
+	bool getEnableDHT() const;
+	void setEnableUPnP(bool enable);
+	bool getEnableUPnP() const;
+	void setEnableNATPMP(bool enable);
+	bool getEnableNATPMP() const;
+
+	// Schema management
+	int getConfigVersion() const;
+	void ensureDefaultConfig();
+	void migrateConfig(int fromVersion, int toVersion);
 	// Theme configuration
 	void setTheme(int themeIndex);
 	int getTheme() const;
@@ -45,4 +59,8 @@ public:
 
 private:
 	json config;
+	static constexpr int CURRENT_CONFIG_VERSION = 1;
+
+	json createDefaultConfig() const;
+	void ensureSettingsStructure();
 };

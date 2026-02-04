@@ -26,7 +26,7 @@ App::App() : uiManager(torrentManager, searchEngine, settingsConfigManager)
 	glfwMakeContextCurrent(window);
 	glfwSwapInterval(1); // Enable vsync
 
-	torrentsConfigManager.load("./config/torrents.json");
+	torrentsConfigManager.load("./config/torrents.json", false);
 	torrentManager.addTorrentsFromConfig(torrentsConfigManager.loadTorrents("./config/torrents.json"));
 
 	// Load favorites and search history
