@@ -119,6 +119,8 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 		selectedTorrent = handle;
 	}
 
+	displayTorrentContextMenu(handle, info_hash);
+
 	// Column 2: Size
 	ImGui::TableSetColumnIndex(2);
 	ImGui::AlignTextToFramePadding();
@@ -186,7 +188,6 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 	ImVec4 ratioColor = HypertubeTheme::getHealthColor(ratio);
 	ImGui::TextColored(ratioColor, "%d / %d", status.num_seeds, status.num_peers);
 
-	displayTorrentContextMenu(handle, info_hash);
 	ImGui::PopID();
 }
 
