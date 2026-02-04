@@ -21,7 +21,7 @@ json ConfigManager::createDefaultConfig() const
 	return defaultConfig;
 }
 
-void ConfigManager::load(const std::string &path)
+void ConfigManager::load(const std::string &path, bool fullConfig)
 {
 	std::ifstream file(path);
 	if (file.is_open())
@@ -30,27 +30,29 @@ void ConfigManager::load(const std::string &path)
 		{
 			file >> this->config;
 			file.close();
-			
-			// Check if config needs migration
-			int currentVersion = getConfigVersion();
-			if (currentVersion < CURRENT_CONFIG_VERSION)
+
+			if (fullConfig)
 			{
-				migrateConfig(currentVersion, CURRENT_CONFIG_VERSION);
+				// Check if config needs migration
+				int currentVersion = getConfigVersion();
+				if (currentVersion < CURRENT_CONFIG_VERSION)
+				{
+					migrateConfig(currentVersion, CURRENT_CONFIG_VERSION);
+				}
+				// Ensure all default settings exist
+				ensureDefaultConfig();
 			}
-			
-			// Ensure all default settings exist
-			ensureDefaultConfig();
 		}
 		catch (const std::exception &e)
 		{
 			std::cerr << "Error loading config: " << e.what() << std::endl;
-			this->config = createDefaultConfig();
+			this->config = fullConfig ? createDefaultConfig() : json{{"torrents", json::array()}};
 		}
 	}
 	else
 	{
-		// No config file exists, create default
-		this->config = createDefaultConfig();
+		// No config file exists
+		this->config = fullConfig ? createDefaultConfig() : json{{"torrents", json::array()}};
 	}
 }
 
@@ -91,7 +93,14 @@ void ConfigManager::saveTorrents(const std::unordered_map<lt::sha1_hash, lt::tor
 		torrentsJson.push_back(torrentEntry);
 	}
 	this->config["torrents"] = torrentsJson;
-	save("./config/torrents.json");
+
+	json torrentsFile = {{"torrents", torrentsJson}};
+	std::ofstream file("./config/torrents.json");
+	if (file.is_open())
+	{
+		file << torrentsFile.dump(4);
+		file.close();
+	}
 }
 
 std::vector<TorrentConfigData> ConfigManager::loadTorrents(const std::string &path)
@@ -180,8 +189,8 @@ int ConfigManager::getDownloadSpeedLimit() const
 	{
 		return config["speed_limits"]["download"];
 	}
-	if (config.contains("settings") && config["settings"].contains("speed_limits") && 
-	    config["settings"]["speed_limits"].contains("download"))
+	if (config.contains("settings") && config["settings"].contains("speed_limits") &&
+		config["settings"]["speed_limits"].contains("download"))
 	{
 		return config["settings"]["speed_limits"]["download"];
 	}
@@ -194,8 +203,8 @@ int ConfigManager::getUploadSpeedLimit() const
 	{
 		return config["speed_limits"]["upload"];
 	}
-	if (config.contains("settings") && config["settings"].contains("speed_limits") && 
-	    config["settings"]["speed_limits"].contains("upload"))
+	if (config.contains("settings") && config["settings"].contains("speed_limits") &&
+		config["settings"]["speed_limits"].contains("upload"))
 	{
 		return config["settings"]["speed_limits"]["upload"];
 	}
@@ -274,19 +283,19 @@ int ConfigManager::getConfigVersion() const
 void ConfigManager::ensureDefaultConfig()
 {
 	json defaults = createDefaultConfig();
-	
+
 	// Ensure version is set
 	if (!config.contains("version"))
 	{
 		config["version"] = CURRENT_CONFIG_VERSION;
 	}
-	
+
 	// Ensure settings section exists
 	if (!config.contains("settings"))
 	{
 		config["settings"] = json::object();
 	}
-	
+
 	// Add any missing default settings
 	for (auto &[key, value] : defaults["settings"].items())
 	{
@@ -300,7 +309,7 @@ void ConfigManager::ensureDefaultConfig()
 void ConfigManager::migrateConfig(int fromVersion, int toVersion)
 {
 	std::cout << "Migrating config from version " << fromVersion << " to " << toVersion << std::endl;
-	
+
 	if (fromVersion == 0 && toVersion >= 1)
 	{
 		// Migration from unversioned to version 1
@@ -309,19 +318,19 @@ void ConfigManager::migrateConfig(int fromVersion, int toVersion)
 		{
 			json oldConfig = config;
 			config = createDefaultConfig();
-			
+
 			// Preserve old speed_limits if they exist
 			if (oldConfig.contains("speed_limits"))
 			{
 				config["settings"]["speed_limits"] = oldConfig["speed_limits"];
 			}
-			
+
 			// Preserve old download_path if it exists
 			if (oldConfig.contains("download_path"))
 			{
 				config["settings"]["download_path"] = oldConfig["download_path"];
 			}
-			
+
 			// Preserve old DHT/UPnP settings if they exist
 			if (oldConfig.contains("enable_dht"))
 			{
@@ -335,19 +344,21 @@ void ConfigManager::migrateConfig(int fromVersion, int toVersion)
 			{
 				config["settings"]["enable_natpmp"] = oldConfig["enable_natpmp"];
 			}
-			
+
 			// Preserve torrents list if it exists
 			if (oldConfig.contains("torrents"))
 			{
 				config["torrents"] = oldConfig["torrents"];
 			}
 		}
-		
+
 		config["version"] = 1;
 	}
-	
+
 	// Future migrations can be added here
 	// if (fromVersion == 1 && toVersion >= 2) { ... }
+}
+
 void ConfigManager::saveFavoritesAndHistory(const std::vector<TorrentSearchResult> &favorites, const std::vector<std::string> &searchHistory)
 {
 	// Save favorites

@@ -21,7 +21,7 @@ struct TorrentConfigData
 class ConfigManager
 {
 public:
-	void load(const std::string &path);
+	void load(const std::string &path, bool fullConfig = true);
 	void save(const std::string &path);
 
 	void saveTorrents(const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &torrents, const std::unordered_map<lt::sha1_hash, std::string> &torrentFilePaths);
@@ -60,7 +60,7 @@ public:
 private:
 	json config;
 	static constexpr int CURRENT_CONFIG_VERSION = 1;
-	
+
 	json createDefaultConfig() const;
 	void ensureSettingsStructure();
 };

@@ -1,5 +1,0 @@
-if(EXISTS "/home/runner/work/hypertube/hypertube/_codeql_build_dir/tests/config_tests[1]_tests.cmake")
-  include("/home/runner/work/hypertube/hypertube/_codeql_build_dir/tests/config_tests[1]_tests.cmake")
-else()
-  add_test(config_tests_NOT_BUILT config_tests_NOT_BUILT)
-endif()

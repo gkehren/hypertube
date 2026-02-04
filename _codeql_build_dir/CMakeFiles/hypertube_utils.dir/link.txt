@@ -1,2 +1,0 @@
-/usr/bin/ar qc libhypertube_utils.a CMakeFiles/hypertube_utils.dir/src/utils/StringUtils.cpp.o
-/usr/bin/ranlib libhypertube_utils.a
