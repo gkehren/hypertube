@@ -7,6 +7,7 @@
 #include <sstream>
 #include <cstdio>
 #include <cmath>
+#include <optional>
 
 TorrentTableUI::TorrentTableUI(TorrentManager &torrentManager)
 	: torrentManager(torrentManager)
@@ -79,17 +80,21 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 {
 	// Try to get cached status first
 	const lt::torrent_status *cachedStatus = torrentManager.getCachedStatus(info_hash);
-	lt::torrent_status status;
+	const lt::torrent_status *statusPtr = nullptr;
+	std::optional<lt::torrent_status> liveStatus;
 
 	if (cachedStatus)
 	{
-		status = *cachedStatus;
+		statusPtr = cachedStatus;
 	}
 	else
 	{
 		// Fallback to live query if cache miss (shouldn't happen normally)
-		status = handle.status();
+		liveStatus.emplace(handle.status());
+		statusPtr = &(*liveStatus);
 	}
+
+	const lt::torrent_status &status = *statusPtr;
 
 	ImGui::PushID(&handle);
 	ImGui::TableNextRow(ImGuiTableRowFlags_None, 28.0f); // Fixed row height for consistency
