@@ -39,6 +39,7 @@ public:
 	// Utility methods
 	void formatBytes(size_t bytes, bool speed, char *buffer, size_t bufferSize);
 	void formatUnixTime(int64_t unixTime, char *buffer, size_t bufferSize);
+	void sortTorrentResults(std::vector<TorrentSearchResult> &results, ImGuiTableSortSpecs *sort_specs);
 
 	// Callback setup
 	void setSearchResultSelectedCallback(std::function<void(const TorrentSearchResult &)> callback);
@@ -57,6 +58,8 @@ private:
 	// Search state
 	char searchQueryBuffer[256] = {0};
 	std::vector<TorrentSearchResult> searchResults;
+	std::vector<TorrentSearchResult> favoritesDisplay;
+	uint64_t lastFavoritesRevision = 0;
 	TorrentSearchResult selectedSearchResult;
 	bool showSearchWindow = false;
 	std::atomic<bool> isSearching;

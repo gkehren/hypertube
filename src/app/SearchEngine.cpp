@@ -608,11 +608,13 @@ void SearchEngine::addToFavorites(const TorrentSearchResult &result)
 	if (it == favorites.end())
 	{
 		favorites.push_back(result);
+		favoritesRevision++;
 	}
 }
 
 void SearchEngine::removeFromFavorites(const std::string &infoHash)
 {
+	auto initialSize = favorites.size();
 	favorites.erase(
 		std::remove_if(favorites.begin(), favorites.end(),
 					   [&infoHash](const TorrentSearchResult &fav)
@@ -620,6 +622,11 @@ void SearchEngine::removeFromFavorites(const std::string &infoHash)
 						   return fav.infoHash == infoHash;
 					   }),
 		favorites.end());
+
+	if (favorites.size() != initialSize)
+	{
+		favoritesRevision++;
+	}
 }
 
 const std::vector<TorrentSearchResult> &SearchEngine::getFavorites() const
@@ -635,6 +642,7 @@ void SearchEngine::saveFavoritesAndHistory(ConfigManager &configManager)
 void SearchEngine::loadFavoritesAndHistory(ConfigManager &configManager)
 {
 	configManager.loadFavoritesAndHistory(favorites, searchHistory);
+	favoritesRevision++;
 }
 
 void SearchEngine::setApiUrl(const std::string &url)

@@ -74,6 +74,7 @@ public:
 	void addToFavorites(const TorrentSearchResult &result);
 	void removeFromFavorites(const std::string &infoHash);
 	const std::vector<TorrentSearchResult> &getFavorites() const;
+	uint64_t getFavoritesRevision() const { return favoritesRevision; }
 
 	// Persistence
 	void saveFavoritesAndHistory(class ConfigManager &configManager);
@@ -101,6 +102,7 @@ private:
 
 	std::vector<std::string> searchHistory;
 	std::vector<TorrentSearchResult> favorites;
+	std::atomic<uint64_t> favoritesRevision{0};
 
 	// HTTP client methods
 	Result makeHttpRequest(const std::string &url, std::string &response);
