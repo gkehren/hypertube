@@ -82,6 +82,7 @@ set(SOURCES
 # Create the utils library
 add_library(hypertube_utils STATIC
     src/utils/StringUtils.cpp
+    src/utils/SystemUtils.cpp
 )
 
 # Create the config library for testing
