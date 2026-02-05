@@ -55,11 +55,15 @@ void ConfigManager::workerLoop()
 			file << req.data.dump(4);
 			// File will be automatically closed by destructor (RAII)
 		}
+
+		activeJobs--;
+		queueCv.notify_all();
 	}
 }
 
 void ConfigManager::enqueueSave(const std::string& path, json data)
 {
+	activeJobs++;
 	{
 		std::lock_guard<std::mutex> lock(queueMutex);
 		saveQueue.push({path, std::move(data)});
@@ -556,6 +560,12 @@ int ConfigManager::getTheme() const
 		}
 	}
 	return 0; // Default to Dark theme
+}
+
+void ConfigManager::waitForAsyncOperations()
+{
+	std::unique_lock<std::mutex> lock(queueMutex);
+	queueCv.wait(lock, [this] { return activeJobs == 0 && saveQueue.empty(); });
 }
 
 void ConfigManager::applyDefaultConfig()

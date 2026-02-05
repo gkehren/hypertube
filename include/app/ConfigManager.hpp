@@ -64,6 +64,9 @@ public:
 	void setTheme(int themeIndex);
 	int getTheme() const;
 
+	// Synchronization for testing
+	void waitForAsyncOperations();
+
 	json &getConfig();
 
 private:
@@ -81,6 +84,7 @@ private:
 	std::mutex queueMutex;
 	std::condition_variable queueCv;
 	std::atomic<bool> stopWorker{false};
+	std::atomic<int> activeJobs{0};
 
 	void workerLoop();
 	void enqueueSave(const std::string& path, json data);
