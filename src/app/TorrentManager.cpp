@@ -84,7 +84,6 @@ Result TorrentManager::removeTorrent(const lt::sha1_hash hash, RemoveTorrentType
 				{
 					std::cerr << "Failed to delete .torrent file: " << e.what() << std::endl;
 				}
-				this->torrentFilePaths.erase(pathIt);
 			}
 		}
 
@@ -94,13 +93,7 @@ Result TorrentManager::removeTorrent(const lt::sha1_hash hash, RemoveTorrentType
 			this->session.remove_torrent(it->second);
 
 		this->torrents.erase(it);
-		// Also clean up path if it wasn't removed above (e.g. for other remove types)
-		// Although removeType check implies we only delete file on specific flags,
-		// we should probably always stop tracking the file path when the torrent is removed from session.
-		if (this->torrentFilePaths.count(hash))
-		{
-			this->torrentFilePaths.erase(hash);
-		}
+		this->torrentFilePaths.erase(hash);
 
 		return Result::Success();
 	}
