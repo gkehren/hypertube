@@ -176,74 +176,7 @@ void SearchUI::displayEnhancedSearchResults()
 		{
 			if (sort_specs->SpecsDirty)
 			{
-				if (sort_specs->SpecsCount > 0)
-				{
-					const ImGuiTableColumnSortSpecs *spec = &sort_specs->Specs[0];
-
-					std::stable_sort(searchResults.begin(), searchResults.end(), [spec](const TorrentSearchResult &a, const TorrentSearchResult &b)
-									 {
-                        int result = 0;
-                        switch (spec->ColumnIndex)
-                        {
-                            case 0: // Name
-                                result = a.name.compare(b.name);
-                                break;
-                            case 1: // Size
-                                if (a.sizeBytes < b.sizeBytes) result = -1;
-                                else if (a.sizeBytes > b.sizeBytes) result = 1;
-                                else result = 0;
-                                break;
-                            case 2: // Seeds
-                                if (a.seeders < b.seeders) result = -1;
-                                else if (a.seeders > b.seeders) result = 1;
-                                else result = 0;
-                                break;
-                            case 3: // Leechers
-                                if (a.leechers < b.leechers) result = -1;
-                                else if (a.leechers > b.leechers) result = 1;
-                                else result = 0;
-                                break;
-                            case 4: // Ratio
-                            {
-                                float ratioA = (a.leechers > 0) ? (float)a.seeders / a.leechers : (a.seeders > 0 ? 1000.0f : 0.0f);
-                                float ratioB = (b.leechers > 0) ? (float)b.seeders / b.leechers : (b.seeders > 0 ? 1000.0f : 0.0f);
-
-                                if (ratioA < ratioB) result = -1;
-                                else if (ratioA > ratioB) result = 1;
-                                else result = 0;
-                                break;
-                            }
-                            case 5: // Completed
-                                if (a.completed < b.completed) result = -1;
-                                else if (a.completed > b.completed) result = 1;
-                                else result = 0;
-                                break;
-                            case 6: // Created
-                                if (a.createdUnix < b.createdUnix) result = -1;
-                                else if (a.createdUnix > b.createdUnix) result = 1;
-                                else result = 0;
-                                break;
-                            case 7: // Last Seen
-                                if (a.scrapedDate < b.scrapedDate) result = -1;
-                                else if (a.scrapedDate > b.scrapedDate) result = 1;
-                                else result = 0;
-                                break;
-                            case 8: // Category
-                                result = a.category.compare(b.category);
-                                break;
-                            default:
-                                result = 0;
-                                break;
-                        }
-
-                        // Apply sort direction
-                        if (spec->SortDirection == ImGuiSortDirection_Descending) {
-                            result = -result;
-                        }
-
-                        return result < 0; });
-				}
-				sort_specs->SpecsDirty = false;
+				sortTorrentResults(searchResults, sort_specs);
 			}
 		}
 
@@ -300,11 +233,19 @@ void SearchUI::displaySearchResults()
 
 void SearchUI::displayFavorites()
 {
-	const auto &favorites = searchEngine.getFavorites();
+	uint64_t currentRevision = searchEngine.getFavoritesRevision();
+	bool revisionChanged = (currentRevision != lastFavoritesRevision);
+
+	// Update local cache if favorites have changed
+	if (revisionChanged)
+	{
+		favoritesDisplay = searchEngine.getFavorites();
+		lastFavoritesRevision = currentRevision;
+	}
 
 	HypertubeTheme::drawSectionHeader("Favorites");
 
-	if (favorites.empty())
+	if (favoritesDisplay.empty())
 	{
 		ImGui::PushStyleColor(ImGuiCol_Text, HypertubeTheme::getCurrentPalette().textSecondary);
 		ImGui::Text("No favorites yet. Right-click on search results to add torrents to favorites.");
@@ -312,7 +253,7 @@ void SearchUI::displayFavorites()
 		return;
 	}
 
-	ImGui::Text("Saved Torrents (%d):", (int)favorites.size());
+	ImGui::Text("Saved Torrents (%d):", (int)favoritesDisplay.size());
 	ImGui::Separator();
 
 	// Create a table for favorites
@@ -337,9 +278,24 @@ void SearchUI::displayFavorites()
 		ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 80);
 		ImGui::TableHeadersRow();
 
-		for (int i = 0; i < (int)favorites.size(); ++i)
+		// Handle sorting
+		if (ImGuiTableSortSpecs *sort_specs = ImGui::TableGetSortSpecs())
 		{
-			displayFavoriteRow(favorites[i], i);
+			// Force re-sort if data changed
+			if (revisionChanged)
+			{
+				sort_specs->SpecsDirty = true;
+			}
+
+			if (sort_specs->SpecsDirty)
+			{
+				sortTorrentResults(favoritesDisplay, sort_specs);
+			}
+		}
+
+		for (int i = 0; i < (int)favoritesDisplay.size(); ++i)
+		{
+			displayFavoriteRow(favoritesDisplay[i], i);
 		}
 
 		ImGui::EndTable();
@@ -890,4 +846,77 @@ bool SearchUI::isInFavorites(const std::string &infoHash) const
 						{
 							return fav.infoHash == infoHash;
 						}) != favorites.end();
+}
+
+void SearchUI::sortTorrentResults(std::vector<TorrentSearchResult> &results, ImGuiTableSortSpecs *sort_specs)
+{
+	if (!sort_specs || !sort_specs->SpecsDirty || sort_specs->SpecsCount <= 0)
+		return;
+
+	const ImGuiTableColumnSortSpecs *spec = &sort_specs->Specs[0];
+
+	std::stable_sort(results.begin(), results.end(), [spec](const TorrentSearchResult &a, const TorrentSearchResult &b)
+					 {
+						int result = 0;
+						switch (spec->ColumnIndex)
+						{
+						case 0: // Name
+							result = a.name.compare(b.name);
+							break;
+						case 1: // Size
+							if (a.sizeBytes < b.sizeBytes) result = -1;
+							else if (a.sizeBytes > b.sizeBytes) result = 1;
+							else result = 0;
+							break;
+						case 2: // Seeds
+							if (a.seeders < b.seeders) result = -1;
+							else if (a.seeders > b.seeders) result = 1;
+							else result = 0;
+							break;
+						case 3: // Leechers
+							if (a.leechers < b.leechers) result = -1;
+							else if (a.leechers > b.leechers) result = 1;
+							else result = 0;
+							break;
+						case 4: // Ratio
+						{
+							float ratioA = (a.leechers > 0) ? (float)a.seeders / a.leechers : (a.seeders > 0 ? 1000.0f : 0.0f);
+							float ratioB = (b.leechers > 0) ? (float)b.seeders / b.leechers : (b.seeders > 0 ? 1000.0f : 0.0f);
+
+							if (ratioA < ratioB) result = -1;
+							else if (ratioA > ratioB) result = 1;
+							else result = 0;
+							break;
+						}
+						case 5: // Completed
+							if (a.completed < b.completed) result = -1;
+							else if (a.completed > b.completed) result = 1;
+							else result = 0;
+							break;
+						case 6: // Created
+							if (a.createdUnix < b.createdUnix) result = -1;
+							else if (a.createdUnix > b.createdUnix) result = 1;
+							else result = 0;
+							break;
+						case 7: // Last Seen
+							if (a.scrapedDate < b.scrapedDate) result = -1;
+							else if (a.scrapedDate > b.scrapedDate) result = 1;
+							else result = 0;
+							break;
+						case 8: // Category
+							result = a.category.compare(b.category);
+							break;
+						default:
+							result = 0;
+							break;
+						}
+
+						// Apply sort direction
+						if (spec->SortDirection == ImGuiSortDirection_Descending) {
+							result = -result;
+						}
+
+						return result < 0; });
+
+	sort_specs->SpecsDirty = false;
 }
