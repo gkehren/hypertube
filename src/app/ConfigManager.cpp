@@ -5,6 +5,68 @@
 #include <cstdlib>
 #include <algorithm>
 
+ConfigManager::ConfigManager()
+{
+	saveThread = std::thread(&ConfigManager::workerLoop, this);
+}
+
+ConfigManager::~ConfigManager()
+{
+	{
+		std::lock_guard<std::mutex> lock(queueMutex);
+		stopWorker = true;
+	}
+	queueCv.notify_one();
+	if (saveThread.joinable())
+	{
+		saveThread.join();
+	}
+}
+
+void ConfigManager::workerLoop()
+{
+	while (true)
+	{
+		SaveRequest req;
+		{
+			std::unique_lock<std::mutex> lock(queueMutex);
+			queueCv.wait(lock, [this] { return stopWorker || !saveQueue.empty(); });
+
+			if (saveQueue.empty() && stopWorker)
+			{
+				return;
+			}
+
+			if (!saveQueue.empty())
+			{
+				req = std::move(saveQueue.front());
+				saveQueue.pop();
+			}
+			else
+			{
+				continue;
+			}
+		}
+
+		// Perform I/O outside the lock
+		std::ofstream file(req.path);
+		if (file.is_open())
+		{
+			file << req.data.dump(4);
+			// File will be automatically closed by destructor (RAII)
+		}
+	}
+}
+
+void ConfigManager::enqueueSave(const std::string& path, json data)
+{
+	{
+		std::lock_guard<std::mutex> lock(queueMutex);
+		saveQueue.push({path, std::move(data)});
+	}
+	queueCv.notify_one();
+}
+
 json ConfigManager::createDefaultConfig() const
 {
 	json defaultConfig = {
@@ -73,17 +135,14 @@ Result ConfigManager::load(const std::string &path, bool fullConfig)
 
 void ConfigManager::save(const std::string &path)
 {
-	std::ofstream file(path);
-	if (file.is_open())
+	// Ensure version is always present before saving
+	if (!config.contains("version"))
 	{
-		// Ensure version is always present before saving
-		if (!config.contains("version"))
-		{
-			config["version"] = CURRENT_CONFIG_VERSION;
-		}
-		file << config.dump(4);
-		// File will be automatically closed by destructor (RAII)
+		config["version"] = CURRENT_CONFIG_VERSION;
 	}
+
+	// Enqueue async save
+	enqueueSave(path, config);
 }
 
 void ConfigManager::saveTorrents(const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &torrents, const std::unordered_map<lt::sha1_hash, std::string> &torrentFilePaths)
@@ -110,12 +169,7 @@ void ConfigManager::saveTorrents(const std::unordered_map<lt::sha1_hash, lt::tor
 	this->config["torrents"] = torrentsJson;
 
 	json torrentsFile = {{"torrents", torrentsJson}};
-	std::ofstream file("./config/torrents.json");
-	if (file.is_open())
-	{
-		file << torrentsFile.dump(4);
-		// File will be automatically closed by destructor (RAII)
-	}
+	enqueueSave("./config/torrents.json", std::move(torrentsFile));
 }
 
 Result ConfigManager::loadTorrents(const std::string &path, std::vector<TorrentConfigData> &outTorrents)
