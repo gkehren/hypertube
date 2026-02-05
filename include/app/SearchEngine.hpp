@@ -8,6 +8,7 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <unordered_set>
 
 struct TorrentSearchResult
 {
@@ -75,6 +76,7 @@ public:
 	void removeFromFavorites(const std::string &infoHash);
 	const std::vector<TorrentSearchResult> &getFavorites() const;
 	uint64_t getFavoritesRevision() const { return favoritesRevision; }
+	bool isFavorite(const std::string &infoHash) const;
 
 	// Persistence
 	void saveFavoritesAndHistory(class ConfigManager &configManager);
@@ -103,6 +105,8 @@ private:
 	std::vector<std::string> searchHistory;
 	std::vector<TorrentSearchResult> favorites;
 	std::atomic<uint64_t> favoritesRevision{0};
+	std::unordered_set<std::string> favoriteHashes;
+	mutable std::mutex favoritesMutex;
 
 	// HTTP client methods
 	Result makeHttpRequest(const std::string &url, std::string &response);

@@ -840,12 +840,7 @@ void SearchUI::processPendingResults()
 
 bool SearchUI::isInFavorites(const std::string &infoHash) const
 {
-	const auto &favorites = searchEngine.getFavorites();
-	return std::find_if(favorites.begin(), favorites.end(),
-						[&infoHash](const TorrentSearchResult &fav)
-						{
-							return fav.infoHash == infoHash;
-						}) != favorites.end();
+	return searchEngine.isFavorite(infoHash);
 }
 
 void SearchUI::sortTorrentResults(std::vector<TorrentSearchResult> &results, ImGuiTableSortSpecs *sort_specs)

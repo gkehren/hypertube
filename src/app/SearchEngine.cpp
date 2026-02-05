@@ -598,22 +598,21 @@ void SearchEngine::clearSearchHistory()
 
 void SearchEngine::addToFavorites(const TorrentSearchResult &result)
 {
-	// Check if already in favorites
-	auto it = std::find_if(favorites.begin(), favorites.end(),
-						   [&result](const TorrentSearchResult &fav)
-						   {
-							   return fav.infoHash == result.infoHash;
-						   });
+	std::lock_guard<std::mutex> lock(favoritesMutex);
 
-	if (it == favorites.end())
+	// Check if already in favorites using the set (O(1))
+	if (favoriteHashes.find(result.infoHash) == favoriteHashes.end())
 	{
 		favorites.push_back(result);
+		favoriteHashes.insert(result.infoHash);
 		favoritesRevision++;
 	}
 }
 
 void SearchEngine::removeFromFavorites(const std::string &infoHash)
 {
+	std::lock_guard<std::mutex> lock(favoritesMutex);
+
 	auto initialSize = favorites.size();
 	favorites.erase(
 		std::remove_if(favorites.begin(), favorites.end(),
@@ -623,6 +622,7 @@ void SearchEngine::removeFromFavorites(const std::string &infoHash)
 					   }),
 		favorites.end());
 
+	favoriteHashes.erase(infoHash);
 	if (favorites.size() != initialSize)
 	{
 		favoritesRevision++;
@@ -634,14 +634,28 @@ const std::vector<TorrentSearchResult> &SearchEngine::getFavorites() const
 	return favorites;
 }
 
+bool SearchEngine::isFavorite(const std::string &infoHash) const
+{
+	std::lock_guard<std::mutex> lock(favoritesMutex);
+	return favoriteHashes.find(infoHash) != favoriteHashes.end();
+}
+
 void SearchEngine::saveFavoritesAndHistory(ConfigManager &configManager)
 {
+	std::lock_guard<std::mutex> lock(favoritesMutex);
 	configManager.saveFavoritesAndHistory(favorites, searchHistory);
 }
 
 void SearchEngine::loadFavoritesAndHistory(ConfigManager &configManager)
 {
+	std::lock_guard<std::mutex> lock(favoritesMutex);
 	configManager.loadFavoritesAndHistory(favorites, searchHistory);
+
+	favoriteHashes.clear();
+	for (const auto &fav : favorites)
+	{
+		favoriteHashes.insert(fav.infoHash);
+	}
 	favoritesRevision++;
 }
 
