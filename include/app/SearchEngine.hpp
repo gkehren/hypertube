@@ -62,10 +62,9 @@ public:
 	// Core search functionality
 	Result searchTorrents(const SearchQuery &query, std::vector<TorrentSearchResult> &results);
 	Result searchTorrents(const SearchQuery &query, SearchResponse &response);
-	Result searchTorrentsAsync(const SearchQuery &query, std::function<void(const std::vector<TorrentSearchResult> &)> callback);
 
-	// New async search with proper threading
-	void searchTorrentsAsyncThreaded(const SearchQuery &query, std::function<void(Result, SearchResponse)> callback);
+	// Async search with proper threading
+	void searchTorrentsAsync(const SearchQuery &query, std::function<void(Result, SearchResponse)> callback);
 
 	// Search history and favorites
 	void addToSearchHistory(const std::string &query);
