@@ -662,24 +662,8 @@ void SearchEngine::cancelCurrentSearch()
 	cancelRequested = true;
 }
 
-// Async search implementation (simplified - would need proper threading in production)
-Result SearchEngine::searchTorrentsAsync(const SearchQuery &query, std::function<void(const std::vector<TorrentSearchResult> &)> callback)
-{
-	// For now, just do synchronous search
-	// In a full implementation, this would use std::async or threading
-	std::vector<TorrentSearchResult> results;
-	Result searchResult = searchTorrents(query, results);
-
-	if (searchResult)
-	{
-		callback(results);
-	}
-
-	return searchResult;
-}
-
-// New threaded async search implementation
-void SearchEngine::searchTorrentsAsyncThreaded(const SearchQuery &query, std::function<void(Result, SearchResponse)> callback)
+// Async search implementation with threading
+void SearchEngine::searchTorrentsAsync(const SearchQuery &query, std::function<void(Result, SearchResponse)> callback)
 {
 	// If already searching, ignore this request
 	if (searching.load())

@@ -711,7 +711,7 @@ void SearchUI::performSearch(const std::string &query)
 	SearchQuery searchQuery(query);
 
 	// Launch async search
-	searchEngine.searchTorrentsAsyncThreaded(searchQuery,
+	searchEngine.searchTorrentsAsync(searchQuery,
 											 [this](Result result, SearchResponse response)
 											 {
 												 // This callback runs in worker thread, so we need to store results safely
@@ -759,7 +759,7 @@ void SearchUI::loadMoreResults()
 		SearchQuery searchQuery(currentSearchQuery, 0, nextToken);
 
 		// Launch async search for more results
-		searchEngine.searchTorrentsAsyncThreaded(searchQuery,
+		searchEngine.searchTorrentsAsync(searchQuery,
 												 [this](Result result, SearchResponse response)
 												 {
 													 // This callback runs in worker thread
