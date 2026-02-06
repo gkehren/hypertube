@@ -67,6 +67,7 @@ TEST_F(ConfigManagerTest, SaveAndLoadConfig)
 
 	// Save config
 	manager.save(configPath);
+	manager.waitForAsyncOperations();
 
 	// Load into a new manager
 	ConfigManager manager2;
@@ -125,6 +126,7 @@ TEST_F(ConfigManagerTest, ConfigVersionPersists)
 	// Load default config and save
 	manager.load(configPath);
 	manager.save(configPath);
+	manager.waitForAsyncOperations();
 
 	// Load the saved file and check it has version
 	std::ifstream file(configPath);

@@ -4,6 +4,11 @@
 #include <vector>
 #include <unordered_map>
 #include <json.hpp>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
+#include <atomic>
 #include "TorrentManager.hpp"
 #include "Result.hpp"
 
@@ -22,6 +27,9 @@ struct TorrentConfigData
 class ConfigManager
 {
 public:
+	ConfigManager();
+	~ConfigManager();
+
 	Result load(const std::string &path, bool fullConfig = true);
 	void save(const std::string &path);
 
@@ -56,11 +64,30 @@ public:
 	void setTheme(int themeIndex);
 	int getTheme() const;
 
+	// Synchronization for testing
+	void waitForAsyncOperations();
+
 	json &getConfig();
 
 private:
 	json config;
 	static constexpr int CURRENT_CONFIG_VERSION = 1;
+
+	// Async save worker
+	struct SaveRequest {
+		std::string path;
+		json data;
+	};
+
+	std::thread saveThread;
+	std::queue<SaveRequest> saveQueue;
+	std::mutex queueMutex;
+	std::condition_variable queueCv;
+	std::atomic<bool> stopWorker{false};
+	std::atomic<int> activeJobs{0};
+
+	void workerLoop();
+	void enqueueSave(const std::string& path, json data);
 
 	json createDefaultConfig() const;
 	void ensureSettingsStructure();
