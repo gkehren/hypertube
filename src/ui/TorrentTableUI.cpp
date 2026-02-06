@@ -1,6 +1,7 @@
 #include "TorrentTableUI.hpp"
 #include "UIManager.hpp"
 #include "StringUtils.hpp"
+#include "SystemUtils.hpp"
 #include "Theme.hpp"
 #include <iostream>
 #include <iomanip>
@@ -244,18 +245,7 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 
 		if (ImGui::MenuItem("Open Containing Folder"))
 		{
-#ifdef _WIN32
-			std::string command = "explorer.exe \"" + handle.status().save_path + "\"";
-#elif __APPLE__
-			std::string command = "open \"" + handle.status().save_path + "\"";
-#elif __linux__
-			std::string command = "xdg-open \"" + handle.status().save_path + "\"";
-#endif
-			int ret = system(command.c_str());
-			if (ret != 0)
-			{
-				std::cerr << "Failed to open containing folder" << std::endl;
-			}
+			Utils::SystemUtils::openFileExplorer(handle.status().save_path);
 		}
 
 		if (ImGui::MenuItem("Copy Magnet URI"))
