@@ -20,8 +20,8 @@ App::App() : uiManager(torrentManager, searchEngine, settingsConfigManager)
 	window = glfwCreateWindow(1440, 720, "Hypertube", nullptr, nullptr);
 	if (!window)
 	{
-		throw std::runtime_error("Failed to create GLFW window");
 		glfwTerminate();
+		throw std::runtime_error("Failed to create GLFW window");
 	}
 	glfwMakeContextCurrent(window);
 	glfwSwapInterval(1); // Enable vsync
