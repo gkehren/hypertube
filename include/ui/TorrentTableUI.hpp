@@ -30,13 +30,7 @@ public:
 	void displayTorrentTableRow(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash);
 
 	// Utility methods for torrent display
-	std::string getTorrentCellText(const lt::torrent_status &status, int column, const lt::torrent_handle &handle);
 	void displayTorrentContextMenu(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash);
-
-	// Formatting utilities
-	std::string torrentStateToString(lt::torrent_status::state_t state, lt::torrent_flags_t flags);
-	std::string formatBytes(size_t bytes, bool speed);
-	std::string computeETA(const lt::torrent_status &status) const;
 
 	// Selection management
 	lt::torrent_handle getSelectedTorrent() const { return selectedTorrent; }
