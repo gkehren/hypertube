@@ -2,22 +2,44 @@
 #include <cstdio>
 #include <cmath>
 #include <string>
+#include <cstring>
 
 namespace Utils {
 
     void formatBytes(size_t bytes, bool speed, char* buf, size_t buf_size)
     {
         static const char *units[] = {"B", "KB", "MB", "GB", "TB"};
-        size_t size = bytes;
+        double size = static_cast<double>(bytes);
         size_t unitIndex = 0;
 
-        while (size >= 1024 && unitIndex < 4)
+        while (size >= 1024.0 && unitIndex < 4)
         {
-            size /= 1024;
+            size /= 1024.0;
             unitIndex++;
         }
 
-        snprintf(buf, buf_size, "%zu %s%s", size, units[unitIndex], speed ? "/s" : "");
+        if (unitIndex == 0)
+        {
+            snprintf(buf, buf_size, "%.0f %s%s", size, units[unitIndex], speed ? "/s" : "");
+        }
+        else
+        {
+            char numBuf[32];
+            snprintf(numBuf, sizeof(numBuf), "%.2f", size);
+
+            // Remove trailing zeros
+            size_t len = std::strlen(numBuf);
+            while (len > 0 && numBuf[len - 1] == '0')
+            {
+                numBuf[--len] = '\0';
+            }
+            if (len > 0 && numBuf[len - 1] == '.')
+            {
+                numBuf[--len] = '\0';
+            }
+
+            snprintf(buf, buf_size, "%s %s%s", numBuf, units[unitIndex], speed ? "/s" : "");
+        }
     }
 
     const char* torrentStateToString(lt::torrent_status::state_t state, lt::torrent_flags_t flags)
