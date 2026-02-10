@@ -197,44 +197,6 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 	ImGui::PopID();
 }
 
-std::string TorrentTableUI::getTorrentCellText(const lt::torrent_status &status, int column, const lt::torrent_handle &handle)
-{
-	// Kept for backward compatibility or other usages, but now calls optimized logic
-	char buf[128];
-	buf[0] = '\0';
-
-	switch (column)
-	{
-	case 0: // Queue position
-		snprintf(buf, sizeof(buf), "%d", static_cast<int>(status.queue_position) + 1);
-		return std::string(buf);
-	case 1: // Name
-		return status.name;
-	case 2: // Size
-		Utils::formatBytes(status.total_wanted, false, buf, sizeof(buf));
-		return std::string(buf);
-	case 4: // Status
-		return std::string(Utils::torrentStateToString(status.state, handle.flags()));
-	case 5: // Download speed
-		Utils::formatBytes(status.download_payload_rate, true, buf, sizeof(buf));
-		return std::string(buf);
-	case 6: // Upload speed
-		Utils::formatBytes(status.upload_payload_rate, true, buf, sizeof(buf));
-		return std::string(buf);
-	case 7: // ETA
-		Utils::computeETA(status, buf, sizeof(buf));
-		return std::string(buf);
-	case 8: // Seeds/Peers
-	{
-		float ratio = status.num_peers > 0 ? (float)status.num_seeds / (float)status.num_peers : 0.0f;
-		snprintf(buf, sizeof(buf), "%d/%d (%f)", status.num_seeds, status.num_peers, ratio);
-		return std::string(buf);
-	}
-	default:
-		return "";
-	}
-}
-
 void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash)
 {
 	if (ImGui::BeginPopupContextItem("##context", ImGuiPopupFlags_MouseButtonRight))
@@ -324,25 +286,6 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 
 		ImGui::EndPopup();
 	}
-}
-
-std::string TorrentTableUI::torrentStateToString(lt::torrent_status::state_t state, lt::torrent_flags_t flags)
-{
-	return std::string(Utils::torrentStateToString(state, flags));
-}
-
-std::string TorrentTableUI::formatBytes(size_t bytes, bool speed)
-{
-	char buf[64];
-	Utils::formatBytes(bytes, speed, buf, sizeof(buf));
-	return std::string(buf);
-}
-
-std::string TorrentTableUI::computeETA(const lt::torrent_status &status) const
-{
-	char buf[64];
-	Utils::computeETA(status, buf, sizeof(buf));
-	return std::string(buf);
 }
 
 void TorrentTableUI::setRemoveTorrentCallback(std::function<void(const lt::sha1_hash &, RemoveTorrentType)> callback)
