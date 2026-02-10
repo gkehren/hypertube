@@ -38,7 +38,7 @@ std::string generateRandomHash(int length = 40) {
 }
 
 int main() {
-    srand(time(NULL));
+    srand(time(nullptr));
 
     const std::vector<int> sizes = {10, 100, 1000, 10000};
     const int ITERATIONS = 100000;
