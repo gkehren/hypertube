@@ -57,6 +57,7 @@ struct SearchResponse
 class SearchEngine
 {
 public:
+	friend class SearchEngineTest;
 	SearchEngine();
 	~SearchEngine();
 
