@@ -803,7 +803,7 @@ void SearchUI::processPendingResults()
 			std::string errorMsg = pendingResult.has_value() ? pendingResult.value().message : "Unknown error";
 
 			// Don't show error popup for cancelled searches
-			if (errorMsg.find("cancelled") == std::string::npos && errorMsg.find("cancelled") == std::string::npos)
+			if (errorMsg.find("cancelled") == std::string::npos)
 			{
 				if (onShowFailurePopup)
 				{
