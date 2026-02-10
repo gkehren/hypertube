@@ -97,4 +97,43 @@ TEST(StringUtilsTest, FormatMagnetUriEmptyName) {
     EXPECT_TRUE(magnet.find("&tr=") != std::string::npos);
 }
 
+TEST(StringUtilsTest, FormatBytesZero) {
+    char buf[64];
+    Utils::formatBytes(0, false, buf, sizeof(buf));
+    EXPECT_STREQ(buf, "0 B");
+
+    Utils::formatBytes(0, true, buf, sizeof(buf));
+    EXPECT_STREQ(buf, "0 B/s");
+}
+
+TEST(StringUtilsTest, FormatBytesBoundaries) {
+    char buf[64];
+    // 1023 B
+    Utils::formatBytes(1023, false, buf, sizeof(buf));
+    EXPECT_STREQ(buf, "1023 B");
+
+    // Just below 1 MB
+    Utils::formatBytes(1024 * 1024 - 1, false, buf, sizeof(buf));
+    EXPECT_STREQ(buf, "1023 KB");
+
+    // Just below 1 GB
+    Utils::formatBytes((size_t)1024 * 1024 * 1024 - 1, false, buf, sizeof(buf));
+    EXPECT_STREQ(buf, "1023 MB");
+}
+
+TEST(StringUtilsTest, FormatBytesLarge) {
+    char buf[64];
+    // 1 TB
+    Utils::formatBytes((size_t)1024 * 1024 * 1024 * 1024, false, buf, sizeof(buf));
+    EXPECT_STREQ(buf, "1 TB");
+}
+
+TEST(StringUtilsTest, FormatBytesBufferTruncation) {
+    char buf[4]; // Size 4: can hold 3 chars + null
+    // "1 KB" needs 5 chars (4 + null) to fit completely.
+    // snprintf will write "1 K" (3 chars) + null terminator.
+    Utils::formatBytes(1024, false, buf, sizeof(buf));
+    EXPECT_STREQ(buf, "1 K");
+}
+
 } // namespace
