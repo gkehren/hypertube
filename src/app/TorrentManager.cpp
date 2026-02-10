@@ -30,8 +30,8 @@ Result TorrentManager::addMagnetTorrent(const std::string &magnetUri, const std:
 {
 	try
 	{
-		std::cout << "Adding magnet torrent: " << magnetUri << std::endl;
 		lt::add_torrent_params params = lt::parse_magnet_uri(magnetUri);
+		std::cout << "Adding magnet torrent: " << params.name << " (hash: " << params.info_hashes.v1 << ")" << std::endl;
 		params.save_path = savePath;
 		lt::torrent_handle handle = this->session.add_torrent(params);
 		this->torrents[handle.info_hash()] = handle;
