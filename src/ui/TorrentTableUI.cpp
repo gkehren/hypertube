@@ -67,28 +67,36 @@ void TorrentTableUI::displayTorrentTableBody()
 	ImGuiListClipper clipper;
 	clipper.Begin(m_torrentListCache.size());
 
+	// Get status cache snapshot once
+	auto statusCache = torrentManager.getStatusCache();
+
 	while (clipper.Step())
 	{
 		for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
 		{
 			const auto &[info_hash, handle] = *m_torrentListCache[i];
-			displayTorrentTableRow(handle, info_hash);
+
+			const lt::torrent_status* statusPtr = nullptr;
+			if (statusCache)
+			{
+				auto it = statusCache->find(info_hash);
+				if (it != statusCache->end())
+				{
+					statusPtr = &it->second;
+				}
+			}
+
+			displayTorrentTableRow(handle, info_hash, statusPtr);
 		}
 	}
 }
 
-void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash)
+void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash, const lt::torrent_status *cachedStatus)
 {
-	// Try to get cached status first
-	const lt::torrent_status *cachedStatus = torrentManager.getCachedStatus(info_hash);
-	const lt::torrent_status *statusPtr = nullptr;
+	const lt::torrent_status *statusPtr = cachedStatus;
 	std::optional<lt::torrent_status> liveStatus;
 
-	if (cachedStatus)
-	{
-		statusPtr = cachedStatus;
-	}
-	else
+	if (!statusPtr)
 	{
 		// Fallback to live query if cache miss (shouldn't happen normally)
 		liveStatus.emplace(handle.status());

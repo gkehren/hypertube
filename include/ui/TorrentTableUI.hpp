@@ -27,7 +27,7 @@ public:
 	void displayTorrentTable();
 	void displayTorrentTableHeader();
 	void displayTorrentTableBody();
-	void displayTorrentTableRow(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash);
+	void displayTorrentTableRow(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash, const lt::torrent_status *cachedStatus);
 
 	// Utility methods for torrent display
 	std::string getTorrentCellText(const lt::torrent_status &status, int column, const lt::torrent_handle &handle);

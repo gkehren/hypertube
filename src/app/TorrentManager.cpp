@@ -137,31 +137,42 @@ int TorrentManager::getUploadSpeedLimit() const
 	return session.get_settings().get_int(lt::settings_pack::upload_rate_limit);
 }
 
-const lt::torrent_status *TorrentManager::getCachedStatus(const lt::sha1_hash &hash) const
+std::optional<lt::torrent_status> TorrentManager::getCachedStatus(const lt::sha1_hash &hash) const
+{
+	auto cache = getStatusCache();
+	if (cache)
+	{
+		auto it = cache->find(hash);
+		if (it != cache->end())
+		{
+			return it->second;
+		}
+	}
+	return std::nullopt;
+}
+
+std::shared_ptr<const std::unordered_map<lt::sha1_hash, lt::torrent_status>> TorrentManager::getStatusCache() const
 {
 	std::lock_guard<std::mutex> lock(cacheMutex);
-	auto it = statusCache.find(hash);
-	if (it != statusCache.end())
-	{
-		return &it->second;
-	}
-	return nullptr;
+	return statusCache;
 }
 
 void TorrentManager::refreshStatusCache()
 {
-	std::lock_guard<std::mutex> lock(cacheMutex);
-
-	// Clear old cache
-	statusCache.clear();
+	auto newCache = std::make_shared<std::unordered_map<lt::sha1_hash, lt::torrent_status>>();
 
 	// Refresh all torrent statuses
 	for (const auto &[hash, handle] : torrents)
 	{
 		if (handle.is_valid())
 		{
-			statusCache[hash] = handle.status();
+			(*newCache)[hash] = handle.status();
 		}
+	}
+
+	{
+		std::lock_guard<std::mutex> lock(cacheMutex);
+		statusCache = std::move(newCache);
 	}
 
 	lastCacheRefresh = std::chrono::steady_clock::now();

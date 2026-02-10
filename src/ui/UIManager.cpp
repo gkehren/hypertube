@@ -324,11 +324,23 @@ void UIManager::displayCategories()
 	int activeCount = 0;
 	int inactiveCount = 0;
 
+	auto statusCache = torrentManager.getStatusCache();
+
 	for (const auto &[hash, handle] : torrents)
 	{
 		if (!handle.is_valid())
 			continue;
-		const lt::torrent_status *status = torrentManager.getCachedStatus(hash);
+
+		const lt::torrent_status *status = nullptr;
+		if (statusCache)
+		{
+			auto it = statusCache->find(hash);
+			if (it != statusCache->end())
+			{
+				status = &it->second;
+			}
+		}
+
 		if (!status)
 			continue;
 
