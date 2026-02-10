@@ -49,7 +49,7 @@ void UIManager::initImGui(GLFWwindow *window)
 	io_ref.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 	io_ref.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	io_ref.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-	io_ref.IniFilename = NULL;
+	io_ref.IniFilename = nullptr;
 	this->io = io_ref;
 
 	// Load and apply saved theme
@@ -401,7 +401,7 @@ void UIManager::displayPreferencesDialog()
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSize(ImVec2(450, 380), ImGuiCond_Appearing);
 
-	if (ImGui::BeginPopupModal("Preferences", NULL, ImGuiWindowFlags_NoResize))
+	if (ImGui::BeginPopupModal("Preferences", nullptr, ImGuiWindowFlags_NoResize))
 	{
 		// Theme Section
 		HypertubeTheme::drawSectionHeader("Appearance");

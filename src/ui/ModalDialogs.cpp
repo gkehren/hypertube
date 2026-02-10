@@ -49,7 +49,7 @@ void ModalDialogs::handleAddMagnetTorrentModal(bool &showMagnetTorrentPopup)
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSize(ImVec2(500, 180), ImGuiCond_Appearing);
 
-	if (ImGui::BeginPopupModal("Add Magnet Torrent", NULL, ImGuiWindowFlags_NoResize))
+	if (ImGui::BeginPopupModal("Add Magnet Torrent", nullptr, ImGuiWindowFlags_NoResize))
 	{
 		HypertubeTheme::drawSectionHeader("Magnet Link");
 
@@ -162,7 +162,7 @@ void ModalDialogs::renderPopupFailure(const std::string &message)
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSize(ImVec2(400, 150), ImGuiCond_Appearing);
 
-	if (ImGui::BeginPopupModal("Failure", NULL, ImGuiWindowFlags_NoResize))
+	if (ImGui::BeginPopupModal("Failure", nullptr, ImGuiWindowFlags_NoResize))
 	{
 		const auto &palette = HypertubeTheme::getCurrentPalette();
 
@@ -193,7 +193,7 @@ void ModalDialogs::removeTorrentModal()
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSize(ImVec2(420, 150), ImGuiCond_Appearing);
 
-	if (ImGui::BeginPopupModal("Remove Torrent", NULL, ImGuiWindowFlags_NoResize))
+	if (ImGui::BeginPopupModal("Remove Torrent", nullptr, ImGuiWindowFlags_NoResize))
 	{
 		const auto &palette = HypertubeTheme::getCurrentPalette();
 
