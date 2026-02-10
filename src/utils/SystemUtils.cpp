@@ -4,30 +4,56 @@
 #include <iostream>
 #include <ctime>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <shellapi.h>
+#else
+#include <unistd.h>
+#include <sys/wait.h>
+#endif
+
 namespace Utils {
     namespace SystemUtils {
 
         void openFileExplorer(const std::string& path) {
-            std::string command;
-
 #ifdef _WIN32
-            command = "explorer.exe \"" + path + "\"";
-#elif __APPLE__
-            command = "open \"" + path + "\"";
-#elif __linux__
-            command = "xdg-open \"" + path + "\"";
-#else
-            std::cerr << "Unsupported platform for openFileExplorer" << std::endl;
-            return;
-#endif
-
             // Launch the system command in a detached thread to avoid blocking the UI
-            std::thread([command]() {
-                int ret = std::system(command.c_str());
-                if (ret != 0) {
-                    std::cerr << "Failed to open file explorer with command: " << command << std::endl;
+            std::thread([path]() {
+                // ShellExecute is safer than system() as it doesn't involve a shell for parsing
+                HINSTANCE result = ShellExecuteA(NULL, "open", path.c_str(), NULL, NULL, SW_SHOWNORMAL);
+                if ((INT_PTR)result <= 32) {
+                    std::cerr << "Failed to open file explorer for path: " << path << std::endl;
                 }
             }).detach();
+#elif defined(__APPLE__) || defined(__linux__)
+            // Launch the system command in a detached thread to avoid blocking the UI
+            std::thread([path]() {
+                pid_t pid = fork();
+                if (pid == 0) {
+                    // Child process: execute the command directly without a shell
+#ifdef __APPLE__
+                    const char* cmd = "open";
+#else
+                    const char* cmd = "xdg-open";
+#endif
+                    execlp(cmd, cmd, path.c_str(), (char*)NULL);
+                    // If execlp fails, exit the child process
+                    _exit(1);
+                } else if (pid > 0) {
+                    // Parent process (in thread): wait for the child to prevent zombies
+                    int status;
+                    waitpid(pid, &status, 0);
+                    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+                        std::cerr << "Failed to open file explorer for path: " << path << std::endl;
+                    }
+                } else {
+                    std::cerr << "Failed to fork process for path: " << path << std::endl;
+                }
+            }).detach();
+#else
+            std::cerr << "Unsupported platform for openFileExplorer" << std::endl;
+#endif
         }
 
         bool getLocalTime(const std::time_t& time, std::tm& result) {
