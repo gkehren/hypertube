@@ -115,6 +115,4 @@ private:
 	Result parseSearchResponse(const std::string &response, SearchResponse &searchResponse);
 
 	// Utility methods
-	std::string urlEncode(const std::string &value) const;
-	std::string formatMagnetUri(const std::string &infoHash, const std::string &name) const;
 };

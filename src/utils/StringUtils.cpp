@@ -102,4 +102,41 @@ namespace Utils {
         snprintf(buf, buf_size, "%s", flags.c_str());
     }
 
+    std::string urlEncode(const std::string &value)
+    {
+        static const char lookup[] = "0123456789ABCDEF";
+        std::string escaped;
+        escaped.reserve(value.length() * 3);
+
+        for (char c : value)
+        {
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~')
+            {
+                escaped += c;
+            }
+            else
+            {
+                escaped += '%';
+                escaped += lookup[(static_cast<unsigned char>(c) >> 4) & 0x0F];
+                escaped += lookup[static_cast<unsigned char>(c) & 0x0F];
+            }
+        }
+
+        return escaped;
+    }
+
+    std::string formatMagnetUri(const std::string &infoHash, const std::string &name)
+    {
+        std::string magnet = "magnet:?xt=urn:btih:" + infoHash;
+        if (!name.empty())
+        {
+            magnet += "&dn=" + urlEncode(name);
+        }
+        // Add some popular trackers
+        magnet += "&tr=udp://tracker.openbittorrent.com:80"
+                  "&tr=udp://tracker.opentrackr.org:1337"
+                  "&tr=udp://tracker.coppersurfer.tk:6969";
+        return magnet;
+    }
+
 }
