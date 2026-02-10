@@ -137,3 +137,90 @@ TEST_F(ConfigManagerTest, ConfigVersionPersists)
 	EXPECT_TRUE(savedConfig.contains("version"));
 	EXPECT_EQ(savedConfig["version"], 1);
 }
+
+TEST_F(ConfigManagerTest, LoadInvalidJson)
+{
+    ConfigManager manager;
+    std::string configPath = (testDir / "invalid.json").string();
+
+    // Create a file with invalid JSON
+    {
+        std::ofstream file(configPath);
+        file << "{ \"key\": \"value\" "; // Missing closing brace
+        file.close();
+    }
+
+    // Load config (should fail and use default)
+    Result res = manager.load(configPath, true); // true for fullConfig validation
+    EXPECT_FALSE(res.success);
+
+    // Check if it fell back to defaults
+    EXPECT_EQ(manager.getConfigVersion(), 1);
+    EXPECT_EQ(manager.getDownloadSpeedLimit(), 0);
+}
+
+TEST_F(ConfigManagerTest, LoadInvalidConfigValues)
+{
+    ConfigManager manager;
+    std::string configPath = (testDir / "invalid_values.json").string();
+
+    // Create a file with valid JSON but invalid values
+    {
+        std::ofstream file(configPath);
+        file << R"({
+            "version": 1,
+            "settings": {
+                "speed_limits": {
+                    "download": -100,
+                    "upload": -50
+                }
+            }
+        })";
+        file.close();
+    }
+
+    // Load config (should fail validation and use default)
+    Result res = manager.load(configPath, true);
+    EXPECT_FALSE(res.success);
+
+    // Check if it fell back to defaults
+    EXPECT_EQ(manager.getDownloadSpeedLimit(), 0);
+    EXPECT_EQ(manager.getUploadSpeedLimit(), 0);
+}
+
+TEST_F(ConfigManagerTest, LoadEmptyFile)
+{
+    ConfigManager manager;
+    std::string configPath = (testDir / "empty.json").string();
+
+    // Create an empty file
+    {
+        std::ofstream file(configPath);
+        file.close();
+    }
+
+    // Load config (should fail parsing and use default)
+    Result res = manager.load(configPath, true);
+    EXPECT_FALSE(res.success);
+
+    // Check if it fell back to defaults
+    EXPECT_EQ(manager.getConfigVersion(), 1);
+}
+
+TEST_F(ConfigManagerTest, LoadTorrentsInvalidJson)
+{
+    ConfigManager manager;
+    std::string configPath = (testDir / "invalid_torrents.json").string();
+
+    // Create a file with invalid JSON
+    {
+        std::ofstream file(configPath);
+        file << "{ \"torrents\": [ "; // Missing closing bracket/brace
+        file.close();
+    }
+
+    std::vector<TorrentConfigData> torrents;
+    Result res = manager.loadTorrents(configPath, torrents);
+    EXPECT_FALSE(res.success);
+    EXPECT_TRUE(torrents.empty());
+}
