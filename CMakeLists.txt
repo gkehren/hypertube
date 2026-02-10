@@ -57,9 +57,7 @@ endif()
 set(SOURCES
     src/main.cpp
     src/app/App.cpp
-    src/app/ConfigManager.cpp
     src/app/TorrentManager.cpp
-    src/app/SearchEngine.cpp
     src/ui/UIManager.cpp
     src/ui/TorrentTableUI.cpp
     src/ui/TorrentDetailsUI.cpp
@@ -110,6 +108,17 @@ target_link_libraries(hypertube_utils PUBLIC
     LibtorrentRasterbar::torrent-rasterbar
 )
 
+# Create the search library
+add_library(hypertube_search STATIC
+    src/app/SearchEngine.cpp
+)
+
+target_link_libraries(hypertube_search PUBLIC
+    hypertube_config
+    hypertube_utils
+    CURL::libcurl
+)
+
 # Create the executable
 add_executable(hypertube ${SOURCES})
 
@@ -130,6 +139,8 @@ target_include_directories(ImGuiFileDialog PUBLIC ${imgui_SOURCE_DIR})
 # Link libraries using modern imported targets
 target_link_libraries(hypertube PRIVATE
     hypertube_utils
+    hypertube_config
+    hypertube_search
     Boost::filesystem
     Boost::system
     LibtorrentRasterbar::torrent-rasterbar
