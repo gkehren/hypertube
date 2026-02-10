@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <libtorrent/torrent_status.hpp>
 #include <libtorrent/torrent_handle.hpp>
 #include <libtorrent/peer_info.hpp>
@@ -22,5 +23,11 @@ namespace Utils {
     // Generates a string of flags representing the peer's state (e.g., "D U E").
     // Writes to the provided buffer.
     void getPeerFlags(const lt::peer_info& p, char* buf, size_t buf_size);
+
+    // Encodes a string for use in a URL.
+    std::string urlEncode(const std::string &value);
+
+    // Formats a magnet URI from an infoHash and a name.
+    std::string formatMagnetUri(const std::string &infoHash, const std::string &name);
 
 }

@@ -1,5 +1,6 @@
 #include "SearchEngine.hpp"
 #include "ConfigManager.hpp"
+#include "utils/StringUtils.hpp"
 #include <curl/curl.h>
 #include <json.hpp>
 #include <iostream>
@@ -191,7 +192,7 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 
 std::string SearchEngine::buildSearchUrl(const SearchQuery &query) const
 {
-	std::string url = apiUrl + "?q=" + urlEncode(query.query);
+	std::string url = apiUrl + "?q=" + Utils::urlEncode(query.query);
 
 	// Add size parameter only if explicitly set and not default
 	if (query.maxResults > 0 && query.maxResults != 50)
@@ -265,7 +266,7 @@ Result SearchEngine::parseSearchResponse(const std::string &response, std::vecto
 			}
 
 			// Generate magnet URI
-			result.magnetUri = formatMagnetUri(result.infoHash, result.name);
+			result.magnetUri = Utils::formatMagnetUri(result.infoHash, result.name);
 
 			// Parse numeric fields safely
 			auto itSizeBytes = item.find("size_bytes");
@@ -439,7 +440,7 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 			seenHashes.insert(result.infoHash);
 
 			// Generate magnet URI
-			result.magnetUri = formatMagnetUri(result.infoHash, result.name);
+			result.magnetUri = Utils::formatMagnetUri(result.infoHash, result.name);
 
 			// Parse numeric fields safely
 			auto itSizeBytes = item.find("size_bytes");
@@ -529,43 +530,6 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 	{
 		return Result::Failure("Parse Error: " + std::string(e.what()));
 	}
-}
-
-std::string SearchEngine::urlEncode(const std::string &value) const
-{
-	static const char lookup[] = "0123456789ABCDEF";
-	std::string escaped;
-	escaped.reserve(value.length() * 3);
-
-	for (char c : value)
-	{
-		if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~')
-		{
-			escaped += c;
-		}
-		else
-		{
-			escaped += '%';
-			escaped += lookup[(c >> 4) & 0x0F];
-			escaped += lookup[c & 0x0F];
-		}
-	}
-
-	return escaped;
-}
-
-std::string SearchEngine::formatMagnetUri(const std::string &infoHash, const std::string &name) const
-{
-	std::string magnet = "magnet:?xt=urn:btih:" + infoHash;
-	if (!name.empty())
-	{
-		magnet += "&dn=" + urlEncode(name);
-	}
-	// Add some popular trackers
-	magnet += "&tr=udp://tracker.openbittorrent.com:80"
-			  "&tr=udp://tracker.opentrackr.org:1337"
-			  "&tr=udp://tracker.coppersurfer.tk:6969";
-	return magnet;
 }
 
 void SearchEngine::addToSearchHistory(const std::string &query)
