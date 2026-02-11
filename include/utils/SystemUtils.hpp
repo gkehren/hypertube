@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <ctime>
 
 namespace Utils {
     namespace SystemUtils {
@@ -13,5 +14,16 @@ namespace Utils {
          * @param path The path to open. Can be a directory or a file.
          */
         void openFileExplorer(const std::string& path);
+
+        /**
+         * @brief Thread-safe wrapper for std::localtime.
+         *
+         * Uses localtime_r on POSIX and localtime_s on Windows.
+         *
+         * @param time The time_t value to convert.
+         * @param result The tm structure to fill with the local time.
+         * @return true if successful, false otherwise.
+         */
+        bool getLocalTime(const std::time_t& time, std::tm& result);
     }
 }

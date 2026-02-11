@@ -1,7 +1,9 @@
 #include "LogsUI.hpp"
 #include "TorrentManager.hpp"
+#include "SystemUtils.hpp"
 #include <iomanip>
 #include <sstream>
+#include <ctime>
 
 LogsUI::LogsUI(TorrentManager &torrentManager)
 	: torrentManager(torrentManager)
@@ -111,9 +113,17 @@ std::string LogsUI::formatTimestamp(const std::chrono::system_clock::time_point 
 	auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()) % 1000;
 	
 	std::stringstream ss;
-	// Note: std::localtime is used here for simplicity but is not thread-safe.
-	// In a multi-threaded context, consider using std::localtime_r (POSIX) or localtime_s (Windows)
-	ss << std::put_time(std::localtime(&time_t), "%H:%M:%S");
+
+	std::tm tm_buf = {};
+	if (Utils::SystemUtils::getLocalTime(time_t, tm_buf))
+	{
+		ss << std::put_time(&tm_buf, "%H:%M:%S");
+	}
+	else
+	{
+		ss << "00:00:00";
+	}
+
 	ss << '.' << std::setfill('0') << std::setw(3) << ms.count();
 	
 	return ss.str();
