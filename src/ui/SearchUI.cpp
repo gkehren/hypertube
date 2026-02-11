@@ -1,5 +1,6 @@
 #include "SearchUI.hpp"
 #include "StringUtils.hpp"
+#include "SystemUtils.hpp"
 #include "Theme.hpp"
 #include <algorithm>
 #include <iostream>
@@ -764,16 +765,15 @@ void SearchUI::formatUnixTime(int64_t unixTime, char *buffer, size_t bufferSize)
 	}
 
 	// Use localtime for local time
-	std::tm *tm = std::localtime(&time);
-
-	if (!tm)
+	std::tm tm_buf = {};
+	if (!Utils::SystemUtils::getLocalTime(time, tm_buf))
 	{
 		snprintf(buffer, bufferSize, "TM Error");
 		return;
 	}
 
 	// Use manual formatting
-	if (std::strftime(buffer, bufferSize, "%Y-%m-%d", tm) == 0)
+	if (std::strftime(buffer, bufferSize, "%Y-%m-%d", &tm_buf) == 0)
 	{
 		snprintf(buffer, bufferSize, "Format Error");
 	}

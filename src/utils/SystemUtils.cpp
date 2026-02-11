@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <thread>
 #include <iostream>
+#include <ctime>
 
 namespace Utils {
     namespace SystemUtils {
@@ -27,6 +28,18 @@ namespace Utils {
                     std::cerr << "Failed to open file explorer with command: " << command << std::endl;
                 }
             }).detach();
+        }
+
+        bool getLocalTime(const std::time_t& time, std::tm& result) {
+#ifdef _WIN32
+            // Windows localtime_s returns 0 on success.
+            // Signature: errno_t localtime_s(struct tm* _tm, const time_t *time);
+            return localtime_s(&result, &time) == 0;
+#else
+            // POSIX localtime_r returns pointer to result on success, NULL on error.
+            // Signature: struct tm *localtime_r(const time_t *timep, struct tm *result);
+            return localtime_r(&time, &result) != nullptr;
+#endif
         }
 
     }
