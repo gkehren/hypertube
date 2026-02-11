@@ -11,6 +11,8 @@
 #include <vector>
 #include <chrono>
 #include <mutex>
+#include <memory>
+#include <optional>
 
 // Forward declaration
 struct TorrentConfigData;
@@ -40,7 +42,8 @@ public:
 	int getUploadSpeedLimit() const;
 
 	// Status cache methods
-	const lt::torrent_status *getCachedStatus(const lt::sha1_hash &hash) const;
+	std::optional<lt::torrent_status> getCachedStatus(const lt::sha1_hash &hash) const;
+	std::shared_ptr<const std::unordered_map<lt::sha1_hash, lt::torrent_status>> getStatusCache() const;
 	void refreshStatusCache();
 	void setCacheRefreshInterval(int milliseconds);
 	bool shouldRefreshCache() const;
@@ -55,7 +58,7 @@ private:
 
 	// Status cache
 	mutable std::mutex cacheMutex;
-	std::unordered_map<lt::sha1_hash, lt::torrent_status> statusCache;
+	std::shared_ptr<const std::unordered_map<lt::sha1_hash, lt::torrent_status>> statusCache = std::make_shared<std::unordered_map<lt::sha1_hash, lt::torrent_status>>();
 	std::chrono::steady_clock::time_point lastCacheRefresh;
 	int cacheRefreshIntervalMs = 250; // Default 250ms
 };

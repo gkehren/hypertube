@@ -18,7 +18,7 @@ void TorrentDetailsUI::displayTorrentDetails(const lt::torrent_handle &selectedT
 	if (selectedTorrent.is_valid())
 	{
 		// Try to get cached status
-		const lt::torrent_status *cachedStatus = torrentManager.getCachedStatus(selectedTorrent.info_hash());
+		std::optional<lt::torrent_status> cachedStatus = torrentManager.getCachedStatus(selectedTorrent.info_hash());
 		lt::torrent_status status;
 
 		if (cachedStatus)
