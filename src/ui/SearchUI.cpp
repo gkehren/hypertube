@@ -351,7 +351,7 @@ void SearchUI::displayFavoriteRow(const TorrentSearchResult &result, int index)
 	ImGui::TableSetColumnIndex(1);
 	ImGui::AlignTextToFramePadding();
 	char sizeBuf[64];
-	formatBytes(result.sizeBytes, false, sizeBuf, sizeof(sizeBuf));
+	Utils::formatBytes(result.sizeBytes, false, sizeBuf, sizeof(sizeBuf));
 	ImGui::Text("%s", sizeBuf);
 
 	// Seeders with color coding
@@ -494,7 +494,7 @@ void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result,
 	ImGui::TableSetColumnIndex(1);
 	ImGui::AlignTextToFramePadding();
 	char sizeBuf[64];
-	formatBytes(result.sizeBytes, false, sizeBuf, sizeof(sizeBuf));
+	Utils::formatBytes(result.sizeBytes, false, sizeBuf, sizeof(sizeBuf));
 	ImGui::Text("%s", sizeBuf);
 
 	// Seeders with color coding
@@ -591,7 +591,7 @@ void SearchUI::displaySearchResultRow(const TorrentSearchResult &result, int ind
 	ImGui::TableSetColumnIndex(1);
 	ImGui::AlignTextToFramePadding();
 	char sizeBuf[64];
-	formatBytes(result.sizeBytes, false, sizeBuf, sizeof(sizeBuf));
+	Utils::formatBytes(result.sizeBytes, false, sizeBuf, sizeof(sizeBuf));
 	ImGui::Text("%s", sizeBuf);
 
 	// Seeders
@@ -725,11 +725,6 @@ void SearchUI::loadMoreResults()
 													 hasPendingResults = true;
 												 });
 	}
-}
-
-void SearchUI::formatBytes(size_t bytes, bool speed, char *buffer, size_t bufferSize)
-{
-	Utils::formatBytes(bytes, speed, buffer, bufferSize);
 }
 
 void SearchUI::formatUnixTime(int64_t unixTime, char *buffer, size_t bufferSize)
