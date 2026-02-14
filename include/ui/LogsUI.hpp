@@ -42,6 +42,7 @@ public:
 private:
 	TorrentManager &torrentManager;
 	std::deque<LogEntry> logEntries;
+	std::vector<const LogEntry*> m_filteredEntries;
 	size_t maxLogEntries = 1000; // Default max entries
 	bool autoScroll = true;
 

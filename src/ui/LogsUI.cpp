@@ -40,6 +40,9 @@ void LogsUI::displayLogsWindow()
 	// Display logs in a scrollable region
 	ImGui::BeginChild("LogScrolling", ImVec2(0, -30), false, ImGuiWindowFlags_HorizontalScrollbar);
 
+	// Update filtered cache
+	m_filteredEntries.clear();
+	m_filteredEntries.reserve(logEntries.size());
 	for (const auto &entry : logEntries)
 	{
 		// Apply filters
@@ -50,12 +53,24 @@ void LogsUI::displayLogsWindow()
 		{
 			continue;
 		}
+		m_filteredEntries.push_back(&entry);
+	}
 
-		// Display timestamp, category, and message
-		std::string timestamp = formatTimestamp(entry.timestamp);
-		ImGui::PushStyleColor(ImGuiCol_Text, entry.color);
-		ImGui::TextWrapped("[%s] [%s] %s", timestamp.c_str(), entry.category.c_str(), entry.message.c_str());
-		ImGui::PopStyleColor();
+	ImGuiListClipper clipper;
+	clipper.Begin(static_cast<int>(m_filteredEntries.size()));
+
+	while (clipper.Step())
+	{
+		for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+		{
+			const auto &entry = *m_filteredEntries[i];
+
+			// Display timestamp, category, and message
+			std::string timestamp = formatTimestamp(entry.timestamp);
+			ImGui::PushStyleColor(ImGuiCol_Text, entry.color);
+			ImGui::TextWrapped("[%s] [%s] %s", timestamp.c_str(), entry.category.c_str(), entry.message.c_str());
+			ImGui::PopStyleColor();
+		}
 	}
 
 	if (autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
