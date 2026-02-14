@@ -113,6 +113,64 @@ TEST(StringUtilsTest, FormatBytesLarge) {
     EXPECT_STREQ(buf, "1 TB");
 }
 
+TEST(StringUtilsTest, ComputeETA) {
+    char buf[64];
+    std::memset(buf, 0, sizeof(buf));
+    lt::torrent_status status;
+
+    // Not downloading
+    status.state = lt::torrent_status::seeding;
+    Utils::computeETA(status, buf, sizeof(buf));
+    EXPECT_STREQ(buf, "N/A");
+
+    // Downloading but zero rate
+    status.state = lt::torrent_status::downloading;
+    status.download_payload_rate = 0;
+    Utils::computeETA(status, buf, sizeof(buf));
+    EXPECT_STREQ(buf, "N/A");
+
+    // Seconds
+    status.download_payload_rate = 100;
+    status.total_wanted = 1000;
+    status.total_wanted_done = 500; // 500 / 100 = 5s
+    Utils::computeETA(status, buf, sizeof(buf));
+    EXPECT_STREQ(buf, "5 seconds");
+
+    // Minutes
+    status.download_payload_rate = 10;
+    status.total_wanted = 2000;
+    status.total_wanted_done = 1000; // 1000 / 10 = 100s = 1m 40s -> 1m
+    Utils::computeETA(status, buf, sizeof(buf));
+    EXPECT_STREQ(buf, "1 minutes");
+
+    // Hours
+    status.download_payload_rate = 10;
+    status.total_wanted = 73000;
+    status.total_wanted_done = 1000; // 72000 / 10 = 7200s = 120m = 2h
+    Utils::computeETA(status, buf, sizeof(buf));
+    EXPECT_STREQ(buf, "2 hours");
+
+    // Days
+    status.download_payload_rate = 1;
+    status.total_wanted = 172800;
+    status.total_wanted_done = 0; // 172800s = 2880m = 48h = 2d
+    Utils::computeETA(status, buf, sizeof(buf));
+    EXPECT_STREQ(buf, "2 days");
+}
+
+TEST(StringUtilsTest, ComputeETABufferTruncation) {
+    char buf[4];
+    std::memset(buf, 0, sizeof(buf));
+    lt::torrent_status status;
+    status.state = lt::torrent_status::downloading;
+    status.download_payload_rate = 100;
+    status.total_wanted = 1000;
+    status.total_wanted_done = 500; // 5 seconds
+
+    Utils::computeETA(status, buf, sizeof(buf));
+    EXPECT_STREQ(buf, "5 s"); // "5 s" + null
+}
+
 TEST(StringUtilsTest, FormatBytesBufferTruncation) {
     char buf[4]; // Size 4: can hold 3 chars + null
     // "1 KB" needs 5 chars (4 + null) to fit completely.
