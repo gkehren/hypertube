@@ -7,6 +7,27 @@ project(hypertube)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+# Enable Position Independent Code (PIE)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+# Security Hardening Flags
+if(MSVC)
+  add_compile_options(/GS /sdl /guard:cf)
+  add_link_options(/DYNAMICBASE /NXCOMPAT /guard:cf)
+else()
+  # GCC/Clang
+  add_compile_options(-fstack-protector-strong -fstack-clash-protection -fcf-protection)
+  add_compile_options(-Wformat -Wformat-security)
+
+  # Linker flags (RELRO, BIND_NOW)
+  if(NOT APPLE)
+    add_link_options("-Wl,-z,relro" "-Wl,-z,now")
+  endif()
+
+  # Fortify Source (Requires optimization, enabled for non-Debug builds)
+  add_compile_definitions($<$<NOT:$<CONFIG:Debug>>:_FORTIFY_SOURCE=2>)
+endif()
+
 # Add compile definition for Windows to avoid SDK warnings
 if(WIN32)
   add_compile_definitions(_WIN32_WINNT=0x0601)
