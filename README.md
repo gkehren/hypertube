@@ -1,8 +1,20 @@
 # Hypertube a BitTorrent Client
 
-A lightweight and fast cross-platform BitTorrent client built with C++ and Dear ImGui. This project aims to provide basic BitTorrent functionalities, a user-friendly interface.
+A lightweight and fast cross-platform BitTorrent client built with C++ and Dear ImGui. This project aims to provide basic BitTorrent functionalities with a modern, intuitive Qt-like interface inspired by qBittorrent.
 
 ## Features
+
+### User Interface
+- **Qt-like Design**: Modern interface with flatter surfaces, clearer borders, and refined spacing inspired by qBittorrent
+- **Comprehensive Layout**:
+  - Left sidebar for category filtering (All, Downloading, Seeding, Completed, Paused, Active, Inactive)
+  - Main torrent list with detailed columns (Progress, Status, Seeds, Peers, Speeds, ETA, Ratio)
+  - Bottom panel split between torrent details and real-time logs
+- **Toolbar**: Quick access to common actions (Add Torrent, Add Magnet, Start, Pause, Remove, Preferences)
+- **Status Bar**: Global statistics display (download/upload speeds, torrent counts by status)
+- **Context Menu**: Organized menu with torrent control, queue management, and file operations
+- **Tabbed Preferences**: Settings organized into Appearance, Connection, and Downloads tabs
+- **5 Pre-built Themes**: Dark (Qt-style), Ocean, Nord, Dracula, and CyberPunk with instant preview
 
 ### Already Implemented
 - Cross-platform GUI with Dear ImGui and docking support
@@ -13,12 +25,16 @@ A lightweight and fast cross-platform BitTorrent client built with C++ and Dear 
 - Peer information viewing
 - File details and progress tracking
 - Tracker information display
+- Queue management (move up/down/top/bottom)
+- Force recheck and force reannounce
 - Context menu operations (open folder, copy magnet URI, queue management)
 - File dialog integration for torrent/save path selection
 - Configuration management with JSON
 - Automatic torrent state persistence
 - Integrated torrent search using torrents-csv.com API
 - Search history and favorites management
+- Speed limits configuration with live preview
+- Global download/upload statistics
 
 ### Roadmap (Future Features)
 
@@ -182,7 +198,14 @@ Stores the state of active torrents to restore them when the application restart
 ## Key Components
 
 ### UI with Dear ImGui
-The user interface is designed using Dear ImGui, providing a lightweight and efficient way to create a user-friendly interface for managing torrents.
+The user interface is designed using Dear ImGui with a modern Qt-like aesthetic, providing a lightweight and efficient interface that's intuitive and suitable for production use:
+
+- **Qt-Style Theme Engine**: Custom theming system with 5 pre-built themes featuring flatter surfaces, clearer borders, and refined spacing that mimics Qt applications
+- **Docking Layout**: Flexible workspace similar to qBittorrent with customizable panels for torrents, details, and logs
+- **Enhanced Torrent Table**: 11-column table with comprehensive information (Queue, Name, Size, Progress, Status, Seeds, Peers, Download Speed, Upload Speed, ETA, Ratio)
+- **Toolbar & Status Bar**: Quick actions toolbar and real-time global statistics display
+- **Organized Context Menus**: Logically grouped actions (Control, Queue Management, Actions, File Operations, Remove)
+- **Tabbed Preferences**: Clean settings interface organized by category (Appearance, Connection, Downloads)
 
 ### BitTorrent Operations with libtorrent
 Libtorrent is used to handle all BitTorrent protocol operations, including peer connections, data transfer, and tracker communication.
