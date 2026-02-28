@@ -424,66 +424,108 @@ void UIManager::displayPreferencesDialog()
 
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(450, 380), ImGuiCond_Appearing);
+	ImGui::SetNextWindowSize(ImVec2(600, 450), ImGuiCond_Appearing);
 
 	if (ImGui::BeginPopupModal("Preferences", nullptr, ImGuiWindowFlags_NoResize))
 	{
-		// Theme Section
-		HypertubeTheme::drawSectionHeader("Appearance");
-
-		ImGui::Text("Theme:");
-		ImGui::SameLine(250);
-		ImGui::SetNextItemWidth(170);
-		const char *themeNames[] = {"Dark", "Ocean", "Nord", "Dracula", "CyberPunk"};
-		if (ImGui::Combo("##ThemeCombo", &tempSelectedTheme, themeNames, IM_ARRAYSIZE(themeNames)))
+		// Tabbed interface for preferences
+		if (ImGui::BeginTabBar("PreferencesTabs", ImGuiTabBarFlags_None))
 		{
-			// Preview theme immediately
-			HypertubeTheme::applyTheme(static_cast<HypertubeTheme::ThemeType>(tempSelectedTheme));
+			// Appearance Tab
+			if (ImGui::BeginTabItem("Appearance"))
+			{
+				ImGui::Spacing();
+				HypertubeTheme::drawSectionHeader("Theme");
+
+				ImGui::Text("Color Scheme:");
+				ImGui::SameLine(200);
+				ImGui::SetNextItemWidth(170);
+				const char *themeNames[] = {"Dark", "Ocean", "Nord", "Dracula", "CyberPunk"};
+				if (ImGui::Combo("##ThemeCombo", &tempSelectedTheme, themeNames, IM_ARRAYSIZE(themeNames)))
+				{
+					// Preview theme immediately
+					HypertubeTheme::applyTheme(static_cast<HypertubeTheme::ThemeType>(tempSelectedTheme));
+				}
+				HypertubeTheme::drawTooltip("Choose the color theme for the application");
+
+				ImGui::Spacing();
+				ImGui::Spacing();
+
+				ImGui::EndTabItem();
+			}
+
+			// Connection Tab
+			if (ImGui::BeginTabItem("Connection"))
+			{
+				ImGui::Spacing();
+				HypertubeTheme::drawSectionHeader("Speed Limits");
+
+				// Download speed limit
+				ImGui::Text("Download Limit (KB/s):");
+				ImGui::SameLine(200);
+				ImGui::SetNextItemWidth(120);
+				int downloadKBps = tempDownloadSpeedLimit / 1024;
+				if (ImGui::InputInt("##DownloadLimit", &downloadKBps, 1, 100))
+				{
+					if (downloadKBps < 0)
+						downloadKBps = 0;
+					tempDownloadSpeedLimit = downloadKBps * 1024;
+				}
+				HypertubeTheme::drawTooltip("Set to 0 for unlimited download speed");
+
+				ImGui::Spacing();
+
+				// Upload speed limit
+				ImGui::Text("Upload Limit (KB/s):");
+				ImGui::SameLine(200);
+				ImGui::SetNextItemWidth(120);
+				int uploadKBps = tempUploadSpeedLimit / 1024;
+				if (ImGui::InputInt("##UploadLimit", &uploadKBps, 1, 100))
+				{
+					if (uploadKBps < 0)
+						uploadKBps = 0;
+					tempUploadSpeedLimit = uploadKBps * 1024;
+				}
+				HypertubeTheme::drawTooltip("Set to 0 for unlimited upload speed");
+
+				ImGui::Spacing();
+				ImGui::Spacing();
+
+				ImGui::EndTabItem();
+			}
+
+			// Downloads Tab
+			if (ImGui::BeginTabItem("Downloads"))
+			{
+				ImGui::Spacing();
+				HypertubeTheme::drawSectionHeader("Save Location");
+
+				ImGui::Text("Default Save Path:");
+				ImGui::SameLine(200);
+				ImGui::SetNextItemWidth(300);
+				char pathBuffer[512];
+				strncpy(pathBuffer, defaultSavePath.c_str(), sizeof(pathBuffer) - 1);
+				pathBuffer[sizeof(pathBuffer) - 1] = '\0';
+				if (ImGui::InputText("##SavePath", pathBuffer, sizeof(pathBuffer)))
+				{
+					defaultSavePath = pathBuffer;
+				}
+				HypertubeTheme::drawTooltip("Default directory for saving downloaded files");
+
+				ImGui::Spacing();
+				ImGui::Spacing();
+
+				ImGui::EndTabItem();
+			}
+
+			ImGui::EndTabBar();
 		}
-		HypertubeTheme::drawTooltip("Choose the color theme for the application");
 
-		ImGui::Spacing();
-		ImGui::Spacing();
-
-		// Speed Limits Section
-		HypertubeTheme::drawSectionHeader("Speed Limits");
-
-		// Download speed limit
-		ImGui::Text("Download Speed Limit (KB/s):");
-		ImGui::SameLine(250);
-		ImGui::SetNextItemWidth(120);
-		int downloadKBps = tempDownloadSpeedLimit / 1024;
-		if (ImGui::InputInt("##DownloadLimit", &downloadKBps, 1, 100))
-		{
-			if (downloadKBps < 0)
-				downloadKBps = 0;
-			tempDownloadSpeedLimit = downloadKBps * 1024;
-		}
-		HypertubeTheme::drawTooltip("Set to 0 for unlimited download speed");
-
-		ImGui::Spacing();
-		ImGui::Spacing();
-
-		// Upload speed limit
-		ImGui::Text("Upload Speed Limit (KB/s):");
-		ImGui::SameLine(250);
-		ImGui::SetNextItemWidth(120);
-		int uploadKBps = tempUploadSpeedLimit / 1024;
-		if (ImGui::InputInt("##UploadLimit", &uploadKBps, 1, 100))
-		{
-			if (uploadKBps < 0)
-				uploadKBps = 0;
-			tempUploadSpeedLimit = uploadKBps * 1024;
-		}
-		HypertubeTheme::drawTooltip("Set to 0 for unlimited upload speed");
-
-		ImGui::Spacing();
 		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::Spacing();
-		ImGui::Spacing();
 
-		// Centered buttons
+		// Centered buttons at the bottom
 		float buttonWidth = 130.0f;
 		float spacing = 15.0f;
 		float totalWidth = buttonWidth * 2 + spacing;
