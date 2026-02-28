@@ -223,87 +223,97 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 {
 	if (ImGui::BeginPopupContextItem("##context", ImGuiPopupFlags_MouseButtonRight))
 	{
-		if (ImGui::MenuItem("Open"))
-		{
-		}
+		bool isPaused = handle.flags() & lt::torrent_flags::paused;
+		const char *pauseLabel = isPaused ? "Resume" : "Pause";
 
-		if (ImGui::MenuItem("Open Containing Folder"))
+		// Torrent control section
+		if (ImGui::MenuItem("Start", nullptr, false, isPaused))
 		{
-			Utils::SystemUtils::openFileExplorer(handle.status().save_path);
+			handle.resume();
 		}
-
-		if (ImGui::MenuItem("Copy Magnet URI"))
+		if (ImGui::MenuItem(pauseLabel))
 		{
-			ImGui::SetClipboardText(lt::make_magnet_uri(handle).c_str());
+			if (isPaused)
+				handle.resume();
+			else
+				handle.pause();
 		}
-
 		if (ImGui::MenuItem("Force Start"))
 		{
 			handle.force_recheck();
 			handle.resume();
 		}
 
-		if (ImGui::MenuItem("Start"))
-		{
-			handle.resume();
-		}
+		ImGui::Separator();
 
-		if (ImGui::MenuItem("Pause"))
-		{
-			if (handle.flags() & lt::torrent_flags::paused)
-				handle.resume();
-			else
-				handle.pause();
-		}
-
-		if (ImGui::MenuItem("Stop"))
-		{
-			handle.pause();
-			handle.force_recheck();
-		}
-
-		if (ImGui::MenuItem("Move Up Queue"))
+		// Queue management section
+		if (ImGui::MenuItem("Move Up Queue", "Ctrl+Up"))
 		{
 			handle.queue_position_up();
 		}
-
-		if (ImGui::MenuItem("Move Down Queue"))
+		if (ImGui::MenuItem("Move Down Queue", "Ctrl+Down"))
 		{
 			handle.queue_position_down();
 		}
+		if (ImGui::MenuItem("Move to Top", "Ctrl+Shift+Up"))
+		{
+			handle.queue_position_top();
+		}
+		if (ImGui::MenuItem("Move to Bottom", "Ctrl+Shift+Down"))
+		{
+			handle.queue_position_bottom();
+		}
 
+		ImGui::Separator();
+
+		// Actions section
+		if (ImGui::MenuItem("Force Recheck"))
+		{
+			handle.force_recheck();
+		}
+		if (ImGui::MenuItem("Force Reannounce"))
+		{
+			handle.force_reannounce();
+		}
+
+		ImGui::Separator();
+
+		// File operations section
+		if (ImGui::MenuItem("Open Containing Folder"))
+		{
+			Utils::SystemUtils::openFileExplorer(handle.status().save_path);
+		}
+		if (ImGui::MenuItem("Copy Magnet Link"))
+		{
+			ImGui::SetClipboardText(lt::make_magnet_uri(handle).c_str());
+		}
+
+		ImGui::Separator();
+
+		// Remove section
 		if (ImGui::BeginMenu("Remove"))
 		{
-			if (ImGui::MenuItem("Remove"))
+			if (ImGui::MenuItem("Remove Torrent"))
 			{
 				if (onRemoveTorrent)
 					onRemoveTorrent(info_hash, REMOVE_TORRENT);
 			}
-			if (ImGui::MenuItem("Remove with Data"))
+			if (ImGui::MenuItem("Remove Torrent and Files"))
 			{
 				if (onRemoveTorrent)
 					onRemoveTorrent(info_hash, REMOVE_TORRENT_DATA);
 			}
-			if (ImGui::MenuItem("Remove with .torrent"))
+			if (ImGui::MenuItem("Remove Torrent and .torrent"))
 			{
 				if (onRemoveTorrent)
 					onRemoveTorrent(info_hash, REMOVE_TORRENT_FILES);
 			}
-			if (ImGui::MenuItem("Remove with Data & .torrent"))
+			if (ImGui::MenuItem("Remove Torrent, Files and .torrent"))
 			{
 				if (onRemoveTorrent)
 					onRemoveTorrent(info_hash, REMOVE_TORRENT_FILES_AND_DATA);
 			}
 			ImGui::EndMenu();
-		}
-
-		if (ImGui::MenuItem("Update Tracker"))
-		{
-			handle.force_reannounce();
-		}
-
-		if (ImGui::MenuItem("Properties"))
-		{
 		}
 
 		ImGui::EndPopup();
