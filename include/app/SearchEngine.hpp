@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Result.hpp"
+#include "SearchProvider.hpp"
 #include <string>
 #include <vector>
 #include <memory>
@@ -88,6 +89,12 @@ public:
 	void setTimeout(int seconds);
 	void setMaxRetries(int retries);
 
+	// Provider management
+	void setActiveProvider(const std::string &providerName);
+	const std::string &getActiveProviderName() const;
+	std::vector<std::string> getAvailableProviders() const;
+	std::shared_ptr<SearchProvider> getActiveProvider() const { return activeProvider; }
+
 	// Status
 	bool isSearching() const;
 	void cancelCurrentSearch();
@@ -103,17 +110,25 @@ private:
 	std::mutex searchMutex;
 	std::thread searchThread;
 
+	// Provider management
+	std::shared_ptr<SearchProvider> activeProvider;
+	std::shared_ptr<TorrentsCsvProvider> torrentsCsvProvider;
+	std::shared_ptr<BitsearchProvider> bitsearchProvider;
+	std::shared_ptr<MultiProvider> multiProvider;
+	std::string activeProviderName;
+
 	std::vector<std::string> searchHistory;
 	std::vector<TorrentSearchResult> favorites;
 	std::atomic<uint64_t> favoritesRevision{0};
 	std::unordered_set<std::string> favoriteHashes;
 	mutable std::mutex favoritesMutex;
 
-	// HTTP client methods
+	// HTTP client methods (kept for backward compatibility)
 	Result makeHttpRequest(const std::string &url, std::string &response);
 	std::string buildSearchUrl(const SearchQuery &query) const;
 	Result parseSearchResponse(const std::string &response, std::vector<TorrentSearchResult> &results);
 	Result parseSearchResponse(const std::string &response, SearchResponse &searchResponse);
 
 	// Utility methods
+	void initializeProviders();
 };
