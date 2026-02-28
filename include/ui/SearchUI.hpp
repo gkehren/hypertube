@@ -36,6 +36,9 @@ public:
 	void displayDirectDownload();
 	void handleDirectDownload(const std::string &input);
 
+	// Provider management
+	void setConfigManager(class ConfigManager *configManager) { this->configManager = configManager; }
+
 	// Selection handling
 	void handleSearchResultSelection(const TorrentSearchResult &result);
 
@@ -70,6 +73,9 @@ private:
 	std::string nextToken;
 	bool hasMoreResults = true;
 	int selectedProviderIndex = 0;
+
+	// Configuration manager for persistence
+	class ConfigManager *configManager = nullptr;
 
 	// Async search state (protected by mutex)
 	std::mutex resultsMutex;

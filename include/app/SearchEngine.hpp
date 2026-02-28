@@ -95,6 +95,10 @@ public:
 	std::vector<std::string> getAvailableProviders() const;
 	std::shared_ptr<SearchProvider> getActiveProvider() const { return activeProvider; }
 
+	// Provider persistence
+	void loadProviderFromConfig(class ConfigManager &configManager);
+	void saveProviderToConfig(class ConfigManager &configManager);
+
 	// Status
 	bool isSearching() const;
 	void cancelCurrentSearch();

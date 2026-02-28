@@ -759,6 +759,18 @@ void SearchEngine::setActiveProvider(const std::string &providerName)
 	std::cout << "Switched to provider: " << activeProviderName << std::endl;
 }
 
+void SearchEngine::loadProviderFromConfig(ConfigManager &configManager)
+{
+	std::string savedProvider = configManager.getSearchProvider();
+	setActiveProvider(savedProvider);
+}
+
+void SearchEngine::saveProviderToConfig(ConfigManager &configManager)
+{
+	configManager.setSearchProvider(activeProviderName);
+}
+
+
 const std::string &SearchEngine::getActiveProviderName() const
 {
 	return activeProviderName;

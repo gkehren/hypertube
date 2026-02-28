@@ -951,6 +951,12 @@ void SearchUI::displayProviderSelection()
 			{
 				selectedProviderIndex = static_cast<int>(i);
 				searchEngine.setActiveProvider(providers[i]);
+
+				// Save provider preference to configuration
+				if (configManager)
+				{
+					searchEngine.saveProviderToConfig(*configManager);
+				}
 			}
 			if (isSelected)
 			{
