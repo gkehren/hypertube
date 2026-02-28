@@ -17,69 +17,69 @@ namespace HypertubeTheme
 	{
 		ImGuiStyle &style = ImGui::GetStyle();
 
-		// Qt-like styling - flatter, clearer borders, refined spacing
-		// Window styling
-		style.WindowPadding = ImVec2(8.0f, 8.0f);
-		style.WindowRounding = 0.0f;  // Qt uses sharp corners
-		style.WindowBorderSize = 1.0f;
+		// Modern styling inspired by macOS, iOS 26, and Windows 11
+		// Window styling - rounded and spacious
+		style.WindowPadding = ImVec2(14.0f, 14.0f);
+		style.WindowRounding = 12.0f;  // Modern rounded corners
+		style.WindowBorderSize = 0.0f;  // No visible borders for clean look
 		style.WindowMinSize = ImVec2(100.0f, 50.0f);
-		style.WindowTitleAlign = ImVec2(0.0f, 0.5f);  // Left-aligned like Qt
+		style.WindowTitleAlign = ImVec2(0.5f, 0.5f);  // Centered title like macOS
 		style.WindowMenuButtonPosition = ImGuiDir_Left;
 
-		// Frame styling - reduced rounding for Qt look
-		style.FramePadding = ImVec2(8.0f, 4.0f);
-		style.FrameRounding = 2.0f;  // Subtle rounding
-		style.FrameBorderSize = 1.0f;  // Qt has visible borders
+		// Frame styling - generous rounding for modern look
+		style.FramePadding = ImVec2(12.0f, 8.0f);
+		style.FrameRounding = 8.0f;  // Smooth rounded corners
+		style.FrameBorderSize = 0.0f;  // Borderless for modern look
 
-		// Item spacing - tighter like Qt
-		style.ItemSpacing = ImVec2(8.0f, 4.0f);
-		style.ItemInnerSpacing = ImVec2(6.0f, 4.0f);
+		// Item spacing - more spacious and breathable
+		style.ItemSpacing = ImVec2(12.0f, 8.0f);
+		style.ItemInnerSpacing = ImVec2(8.0f, 6.0f);
 
 		// Touch/Click area
 		style.TouchExtraPadding = ImVec2(0.0f, 0.0f);
 
 		// Indent
-		style.IndentSpacing = 20.0f;
+		style.IndentSpacing = 22.0f;
 
-		// Scrollbar - wider like Qt
-		style.ScrollbarSize = 16.0f;
-		style.ScrollbarRounding = 0.0f;  // Qt scrollbars are rectangular
+		// Scrollbar - sleeker modern style
+		style.ScrollbarSize = 14.0f;
+		style.ScrollbarRounding = 9.0f;  // Fully rounded scrollbars
 
-		// Grab (sliders, scrollbars)
-		style.GrabMinSize = 10.0f;
-		style.GrabRounding = 0.0f;
+		// Grab (sliders, scrollbars) - rounded like iOS
+		style.GrabMinSize = 12.0f;
+		style.GrabRounding = 8.0f;
 
-		// Tabs - Qt-like tab styling
-		style.TabRounding = 2.0f;  // Slight rounding on tabs
-		style.TabBorderSize = 1.0f;
-		style.TabBarBorderSize = 1.0f;
+		// Tabs - smooth rounded tabs like modern UIs
+		style.TabRounding = 8.0f;
+		style.TabBorderSize = 0.0f;
+		style.TabBarBorderSize = 0.0f;
 
-		// Tables - more padding like Qt
-		style.CellPadding = ImVec2(6.0f, 4.0f);
+		// Tables - more generous padding
+		style.CellPadding = ImVec2(8.0f, 6.0f);
 
 		// Buttons
 		style.ButtonTextAlign = ImVec2(0.5f, 0.5f);
 
-		// Popups
-		style.PopupRounding = 2.0f;
-		style.PopupBorderSize = 1.0f;
+		// Popups - rounded like macOS
+		style.PopupRounding = 10.0f;
+		style.PopupBorderSize = 0.0f;
 
 		// Separator
-		style.SeparatorTextBorderSize = 2.0f;
+		style.SeparatorTextBorderSize = 1.0f;
 		style.SeparatorTextAlign = ImVec2(0.0f, 0.5f);
-		style.SeparatorTextPadding = ImVec2(20.0f, 3.0f);
+		style.SeparatorTextPadding = ImVec2(20.0f, 4.0f);
 
-		// Child windows
-		style.ChildRounding = 0.0f;  // Sharp corners like Qt
-		style.ChildBorderSize = 1.0f;
+		// Child windows - rounded for modern aesthetic
+		style.ChildRounding = 8.0f;
+		style.ChildBorderSize = 0.0f;
 
 		// Misc
 		style.AntiAliasedLines = true;
 		style.AntiAliasedFill = true;
 		style.AntiAliasedLinesUseTex = true;
 
-		// Alpha settings for disabled
-		style.DisabledAlpha = 0.6f;
+		// Alpha settings for disabled - slightly more transparent
+		style.DisabledAlpha = 0.5f;
 	}
 
 	void applyTheme(ThemeType theme)
@@ -114,95 +114,95 @@ namespace HypertubeTheme
 		ImGuiStyle &style = ImGui::GetStyle();
 		ImVec4 *colors = style.Colors;
 
-		// Qt-like dark theme with better contrast and clearer borders
-		s_currentPalette.primary = ImVec4(0.24f, 0.52f, 0.78f, 1.00f);		// Qt blue
-		s_currentPalette.primaryHover = ImVec4(0.32f, 0.60f, 0.86f, 1.00f); // Lighter blue
-		s_currentPalette.primaryActive = ImVec4(0.18f, 0.42f, 0.68f, 1.00f);
+		// Modern dark theme inspired by macOS Monterey/Ventura, iOS 26, and Windows 11
+		s_currentPalette.primary = ImVec4(0.00f, 0.48f, 1.00f, 1.00f);		// iOS/macOS blue
+		s_currentPalette.primaryHover = ImVec4(0.25f, 0.60f, 1.00f, 1.00f); // Lighter blue
+		s_currentPalette.primaryActive = ImVec4(0.00f, 0.40f, 0.88f, 1.00f);
 
-		s_currentPalette.accent = ImVec4(0.42f, 0.65f, 0.80f, 1.00f); // Light blue accent
-		s_currentPalette.accentHover = ImVec4(0.50f, 0.73f, 0.88f, 1.00f);
-		s_currentPalette.accentActive = ImVec4(0.34f, 0.57f, 0.72f, 1.00f);
+		s_currentPalette.accent = ImVec4(0.35f, 0.61f, 0.98f, 1.00f); // Vibrant accent blue
+		s_currentPalette.accentHover = ImVec4(0.45f, 0.70f, 1.00f, 1.00f);
+		s_currentPalette.accentActive = ImVec4(0.25f, 0.51f, 0.88f, 1.00f);
 
-		s_currentPalette.background = ImVec4(0.18f, 0.18f, 0.18f, 1.00f);	  // Qt dark gray
-		s_currentPalette.backgroundDark = ImVec4(0.14f, 0.14f, 0.14f, 1.00f); // Darker
-		s_currentPalette.backgroundLight = ImVec4(0.22f, 0.22f, 0.22f, 1.00f);
+		s_currentPalette.background = ImVec4(0.11f, 0.11f, 0.12f, 1.00f);	  // Deep, soft dark background
+		s_currentPalette.backgroundDark = ImVec4(0.08f, 0.08f, 0.09f, 1.00f); // Darker layer
+		s_currentPalette.backgroundLight = ImVec4(0.14f, 0.14f, 0.15f, 1.00f); // Elevated surface
 
-		s_currentPalette.surface = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
-		s_currentPalette.surfaceHover = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
-		s_currentPalette.surfaceActive = ImVec4(0.35f, 0.35f, 0.35f, 1.00f);
+		s_currentPalette.surface = ImVec4(0.17f, 0.17f, 0.18f, 1.00f);
+		s_currentPalette.surfaceHover = ImVec4(0.22f, 0.22f, 0.23f, 1.00f);
+		s_currentPalette.surfaceActive = ImVec4(0.27f, 0.27f, 0.28f, 1.00f);
 
-		s_currentPalette.textPrimary = ImVec4(0.95f, 0.95f, 0.95f, 1.00f);
-		s_currentPalette.textSecondary = ImVec4(0.70f, 0.70f, 0.70f, 1.00f);
-		s_currentPalette.textDisabled = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+		s_currentPalette.textPrimary = ImVec4(0.98f, 0.98f, 0.98f, 1.00f);
+		s_currentPalette.textSecondary = ImVec4(0.67f, 0.67f, 0.69f, 1.00f);
+		s_currentPalette.textDisabled = ImVec4(0.47f, 0.47f, 0.49f, 1.00f);
 
-		s_currentPalette.success = ImVec4(0.40f, 0.80f, 0.40f, 1.00f);
-		s_currentPalette.warning = ImVec4(0.90f, 0.70f, 0.20f, 1.00f);
-		s_currentPalette.error = ImVec4(0.90f, 0.30f, 0.30f, 1.00f);
-		s_currentPalette.info = ImVec4(0.40f, 0.70f, 0.95f, 1.00f);
+		s_currentPalette.success = ImVec4(0.20f, 0.78f, 0.35f, 1.00f); // iOS green
+		s_currentPalette.warning = ImVec4(1.00f, 0.58f, 0.00f, 1.00f); // iOS orange
+		s_currentPalette.error = ImVec4(1.00f, 0.27f, 0.23f, 1.00f);   // iOS red
+		s_currentPalette.info = ImVec4(0.35f, 0.61f, 0.98f, 1.00f);	   // iOS blue
 
-		s_currentPalette.border = ImVec4(0.40f, 0.40f, 0.40f, 1.00f);  // More visible borders
-		s_currentPalette.borderHover = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+		s_currentPalette.border = ImVec4(0.20f, 0.20f, 0.22f, 0.50f);  // Subtle borders
+		s_currentPalette.borderHover = ImVec4(0.35f, 0.35f, 0.37f, 0.70f);
 
-		s_currentPalette.progressDownload = ImVec4(0.24f, 0.52f, 0.78f, 1.00f);
-		s_currentPalette.progressUpload = ImVec4(0.42f, 0.65f, 0.80f, 1.00f);
-		s_currentPalette.progressBackground = ImVec4(0.22f, 0.22f, 0.22f, 1.00f);
+		s_currentPalette.progressDownload = ImVec4(0.00f, 0.48f, 1.00f, 1.00f);
+		s_currentPalette.progressUpload = ImVec4(0.35f, 0.61f, 0.98f, 1.00f);
+		s_currentPalette.progressBackground = ImVec4(0.17f, 0.17f, 0.18f, 1.00f);
 
-		// Apply colors
+		// Apply colors with modern styling
 		colors[ImGuiCol_Text] = s_currentPalette.textPrimary;
 		colors[ImGuiCol_TextDisabled] = s_currentPalette.textDisabled;
 		colors[ImGuiCol_WindowBg] = s_currentPalette.background;
 		colors[ImGuiCol_ChildBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_PopupBg] = ImVec4(0.10f, 0.10f, 0.13f, 0.98f);
+		colors[ImGuiCol_PopupBg] = ImVec4(0.10f, 0.10f, 0.11f, 0.95f);
 		colors[ImGuiCol_Border] = s_currentPalette.border;
 		colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
 		colors[ImGuiCol_FrameBg] = s_currentPalette.surface;
 		colors[ImGuiCol_FrameBgHovered] = s_currentPalette.surfaceHover;
 		colors[ImGuiCol_FrameBgActive] = s_currentPalette.surfaceActive;
 		colors[ImGuiCol_TitleBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_TitleBgActive] = s_currentPalette.surface;
-		colors[ImGuiCol_TitleBgCollapsed] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_MenuBarBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_ScrollbarBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_ScrollbarGrab] = s_currentPalette.surface;
-		colors[ImGuiCol_ScrollbarGrabHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_ScrollbarGrabActive] = s_currentPalette.surfaceActive;
+		colors[ImGuiCol_TitleBgActive] = ImVec4(0.10f, 0.10f, 0.11f, 1.00f);
+		colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.08f, 0.08f, 0.09f, 0.90f);
+		colors[ImGuiCol_MenuBarBg] = s_currentPalette.backgroundLight;
+		colors[ImGuiCol_ScrollbarBg] = ImVec4(0.08f, 0.08f, 0.09f, 0.50f);
+		colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.35f, 0.35f, 0.37f, 0.80f);
+		colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.45f, 0.45f, 0.47f, 0.90f);
+		colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.55f, 0.55f, 0.57f, 1.00f);
 		colors[ImGuiCol_CheckMark] = s_currentPalette.primary;
 		colors[ImGuiCol_SliderGrab] = s_currentPalette.primary;
 		colors[ImGuiCol_SliderGrabActive] = s_currentPalette.primaryActive;
 		colors[ImGuiCol_Button] = s_currentPalette.surface;
 		colors[ImGuiCol_ButtonHovered] = s_currentPalette.surfaceHover;
 		colors[ImGuiCol_ButtonActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_Header] = s_currentPalette.surface;
-		colors[ImGuiCol_HeaderHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_HeaderActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_Separator] = s_currentPalette.border;
-		colors[ImGuiCol_SeparatorHovered] = s_currentPalette.primary;
+		colors[ImGuiCol_Header] = ImVec4(0.17f, 0.17f, 0.18f, 0.80f);
+		colors[ImGuiCol_HeaderHovered] = ImVec4(0.22f, 0.22f, 0.23f, 0.80f);
+		colors[ImGuiCol_HeaderActive] = ImVec4(0.27f, 0.27f, 0.28f, 1.00f);
+		colors[ImGuiCol_Separator] = ImVec4(0.20f, 0.20f, 0.22f, 0.40f);
+		colors[ImGuiCol_SeparatorHovered] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.60f);
 		colors[ImGuiCol_SeparatorActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_ResizeGrip] = s_currentPalette.surface;
-		colors[ImGuiCol_ResizeGripHovered] = s_currentPalette.primary;
+		colors[ImGuiCol_ResizeGrip] = ImVec4(0.17f, 0.17f, 0.18f, 0.30f);
+		colors[ImGuiCol_ResizeGripHovered] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.60f);
 		colors[ImGuiCol_ResizeGripActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_Tab] = s_currentPalette.surface;
-		colors[ImGuiCol_TabHovered] = s_currentPalette.primary;
-		colors[ImGuiCol_TabActive] = ImVec4(s_currentPalette.primary.x * 0.7f, s_currentPalette.primary.y * 0.7f, s_currentPalette.primary.z * 0.7f, 1.0f);
-		colors[ImGuiCol_TabUnfocused] = s_currentPalette.surface;
-		colors[ImGuiCol_TabUnfocusedActive] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_DockingPreview] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.5f);
+		colors[ImGuiCol_Tab] = ImVec4(0.14f, 0.14f, 0.15f, 0.90f);
+		colors[ImGuiCol_TabHovered] = ImVec4(s_currentPalette.primary.x * 0.6f, s_currentPalette.primary.y * 0.6f, s_currentPalette.primary.z * 0.6f, 0.80f);
+		colors[ImGuiCol_TabActive] = ImVec4(s_currentPalette.primary.x * 0.5f, s_currentPalette.primary.y * 0.5f, s_currentPalette.primary.z * 0.5f, 1.0f);
+		colors[ImGuiCol_TabUnfocused] = ImVec4(0.12f, 0.12f, 0.13f, 0.90f);
+		colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.17f, 0.17f, 0.18f, 0.90f);
+		colors[ImGuiCol_DockingPreview] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.40f);
 		colors[ImGuiCol_DockingEmptyBg] = s_currentPalette.backgroundDark;
 		colors[ImGuiCol_PlotLines] = s_currentPalette.primary;
 		colors[ImGuiCol_PlotLinesHovered] = s_currentPalette.primaryHover;
 		colors[ImGuiCol_PlotHistogram] = s_currentPalette.primary;
 		colors[ImGuiCol_PlotHistogramHovered] = s_currentPalette.primaryHover;
-		colors[ImGuiCol_TableHeaderBg] = s_currentPalette.surface;
-		colors[ImGuiCol_TableBorderStrong] = s_currentPalette.border;
-		colors[ImGuiCol_TableBorderLight] = ImVec4(s_currentPalette.border.x * 0.7f, s_currentPalette.border.y * 0.7f, s_currentPalette.border.z * 0.7f, 1.0f);
+		colors[ImGuiCol_TableHeaderBg] = ImVec4(0.14f, 0.14f, 0.15f, 1.00f);
+		colors[ImGuiCol_TableBorderStrong] = ImVec4(0.20f, 0.20f, 0.22f, 0.60f);
+		colors[ImGuiCol_TableBorderLight] = ImVec4(0.17f, 0.17f, 0.18f, 0.30f);
 		colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-		colors[ImGuiCol_TableRowBgAlt] = ImVec4(0.07f, 0.07f, 0.10f, 0.50f);
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.35f);
-		colors[ImGuiCol_DragDropTarget] = s_currentPalette.primary;
+		colors[ImGuiCol_TableRowBgAlt] = ImVec4(0.14f, 0.14f, 0.15f, 0.30f);
+		colors[ImGuiCol_TextSelectedBg] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.30f);
+		colors[ImGuiCol_DragDropTarget] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.80f);
 		colors[ImGuiCol_NavHighlight] = s_currentPalette.primary;
-		colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
-		colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
-		colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.60f);
+		colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.60f);
+		colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.40f);
+		colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.55f);
 	}
 
 	void applyOceanTheme()
