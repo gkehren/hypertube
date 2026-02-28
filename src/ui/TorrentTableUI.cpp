@@ -28,9 +28,11 @@ void TorrentTableUI::displayTorrentTable()
 								 ImGuiTableFlags_Reorderable |
 								 ImGuiTableFlags_Hideable |
 								 ImGuiTableFlags_BordersInnerV |
-								 ImGuiTableFlags_ScrollY;
+								 ImGuiTableFlags_BordersOuterV |
+								 ImGuiTableFlags_ScrollY |
+								 ImGuiTableFlags_SizingStretchProp;
 
-	if (ImGui::BeginTable("Torrents", 9, tableFlags))
+	if (ImGui::BeginTable("Torrents", 11, tableFlags))
 	{
 		displayTorrentTableHeader();
 		displayTorrentTableBody();
@@ -40,15 +42,17 @@ void TorrentTableUI::displayTorrentTable()
 
 void TorrentTableUI::displayTorrentTableHeader()
 {
-	ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed);
+	ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 35.0f);
 	ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-	ImGui::TableSetupColumn("Size");
-	ImGui::TableSetupColumn("Progress");
-	ImGui::TableSetupColumn("Status");
-	ImGui::TableSetupColumn("Down Speed");
-	ImGui::TableSetupColumn("Up Speed");
-	ImGui::TableSetupColumn("ETA");
-	ImGui::TableSetupColumn("Seeds/Peers");
+	ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+	ImGui::TableSetupColumn("Progress", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+	ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+	ImGui::TableSetupColumn("Seeds", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+	ImGui::TableSetupColumn("Peers", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+	ImGui::TableSetupColumn("Down Speed", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+	ImGui::TableSetupColumn("Up Speed", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+	ImGui::TableSetupColumn("ETA", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+	ImGui::TableSetupColumn("Ratio", ImGuiTableColumnFlags_WidthFixed, 60.0f);
 	ImGui::TableHeadersRow();
 }
 
@@ -106,7 +110,7 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 	const lt::torrent_status &status = *statusPtr;
 
 	ImGui::PushID(&handle);
-	ImGui::TableNextRow(ImGuiTableRowFlags_None, 28.0f); // Fixed row height for consistency
+	ImGui::TableNextRow(ImGuiTableRowFlags_None, 26.0f); // Slightly smaller row height
 
 	// Determine if this row is selected
 	bool isSelected = (selectedTorrent == handle);
@@ -116,12 +120,8 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 	ImVec4 statusColor = HypertubeTheme::getStatusColor(statusStr);
 	const auto &palette = HypertubeTheme::getCurrentPalette();
 
-	// Store the row rect for selection detection
-	ImGui::TableSetColumnIndex(0);
-	float rowStartY = ImGui::GetCursorScreenPos().y;
-	float rowMinX = ImGui::GetCursorScreenPos().x;
-
 	// Column 0: Queue position
+	ImGui::TableSetColumnIndex(0);
 	ImGui::AlignTextToFramePadding();
 	ImGui::Text("%d", static_cast<int>(status.queue_position) + 1);
 
@@ -144,8 +144,8 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 
 	// Column 3: Progress bar
 	ImGui::TableSetColumnIndex(3);
-	float progressBarHeight = 16.0f;
-	float rowHeight = 28.0f;
+	float progressBarHeight = 14.0f;
+	float rowHeight = 26.0f;
 	float progressVerticalPadding = (rowHeight - progressBarHeight) * 0.5f;
 	ImGui::SetCursorPosY(ImGui::GetCursorPosY() + progressVerticalPadding);
 
@@ -168,8 +168,18 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 	ImGui::AlignTextToFramePadding();
 	ImGui::TextColored(statusColor, "%s", statusStr);
 
-	// Column 5: Download speed
+	// Column 5: Seeds
 	ImGui::TableSetColumnIndex(5);
+	ImGui::AlignTextToFramePadding();
+	ImGui::Text("%d (%d)", status.num_seeds, status.num_complete);
+
+	// Column 6: Peers
+	ImGui::TableSetColumnIndex(6);
+	ImGui::AlignTextToFramePadding();
+	ImGui::Text("%d (%d)", status.num_peers - status.num_seeds, status.num_incomplete);
+
+	// Column 7: Download speed
+	ImGui::TableSetColumnIndex(7);
 	ImGui::AlignTextToFramePadding();
 	char downSpeedBuf[64];
 	Utils::formatBytes(status.download_payload_rate, true, downSpeedBuf, sizeof(downSpeedBuf));
@@ -178,8 +188,8 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 	else
 		ImGui::Text("%s", downSpeedBuf);
 
-	// Column 6: Upload speed
-	ImGui::TableSetColumnIndex(6);
+	// Column 8: Upload speed
+	ImGui::TableSetColumnIndex(8);
 	ImGui::AlignTextToFramePadding();
 	char upSpeedBuf[64];
 	Utils::formatBytes(status.upload_payload_rate, true, upSpeedBuf, sizeof(upSpeedBuf));
@@ -188,19 +198,23 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 	else
 		ImGui::Text("%s", upSpeedBuf);
 
-	// Column 7: ETA
-	ImGui::TableSetColumnIndex(7);
+	// Column 9: ETA
+	ImGui::TableSetColumnIndex(9);
 	ImGui::AlignTextToFramePadding();
 	char etaBuf[64];
 	Utils::computeETA(status, etaBuf, sizeof(etaBuf));
 	ImGui::Text("%s", etaBuf);
 
-	// Column 8: Seeds/Peers
-	ImGui::TableSetColumnIndex(8);
+	// Column 10: Ratio
+	ImGui::TableSetColumnIndex(10);
 	ImGui::AlignTextToFramePadding();
-	float ratio = status.num_peers > 0 ? (float)status.num_seeds / (float)status.num_peers : 0.0f;
+	float ratio = 0.0f;
+	if (status.total_download > 0)
+	{
+		ratio = static_cast<float>(status.total_upload) / static_cast<float>(status.total_download);
+	}
 	ImVec4 ratioColor = HypertubeTheme::getHealthColor(ratio);
-	ImGui::TextColored(ratioColor, "%d / %d", status.num_seeds, status.num_peers);
+	ImGui::TextColored(ratioColor, "%.2f", ratio);
 
 	ImGui::PopID();
 }

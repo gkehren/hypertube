@@ -1,5 +1,6 @@
 #include "UIManager.hpp"
 #include "Theme.hpp"
+#include "StringUtils.hpp"
 #include "imgui_internal.h"
 #include <filesystem>
 #include <iostream>
@@ -156,6 +157,8 @@ void UIManager::renderFrame(GLFWwindow *window, const ImVec4 &clear_color)
 
 	displayMenuBar();
 
+	displayToolbar();
+
 	displayCategories();
 	displayTorrentManagement();
 
@@ -176,6 +179,8 @@ void UIManager::renderFrame(GLFWwindow *window, const ImVec4 &clear_color)
 		showFailurePopup = false;
 	}
 	modalDialogs->renderPopupFailure(failurePopupMessage);
+
+	displayStatusBar();
 
 	ImGui::End();
 
@@ -205,15 +210,23 @@ void UIManager::setupDocking(ImGuiID dockspace_id)
 	ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
 	ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
 
+	// Split layout similar to qBittorrent:
+	// - Left sidebar for categories (15%)
+	// - Main area split vertically:
+	//   - Top: Torrent list (55%)
+	//   - Bottom split horizontally:
+	//     - Left: Torrent details (50%)
+	//     - Right: Logs (50%)
+
 	ImGuiID dock_main_id = dockspace_id;
 	ImGuiID dock_left_id;
-	ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.2f, &dock_left_id, &dock_main_id);
+	ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.15f, &dock_left_id, &dock_main_id);
 
 	ImGuiID dock_top_id;
 	ImGuiID dock_bottom_id;
-	ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.4f, &dock_bottom_id, &dock_top_id);
+	ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.35f, &dock_bottom_id, &dock_top_id);
 
-	// Split the bottom area to make room for logs
+	// Split the bottom area for details and logs
 	ImGuiID dock_details_id;
 	ImGuiID dock_logs_id;
 	ImGui::DockBuilderSplitNode(dock_bottom_id, ImGuiDir_Right, 0.5f, &dock_logs_id, &dock_details_id);
@@ -522,4 +535,120 @@ void UIManager::applySpeedLimits()
 
 	torrentManager.setDownloadSpeedLimit(downloadLimit);
 	torrentManager.setUploadSpeedLimit(uploadLimit);
+}
+
+void UIManager::displayToolbar()
+{
+	// Toolbar with common actions - Qt-like
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 4.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 4.0f));
+	ImGui::PushStyleColor(ImGuiCol_ChildBg, HypertubeTheme::getCurrentPalette().surface);
+
+	if (ImGui::BeginChild("##Toolbar", ImVec2(0, ImGui::GetFrameHeight() + 8.0f), true, ImGuiWindowFlags_NoScrollbar))
+	{
+		// File operations
+		if (HypertubeTheme::drawToolbarButton("Add Torrent", "Add a .torrent file"))
+		{
+			showTorrentPopup = true;
+		}
+		ImGui::SameLine();
+		if (HypertubeTheme::drawToolbarButton("Add Magnet", "Add a magnet link"))
+		{
+			showMagnetTorrentPopup = true;
+		}
+
+		ImGui::SameLine();
+		ImGui::Separator();
+		ImGui::SameLine();
+
+		// Torrent control operations
+		bool hasSelection = torrentTableUI->getSelectedTorrent().is_valid();
+		if (HypertubeTheme::drawToolbarButton("Start", "Start selected torrent", hasSelection))
+		{
+			if (hasSelection)
+			{
+				torrentTableUI->getSelectedTorrent().resume();
+			}
+		}
+		ImGui::SameLine();
+		if (HypertubeTheme::drawToolbarButton("Pause", "Pause selected torrent", hasSelection))
+		{
+			if (hasSelection)
+			{
+				torrentTableUI->getSelectedTorrent().pause();
+			}
+		}
+		ImGui::SameLine();
+		if (HypertubeTheme::drawToolbarButton("Remove", "Remove selected torrent", hasSelection))
+		{
+			if (hasSelection)
+			{
+				auto hash = torrentTableUI->getSelectedTorrent().info_hash();
+				torrentsToRemove.emplace_back(hash, REMOVE_TORRENT);
+			}
+		}
+
+		ImGui::SameLine();
+		ImGui::Separator();
+		ImGui::SameLine();
+
+		// Settings
+		if (HypertubeTheme::drawToolbarButton("Preferences", "Open preferences dialog"))
+		{
+			showPreferencesDialog = true;
+		}
+	}
+	ImGui::EndChild();
+	ImGui::PopStyleColor();
+	ImGui::PopStyleVar(2);
+}
+
+void UIManager::displayStatusBar()
+{
+	// Calculate global statistics
+	auto &torrents = torrentManager.getTorrents();
+	auto statusCache = torrentManager.getStatusCache();
+
+	int totalDownloading = 0;
+	int totalSeeding = 0;
+	int totalPaused = 0;
+	int64_t totalDownSpeed = 0;
+	int64_t totalUpSpeed = 0;
+
+	if (statusCache)
+	{
+		for (const auto &[hash, status] : *statusCache)
+		{
+			if (status.state == lt::torrent_status::downloading ||
+				status.state == lt::torrent_status::downloading_metadata)
+				totalDownloading++;
+			else if (status.state == lt::torrent_status::seeding)
+				totalSeeding++;
+
+			totalDownSpeed += status.download_payload_rate;
+			totalUpSpeed += status.upload_payload_rate;
+		}
+	}
+
+	// Count paused torrents
+	for (const auto &[hash, handle] : torrents)
+	{
+		if (handle.flags() & lt::torrent_flags::paused)
+			totalPaused++;
+	}
+
+	// Format status text
+	char leftText[256];
+	char rightText[256];
+	char downSpeedBuf[64];
+	char upSpeedBuf[64];
+
+	Utils::formatBytes(totalDownSpeed, true, downSpeedBuf, sizeof(downSpeedBuf));
+	Utils::formatBytes(totalUpSpeed, true, upSpeedBuf, sizeof(upSpeedBuf));
+
+	snprintf(leftText, sizeof(leftText), "Downloading: %d | Seeding: %d | Paused: %d",
+		totalDownloading, totalSeeding, totalPaused);
+	snprintf(rightText, sizeof(rightText), "DL: %s | UL: %s", downSpeedBuf, upSpeedBuf);
+
+	HypertubeTheme::drawStatusBar(leftText, nullptr, rightText);
 }

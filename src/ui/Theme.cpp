@@ -17,50 +17,51 @@ namespace HypertubeTheme
 	{
 		ImGuiStyle &style = ImGui::GetStyle();
 
+		// Qt-like styling - flatter, clearer borders, refined spacing
 		// Window styling
-		style.WindowPadding = ImVec2(12.0f, 12.0f);
-		style.WindowRounding = 8.0f;
+		style.WindowPadding = ImVec2(8.0f, 8.0f);
+		style.WindowRounding = 0.0f;  // Qt uses sharp corners
 		style.WindowBorderSize = 1.0f;
 		style.WindowMinSize = ImVec2(100.0f, 50.0f);
-		style.WindowTitleAlign = ImVec2(0.5f, 0.5f);
-		style.WindowMenuButtonPosition = ImGuiDir_None;
+		style.WindowTitleAlign = ImVec2(0.0f, 0.5f);  // Left-aligned like Qt
+		style.WindowMenuButtonPosition = ImGuiDir_Left;
 
-		// Frame styling
-		style.FramePadding = ImVec2(10.0f, 6.0f);
-		style.FrameRounding = 6.0f;
-		style.FrameBorderSize = 0.0f;
+		// Frame styling - reduced rounding for Qt look
+		style.FramePadding = ImVec2(8.0f, 4.0f);
+		style.FrameRounding = 2.0f;  // Subtle rounding
+		style.FrameBorderSize = 1.0f;  // Qt has visible borders
 
-		// Item spacing
-		style.ItemSpacing = ImVec2(10.0f, 8.0f);
-		style.ItemInnerSpacing = ImVec2(8.0f, 6.0f);
+		// Item spacing - tighter like Qt
+		style.ItemSpacing = ImVec2(8.0f, 4.0f);
+		style.ItemInnerSpacing = ImVec2(6.0f, 4.0f);
 
 		// Touch/Click area
 		style.TouchExtraPadding = ImVec2(0.0f, 0.0f);
 
 		// Indent
-		style.IndentSpacing = 22.0f;
+		style.IndentSpacing = 20.0f;
 
-		// Scrollbar
-		style.ScrollbarSize = 14.0f;
-		style.ScrollbarRounding = 6.0f;
+		// Scrollbar - wider like Qt
+		style.ScrollbarSize = 16.0f;
+		style.ScrollbarRounding = 0.0f;  // Qt scrollbars are rectangular
 
 		// Grab (sliders, scrollbars)
-		style.GrabMinSize = 12.0f;
-		style.GrabRounding = 4.0f;
+		style.GrabMinSize = 10.0f;
+		style.GrabRounding = 0.0f;
 
-		// Tabs
-		style.TabRounding = 6.0f;
-		style.TabBorderSize = 0.0f;
+		// Tabs - Qt-like tab styling
+		style.TabRounding = 2.0f;  // Slight rounding on tabs
+		style.TabBorderSize = 1.0f;
 		style.TabBarBorderSize = 1.0f;
 
-		// Tables
-		style.CellPadding = ImVec2(8.0f, 6.0f);
+		// Tables - more padding like Qt
+		style.CellPadding = ImVec2(6.0f, 4.0f);
 
 		// Buttons
 		style.ButtonTextAlign = ImVec2(0.5f, 0.5f);
 
 		// Popups
-		style.PopupRounding = 8.0f;
+		style.PopupRounding = 2.0f;
 		style.PopupBorderSize = 1.0f;
 
 		// Separator
@@ -69,7 +70,7 @@ namespace HypertubeTheme
 		style.SeparatorTextPadding = ImVec2(20.0f, 3.0f);
 
 		// Child windows
-		style.ChildRounding = 6.0f;
+		style.ChildRounding = 0.0f;  // Sharp corners like Qt
 		style.ChildBorderSize = 1.0f;
 
 		// Misc
@@ -78,7 +79,7 @@ namespace HypertubeTheme
 		style.AntiAliasedLinesUseTex = true;
 
 		// Alpha settings for disabled
-		style.DisabledAlpha = 0.5f;
+		style.DisabledAlpha = 0.6f;
 	}
 
 	void applyTheme(ThemeType theme)
@@ -113,38 +114,38 @@ namespace HypertubeTheme
 		ImGuiStyle &style = ImGui::GetStyle();
 		ImVec4 *colors = style.Colors;
 
-		// Define color palette - Modern dark with teal/cyan accent
-		s_currentPalette.primary = ImVec4(0.20f, 0.75f, 0.75f, 1.00f);		// Teal
-		s_currentPalette.primaryHover = ImVec4(0.25f, 0.85f, 0.85f, 1.00f); // Lighter teal
-		s_currentPalette.primaryActive = ImVec4(0.15f, 0.65f, 0.65f, 1.00f);
+		// Qt-like dark theme with better contrast and clearer borders
+		s_currentPalette.primary = ImVec4(0.24f, 0.52f, 0.78f, 1.00f);		// Qt blue
+		s_currentPalette.primaryHover = ImVec4(0.32f, 0.60f, 0.86f, 1.00f); // Lighter blue
+		s_currentPalette.primaryActive = ImVec4(0.18f, 0.42f, 0.68f, 1.00f);
 
-		s_currentPalette.accent = ImVec4(0.60f, 0.40f, 0.90f, 1.00f); // Purple accent
-		s_currentPalette.accentHover = ImVec4(0.70f, 0.50f, 0.95f, 1.00f);
-		s_currentPalette.accentActive = ImVec4(0.50f, 0.30f, 0.80f, 1.00f);
+		s_currentPalette.accent = ImVec4(0.42f, 0.65f, 0.80f, 1.00f); // Light blue accent
+		s_currentPalette.accentHover = ImVec4(0.50f, 0.73f, 0.88f, 1.00f);
+		s_currentPalette.accentActive = ImVec4(0.34f, 0.57f, 0.72f, 1.00f);
 
-		s_currentPalette.background = ImVec4(0.08f, 0.08f, 0.10f, 1.00f);	  // Very dark
-		s_currentPalette.backgroundDark = ImVec4(0.05f, 0.05f, 0.07f, 1.00f); // Darker
-		s_currentPalette.backgroundLight = ImVec4(0.12f, 0.12f, 0.15f, 1.00f);
+		s_currentPalette.background = ImVec4(0.18f, 0.18f, 0.18f, 1.00f);	  // Qt dark gray
+		s_currentPalette.backgroundDark = ImVec4(0.14f, 0.14f, 0.14f, 1.00f); // Darker
+		s_currentPalette.backgroundLight = ImVec4(0.22f, 0.22f, 0.22f, 1.00f);
 
-		s_currentPalette.surface = ImVec4(0.14f, 0.14f, 0.17f, 1.00f);
-		s_currentPalette.surfaceHover = ImVec4(0.18f, 0.18f, 0.22f, 1.00f);
-		s_currentPalette.surfaceActive = ImVec4(0.22f, 0.22f, 0.27f, 1.00f);
+		s_currentPalette.surface = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
+		s_currentPalette.surfaceHover = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
+		s_currentPalette.surfaceActive = ImVec4(0.35f, 0.35f, 0.35f, 1.00f);
 
-		s_currentPalette.textPrimary = ImVec4(0.95f, 0.95f, 0.97f, 1.00f);
-		s_currentPalette.textSecondary = ImVec4(0.60f, 0.60f, 0.65f, 1.00f);
-		s_currentPalette.textDisabled = ImVec4(0.40f, 0.40f, 0.45f, 1.00f);
+		s_currentPalette.textPrimary = ImVec4(0.95f, 0.95f, 0.95f, 1.00f);
+		s_currentPalette.textSecondary = ImVec4(0.70f, 0.70f, 0.70f, 1.00f);
+		s_currentPalette.textDisabled = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
 
-		s_currentPalette.success = ImVec4(0.30f, 0.80f, 0.50f, 1.00f);
-		s_currentPalette.warning = ImVec4(0.95f, 0.75f, 0.25f, 1.00f);
-		s_currentPalette.error = ImVec4(0.90f, 0.35f, 0.40f, 1.00f);
-		s_currentPalette.info = ImVec4(0.35f, 0.70f, 0.95f, 1.00f);
+		s_currentPalette.success = ImVec4(0.40f, 0.80f, 0.40f, 1.00f);
+		s_currentPalette.warning = ImVec4(0.90f, 0.70f, 0.20f, 1.00f);
+		s_currentPalette.error = ImVec4(0.90f, 0.30f, 0.30f, 1.00f);
+		s_currentPalette.info = ImVec4(0.40f, 0.70f, 0.95f, 1.00f);
 
-		s_currentPalette.border = ImVec4(0.25f, 0.25f, 0.30f, 1.00f);
-		s_currentPalette.borderHover = ImVec4(0.35f, 0.35f, 0.40f, 1.00f);
+		s_currentPalette.border = ImVec4(0.40f, 0.40f, 0.40f, 1.00f);  // More visible borders
+		s_currentPalette.borderHover = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
 
-		s_currentPalette.progressDownload = ImVec4(0.20f, 0.75f, 0.75f, 1.00f);
-		s_currentPalette.progressUpload = ImVec4(0.60f, 0.40f, 0.90f, 1.00f);
-		s_currentPalette.progressBackground = ImVec4(0.18f, 0.18f, 0.22f, 1.00f);
+		s_currentPalette.progressDownload = ImVec4(0.24f, 0.52f, 0.78f, 1.00f);
+		s_currentPalette.progressUpload = ImVec4(0.42f, 0.65f, 0.80f, 1.00f);
+		s_currentPalette.progressBackground = ImVec4(0.22f, 0.22f, 0.22f, 1.00f);
 
 		// Apply colors
 		colors[ImGuiCol_Text] = s_currentPalette.textPrimary;
@@ -808,5 +809,94 @@ namespace HypertubeTheme
 			a.y + (b.y - a.y) * t,
 			a.z + (b.z - a.z) * t,
 			a.w + (b.w - a.w) * t);
+	}
+
+	bool drawToolbarButton(const char *label, const char *tooltip, bool enabled)
+	{
+		if (!enabled)
+		{
+			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+		}
+
+		// Toolbar button with slight padding
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12.0f, 6.0f));
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 2.0f);
+
+		bool clicked = false;
+		if (enabled)
+		{
+			clicked = ImGui::Button(label);
+		}
+		else
+		{
+			ImGui::Button(label);
+		}
+
+		ImGui::PopStyleVar(2);
+
+		if (!enabled)
+		{
+			ImGui::PopStyleVar();
+		}
+
+		if (tooltip && ImGui::IsItemHovered())
+		{
+			drawTooltip(tooltip);
+		}
+
+		return clicked;
+	}
+
+	void drawStatusBar(const char *leftText, const char *centerText, const char *rightText)
+	{
+		ImGuiWindow *window = ImGui::GetCurrentWindow();
+		if (window->SkipItems)
+			return;
+
+		const ImGuiStyle &style = ImGui::GetStyle();
+		const float height = ImGui::GetFrameHeight();
+		const ImVec2 pos = ImGui::GetCursorScreenPos();
+		const float width = ImGui::GetContentRegionAvail().x;
+
+		// Draw background
+		ImGui::GetWindowDrawList()->AddRectFilled(
+			pos,
+			ImVec2(pos.x + width, pos.y + height),
+			ImGui::GetColorU32(s_currentPalette.surface),
+			0.0f);
+
+		// Draw top border
+		ImGui::GetWindowDrawList()->AddLine(
+			pos,
+			ImVec2(pos.x + width, pos.y),
+			ImGui::GetColorU32(s_currentPalette.border),
+			1.0f);
+
+		// Left text
+		if (leftText)
+		{
+			ImGui::SetCursorScreenPos(ImVec2(pos.x + style.FramePadding.x, pos.y + style.FramePadding.y));
+			ImGui::TextUnformatted(leftText);
+		}
+
+		// Center text
+		if (centerText)
+		{
+			ImVec2 textSize = ImGui::CalcTextSize(centerText);
+			ImGui::SetCursorScreenPos(ImVec2(pos.x + (width - textSize.x) * 0.5f, pos.y + style.FramePadding.y));
+			ImGui::TextUnformatted(centerText);
+		}
+
+		// Right text
+		if (rightText)
+		{
+			ImVec2 textSize = ImGui::CalcTextSize(rightText);
+			ImGui::SetCursorScreenPos(ImVec2(pos.x + width - textSize.x - style.FramePadding.x, pos.y + style.FramePadding.y));
+			ImGui::TextUnformatted(rightText);
+		}
+
+		// Move cursor to next line
+		ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + height));
+		ImGui::Dummy(ImVec2(width, 0));
 	}
 }

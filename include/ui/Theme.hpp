@@ -85,6 +85,10 @@ namespace HypertubeTheme
 	// Category sidebar item
 	bool drawCategoryItem(const char *label, const char *icon, bool selected, int count = -1);
 
+	// Toolbar and status bar helpers
+	bool drawToolbarButton(const char *label, const char *tooltip = nullptr, bool enabled = true);
+	void drawStatusBar(const char *leftText, const char *centerText = nullptr, const char *rightText = nullptr);
+
 	// Torrent status helpers
 	ImVec4 getStatusColor(const char *status);
 	ImVec4 getHealthColor(float seedRatio);
