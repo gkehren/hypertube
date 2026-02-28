@@ -1,10 +1,12 @@
 #include "TorrentDetailsUI.hpp"
 #include "TorrentManager.hpp"
 #include "StringUtils.hpp"
+#include "SystemUtils.hpp"
 #include "Theme.hpp"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <filesystem>
 
 TorrentDetailsUI::TorrentDetailsUI(TorrentManager &torrentManager)
 	: torrentManager(torrentManager)
@@ -111,12 +113,17 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 	std::vector<std::int64_t> file_progress;
 	selectedTorrent.file_progress(file_progress);
 
-	if (ImGui::BeginTable("Files", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
+	// Get torrent status for save path
+	auto status = selectedTorrent.status();
+	std::string savePath = status.save_path;
+
+	if (ImGui::BeginTable("Files", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
 	{
 		ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
 		ImGui::TableSetupColumn("Size");
 		ImGui::TableSetupColumn("Progress");
 		ImGui::TableSetupColumn("Priority");
+		ImGui::TableSetupColumn("Preview");
 		ImGui::TableHeadersRow();
 
 		const auto &palette = HypertubeTheme::getCurrentPalette();
@@ -126,12 +133,16 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 			lt::file_index_t index(i);
 			ImGui::TableNextRow();
 
+			// Column 0: File Name
 			ImGui::TableSetColumnIndex(0);
-			ImGui::Text("%s", file_storage.file_name(index).to_string().c_str());
+			std::string fileName = file_storage.file_name(index).to_string();
+			ImGui::Text("%s", fileName.c_str());
 
+			// Column 1: Size
 			ImGui::TableSetColumnIndex(1);
 			ImGui::Text("%s", formatBytes(file_storage.file_size(index), false).c_str());
 
+			// Column 2: Progress
 			ImGui::TableSetColumnIndex(2);
 			float progress = 0.0f;
 			if (file_storage.file_size(index) > 0)
@@ -144,10 +155,16 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 			else if (progress > 0.0f)
 				progressColor = palette.progressDownload;
 			else
-				ImGui::ProgressBar(0.0f);
+				progressColor = palette.surface;
 
+			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, progressColor);
+			char progressText[16];
+			snprintf(progressText, sizeof(progressText), "%.0f%%", progress * 100.0f);
+			ImGui::ProgressBar(progress, ImVec2(-1, 0), progressText);
+			ImGui::PopStyleColor();
+
+			// Column 3: Priority
 			ImGui::TableSetColumnIndex(3);
-			// Get current priority and map to combo index
 			lt::download_priority_t current_priority = selectedTorrent.file_priority(index);
 			int priority_index;
 			if (current_priority == lt::dont_download)
@@ -176,13 +193,73 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 				}
 				selectedTorrent.file_priority(index, new_priority);
 			}
-				progressColor = palette.surface;
 
-			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, progressColor);
-			char progressText[16];
-			snprintf(progressText, sizeof(progressText), "%.0f%%", progress * 100.0f);
-			ImGui::ProgressBar(progress, ImVec2(-1, 0), progressText);
-			ImGui::PopStyleColor();
+			// Column 4: Preview button
+			ImGui::TableSetColumnIndex(4);
+
+			// Check if file is previewable
+			bool canPreview = Utils::SystemUtils::isPreviewableFile(fileName);
+
+			if (canPreview)
+			{
+				// Construct full file path
+				auto file_path_sv = file_storage.file_path(index);
+				std::string relativePath(file_path_sv.data(), file_path_sv.size());
+				std::filesystem::path fullPath = std::filesystem::path(savePath) / relativePath;
+
+				std::string button_id = "Preview##" + std::to_string(i);
+
+				// Check if file exists and has some progress
+				bool fileExists = std::filesystem::exists(fullPath);
+				bool hasProgress = progress > 0.0f;
+
+				if (!hasProgress)
+				{
+					ImGui::BeginDisabled();
+				}
+
+				if (ImGui::Button(button_id.c_str()))
+				{
+					// Enable sequential download if not already enabled
+					auto flags = selectedTorrent.flags();
+					if (!(flags & lt::torrent_flags::sequential_download))
+					{
+						selectedTorrent.set_flags(lt::torrent_flags::sequential_download);
+					}
+
+					// Increase priority of this file to ensure faster download
+					if (current_priority < lt::top_priority)
+					{
+						selectedTorrent.file_priority(index, lt::top_priority);
+					}
+
+					// Open the file for preview
+					Utils::SystemUtils::openFilePreview(fullPath.string());
+				}
+
+				if (!hasProgress)
+				{
+					ImGui::EndDisabled();
+					if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					{
+						ImGui::SetTooltip("File download not started yet");
+					}
+				}
+				else if (!fileExists)
+				{
+					if (ImGui::IsItemHovered())
+					{
+						ImGui::SetTooltip("Preview will open with default application\n(File may still be downloading)");
+					}
+				}
+				else
+				{
+					if (ImGui::IsItemHovered())
+					{
+						ImGui::SetTooltip("Preview with default application");
+					}
+				}
+			}
 		}
 
 		ImGui::EndTable();

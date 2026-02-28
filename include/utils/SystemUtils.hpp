@@ -25,5 +25,25 @@ namespace Utils {
          * @return true if successful, false otherwise.
          */
         bool getLocalTime(const std::time_t& time, std::tm& result);
+
+        /**
+         * @brief Determines if a file is previewable based on its extension.
+         *
+         * Checks if the file is a video, audio, image, or text file that can be previewed.
+         *
+         * @param filename The name of the file to check.
+         * @return true if the file can be previewed, false otherwise.
+         */
+        bool isPreviewableFile(const std::string& filename);
+
+        /**
+         * @brief Opens a file with the system's default application for preview.
+         *
+         * This function launches the platform-specific default application (e.g., video player,
+         * image viewer, text editor) in a detached thread to prevent blocking the calling thread.
+         *
+         * @param filePath The full path to the file to preview.
+         */
+        void openFilePreview(const std::string& filePath);
     }
 }
