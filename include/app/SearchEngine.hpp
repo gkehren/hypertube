@@ -11,50 +11,6 @@
 #include <atomic>
 #include <unordered_set>
 
-struct TorrentSearchResult
-{
-	std::string name;
-	std::string magnetUri;
-	std::string infoHash;
-	size_t sizeBytes;
-	int seeders;
-	int leechers;
-	std::string dateUploaded;
-	std::string category;
-	int64_t createdUnix;
-	int64_t scrapedDate;
-	int completed;
-
-	TorrentSearchResult() = default;
-	TorrentSearchResult(const std::string &name, const std::string &magnetUri,
-						const std::string &infoHash, size_t sizeBytes, int seeders,
-						int leechers, const std::string &dateUploaded, const std::string &category,
-						int64_t createdUnix = 0, int64_t scrapedDate = 0, int completed = 0)
-		: name(name), magnetUri(magnetUri), infoHash(infoHash),
-		  sizeBytes(sizeBytes), seeders(seeders), leechers(leechers),
-		  dateUploaded(dateUploaded), category(category), createdUnix(createdUnix),
-		  scrapedDate(scrapedDate), completed(completed) {}
-};
-
-struct SearchQuery
-{
-	std::string query;
-	int maxResults = 0;			// 0 means use API default (don't send size parameter)
-	std::string nextToken = ""; // Token for pagination (from API 'next' field)
-
-	SearchQuery(const std::string &q) : query(q) {}
-	SearchQuery(const std::string &q, int max) : query(q), maxResults(max) {}
-	SearchQuery(const std::string &q, int max, const std::string &next)
-		: query(q), maxResults(max), nextToken(next) {}
-};
-
-struct SearchResponse
-{
-	std::vector<TorrentSearchResult> torrents;
-	std::string nextToken;
-	bool hasMore = false;
-};
-
 class SearchEngine
 {
 public:
