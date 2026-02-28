@@ -223,7 +223,7 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 {
 	if (ImGui::BeginPopupContextItem("##context", ImGuiPopupFlags_MouseButtonRight))
 	{
-		bool isPaused = (handle.flags() & lt::torrent_flags::paused) != 0;
+		bool isPaused = static_cast<bool>(handle.flags() & lt::torrent_flags::paused);
 		const char *pauseLabel = isPaused ? "Resume" : "Pause";
 
 		// Torrent control section
