@@ -17,6 +17,11 @@ protected:
     Result parseResponse(const std::string& response, SearchResponse& searchResponse) {
         return engine.parseSearchResponse(response, searchResponse);
     }
+
+    // Helper to access private buildSearchUrl
+    std::string buildSearchUrl(const SearchQuery& query) {
+        return engine.buildSearchUrl(query);
+    }
 };
 
 TEST_F(SearchEngineTest, ParseValidArrayResponse) {
@@ -220,4 +225,13 @@ TEST_F(SearchEngineTest, ParseNumericFields) {
     EXPECT_EQ(results[0].scrapedDate, 1600000001);
     EXPECT_EQ(results[0].completed, 100);
     EXPECT_EQ(results[0].dateUploaded, "1600000000");
+}
+
+TEST_F(SearchEngineTest, BuildSearchUrlEncodesNextToken) {
+    SearchQuery query("ubuntu", 50, "123&attacker=parameter");
+    std::string url = buildSearchUrl(query);
+
+    // The nextToken should be URL-encoded, so "&attacker=parameter" becomes "%26attacker%3Dparameter"
+    EXPECT_NE(url.find("after=123%26attacker%3Dparameter"), std::string::npos);
+    EXPECT_EQ(url.find("&attacker=parameter"), std::string::npos);
 }

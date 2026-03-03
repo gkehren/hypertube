@@ -203,7 +203,7 @@ std::string SearchEngine::buildSearchUrl(const SearchQuery &query) const
 	// Add after parameter for pagination using next token
 	if (!query.nextToken.empty())
 	{
-		url += "&after=" + query.nextToken;
+		url += "&after=" + Utils::urlEncode(query.nextToken);
 	}
 
 	return url;
