@@ -1,8 +1,9 @@
 #include "StringUtils.hpp"
-#include <cstdio>
 #include <cmath>
 #include <string>
-#include <cstring>
+#include <sstream>
+#include <iomanip>
+#include <algorithm>
 
 namespace Utils {
 
@@ -18,27 +19,37 @@ namespace Utils {
             unitIndex++;
         }
 
+        std::string numStr;
         if (unitIndex == 0)
         {
-            snprintf(buf, buf_size, "%.0f %s%s", size, units[unitIndex], speed ? "/s" : "");
+            numStr = std::to_string(bytes);
         }
         else
         {
-            char numBuf[32];
-            snprintf(numBuf, sizeof(numBuf), "%.2f", size);
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(2) << size;
+            numStr = oss.str();
 
             // Remove trailing zeros
-            size_t len = std::strlen(numBuf);
-            while (len > 0 && numBuf[len - 1] == '0')
+            size_t dotPos = numStr.find('.');
+            if (dotPos != std::string::npos)
             {
-                numBuf[--len] = '\0';
+                size_t lastNonZero = numStr.find_last_not_of('0');
+                if (lastNonZero != std::string::npos && lastNonZero >= dotPos)
+                {
+                    if (lastNonZero == dotPos)
+                        numStr.erase(dotPos);
+                    else
+                        numStr.erase(lastNonZero + 1);
+                }
             }
-            if (len > 0 && numBuf[len - 1] == '.')
-            {
-                numBuf[--len] = '\0';
-            }
+        }
 
-            snprintf(buf, buf_size, "%s %s%s", numBuf, units[unitIndex], speed ? "/s" : "");
+        std::string result = numStr + " " + units[unitIndex] + (speed ? "/s" : "");
+        if (buf && buf_size > 0)
+        {
+            size_t copyLen = result.copy(buf, buf_size - 1);
+            buf[copyLen] = '\0';
         }
     }
 
@@ -75,14 +86,21 @@ namespace Utils {
             int64_t hoursLeft = minutesLeft / 60;
             int64_t daysLeft = hoursLeft / 24;
 
+            std::string eta;
             if (daysLeft > 0)
-                snprintf(buf, buf_size, "%lld days", (long long)daysLeft);
+                eta = std::to_string(daysLeft) + " days";
             else if (hoursLeft > 0)
-                snprintf(buf, buf_size, "%lld hours", (long long)hoursLeft);
+                eta = std::to_string(hoursLeft) + " hours";
             else if (minutesLeft > 0)
-                snprintf(buf, buf_size, "%lld minutes", (long long)minutesLeft);
+                eta = std::to_string(minutesLeft) + " minutes";
             else
-                snprintf(buf, buf_size, "%lld seconds", (long long)secondsLeft);
+                eta = std::to_string(secondsLeft) + " seconds";
+
+            if (buf && buf_size > 0)
+            {
+                size_t copyLen = eta.copy(buf, buf_size - 1);
+                buf[copyLen] = '\0';
+            }
         }
         else
         {
@@ -117,11 +135,11 @@ namespace Utils {
              flags += 'e';
         }
 
-        if (flags.length() >= buf_size) {
-            flags = flags.substr(0, buf_size - 1);
+        if (buf && buf_size > 0)
+        {
+            size_t copyLen = flags.copy(buf, buf_size - 1);
+            buf[copyLen] = '\0';
         }
-
-        snprintf(buf, buf_size, "%s", flags.c_str());
     }
 
     std::string urlEncode(const std::string &value)
