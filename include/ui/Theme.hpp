@@ -22,6 +22,7 @@ namespace HypertubeTheme
 		ImVec4 background;
 		ImVec4 backgroundDark;
 		ImVec4 backgroundLight;
+		ImVec4 popupBg;
 
 		// Surface colors
 		ImVec4 surface;
@@ -47,6 +48,9 @@ namespace HypertubeTheme
 		ImVec4 progressDownload;
 		ImVec4 progressUpload;
 		ImVec4 progressBackground;
+
+		// Table colors
+		ImVec4 tableRowBgAlt;
 	};
 
 	// Pre-defined themes

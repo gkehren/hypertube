@@ -13,6 +13,68 @@ namespace HypertubeTheme
 		return s_currentPalette;
 	}
 
+	static void applyPaletteToStyle(const ColorPalette &palette)
+	{
+		ImGuiStyle &style = ImGui::GetStyle();
+		ImVec4 *colors = style.Colors;
+
+		colors[ImGuiCol_Text] = palette.textPrimary;
+		colors[ImGuiCol_TextDisabled] = palette.textDisabled;
+		colors[ImGuiCol_WindowBg] = palette.background;
+		colors[ImGuiCol_ChildBg] = palette.backgroundDark;
+		colors[ImGuiCol_PopupBg] = palette.popupBg;
+		colors[ImGuiCol_Border] = palette.border;
+		colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+		colors[ImGuiCol_FrameBg] = palette.surface;
+		colors[ImGuiCol_FrameBgHovered] = palette.surfaceHover;
+		colors[ImGuiCol_FrameBgActive] = palette.surfaceActive;
+		colors[ImGuiCol_TitleBg] = palette.backgroundDark;
+		colors[ImGuiCol_TitleBgActive] = palette.surface;
+		colors[ImGuiCol_TitleBgCollapsed] = palette.backgroundDark;
+		colors[ImGuiCol_MenuBarBg] = palette.backgroundDark;
+		colors[ImGuiCol_ScrollbarBg] = palette.backgroundDark;
+		colors[ImGuiCol_ScrollbarGrab] = palette.surface;
+		colors[ImGuiCol_ScrollbarGrabHovered] = palette.surfaceHover;
+		colors[ImGuiCol_ScrollbarGrabActive] = palette.surfaceActive;
+		colors[ImGuiCol_CheckMark] = palette.primary;
+		colors[ImGuiCol_SliderGrab] = palette.primary;
+		colors[ImGuiCol_SliderGrabActive] = palette.primaryActive;
+		colors[ImGuiCol_Button] = palette.surface;
+		colors[ImGuiCol_ButtonHovered] = palette.surfaceHover;
+		colors[ImGuiCol_ButtonActive] = palette.surfaceActive;
+		colors[ImGuiCol_Header] = palette.surface;
+		colors[ImGuiCol_HeaderHovered] = palette.surfaceHover;
+		colors[ImGuiCol_HeaderActive] = palette.surfaceActive;
+		colors[ImGuiCol_Separator] = palette.border;
+		colors[ImGuiCol_SeparatorHovered] = palette.primary;
+		colors[ImGuiCol_SeparatorActive] = palette.primaryActive;
+		colors[ImGuiCol_ResizeGrip] = palette.surface;
+		colors[ImGuiCol_ResizeGripHovered] = palette.primary;
+		colors[ImGuiCol_ResizeGripActive] = palette.primaryActive;
+		colors[ImGuiCol_Tab] = palette.surface;
+		colors[ImGuiCol_TabHovered] = palette.primary;
+		colors[ImGuiCol_TabActive] = ImVec4(palette.primary.x * 0.7f, palette.primary.y * 0.7f, palette.primary.z * 0.7f, 1.0f);
+		colors[ImGuiCol_TabUnfocused] = palette.surface;
+		colors[ImGuiCol_TabUnfocusedActive] = palette.surfaceHover;
+		colors[ImGuiCol_DockingPreview] = ImVec4(palette.primary.x, palette.primary.y, palette.primary.z, 0.5f);
+		colors[ImGuiCol_DockingEmptyBg] = palette.backgroundDark;
+		colors[ImGuiCol_PlotLines] = palette.primary;
+		colors[ImGuiCol_PlotLinesHovered] = palette.primaryHover;
+		colors[ImGuiCol_PlotHistogram] = palette.primary;
+		colors[ImGuiCol_PlotHistogramHovered] = palette.primaryHover;
+		colors[ImGuiCol_TableHeaderBg] = palette.surface;
+		colors[ImGuiCol_TableBorderStrong] = palette.border;
+		colors[ImGuiCol_TableBorderLight] = ImVec4(palette.border.x * 0.7f, palette.border.y * 0.7f, palette.border.z * 0.7f, 1.0f);
+		colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+		colors[ImGuiCol_TableRowBgAlt] = palette.tableRowBgAlt;
+		colors[ImGuiCol_TextSelectedBg] = ImVec4(palette.primary.x, palette.primary.y, palette.primary.z, 0.35f);
+		colors[ImGuiCol_DragDropTarget] = palette.primary;
+		colors[ImGuiCol_NavHighlight] = palette.primary;
+		colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
+		colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
+		colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.60f);
+	}
+
 	void configureStyleSettings()
 	{
 		ImGuiStyle &style = ImGui::GetStyle();
@@ -110,9 +172,6 @@ namespace HypertubeTheme
 
 	void applyModernDarkTheme()
 	{
-		ImGuiStyle &style = ImGui::GetStyle();
-		ImVec4 *colors = style.Colors;
-
 		// Define color palette - Modern dark with teal/cyan accent
 		s_currentPalette.primary = ImVec4(0.20f, 0.75f, 0.75f, 1.00f);		// Teal
 		s_currentPalette.primaryHover = ImVec4(0.25f, 0.85f, 0.85f, 1.00f); // Lighter teal
@@ -125,6 +184,7 @@ namespace HypertubeTheme
 		s_currentPalette.background = ImVec4(0.08f, 0.08f, 0.10f, 1.00f);	  // Very dark
 		s_currentPalette.backgroundDark = ImVec4(0.05f, 0.05f, 0.07f, 1.00f); // Darker
 		s_currentPalette.backgroundLight = ImVec4(0.12f, 0.12f, 0.15f, 1.00f);
+		s_currentPalette.popupBg = ImVec4(0.10f, 0.10f, 0.13f, 0.98f);
 
 		s_currentPalette.surface = ImVec4(0.14f, 0.14f, 0.17f, 1.00f);
 		s_currentPalette.surfaceHover = ImVec4(0.18f, 0.18f, 0.22f, 1.00f);
@@ -146,69 +206,14 @@ namespace HypertubeTheme
 		s_currentPalette.progressUpload = ImVec4(0.60f, 0.40f, 0.90f, 1.00f);
 		s_currentPalette.progressBackground = ImVec4(0.18f, 0.18f, 0.22f, 1.00f);
 
-		// Apply colors
-		colors[ImGuiCol_Text] = s_currentPalette.textPrimary;
-		colors[ImGuiCol_TextDisabled] = s_currentPalette.textDisabled;
-		colors[ImGuiCol_WindowBg] = s_currentPalette.background;
-		colors[ImGuiCol_ChildBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_PopupBg] = ImVec4(0.10f, 0.10f, 0.13f, 0.98f);
-		colors[ImGuiCol_Border] = s_currentPalette.border;
-		colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-		colors[ImGuiCol_FrameBg] = s_currentPalette.surface;
-		colors[ImGuiCol_FrameBgHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_FrameBgActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_TitleBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_TitleBgActive] = s_currentPalette.surface;
-		colors[ImGuiCol_TitleBgCollapsed] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_MenuBarBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_ScrollbarBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_ScrollbarGrab] = s_currentPalette.surface;
-		colors[ImGuiCol_ScrollbarGrabHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_ScrollbarGrabActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_CheckMark] = s_currentPalette.primary;
-		colors[ImGuiCol_SliderGrab] = s_currentPalette.primary;
-		colors[ImGuiCol_SliderGrabActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_Button] = s_currentPalette.surface;
-		colors[ImGuiCol_ButtonHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_ButtonActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_Header] = s_currentPalette.surface;
-		colors[ImGuiCol_HeaderHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_HeaderActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_Separator] = s_currentPalette.border;
-		colors[ImGuiCol_SeparatorHovered] = s_currentPalette.primary;
-		colors[ImGuiCol_SeparatorActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_ResizeGrip] = s_currentPalette.surface;
-		colors[ImGuiCol_ResizeGripHovered] = s_currentPalette.primary;
-		colors[ImGuiCol_ResizeGripActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_Tab] = s_currentPalette.surface;
-		colors[ImGuiCol_TabHovered] = s_currentPalette.primary;
-		colors[ImGuiCol_TabActive] = ImVec4(s_currentPalette.primary.x * 0.7f, s_currentPalette.primary.y * 0.7f, s_currentPalette.primary.z * 0.7f, 1.0f);
-		colors[ImGuiCol_TabUnfocused] = s_currentPalette.surface;
-		colors[ImGuiCol_TabUnfocusedActive] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_DockingPreview] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.5f);
-		colors[ImGuiCol_DockingEmptyBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_PlotLines] = s_currentPalette.primary;
-		colors[ImGuiCol_PlotLinesHovered] = s_currentPalette.primaryHover;
-		colors[ImGuiCol_PlotHistogram] = s_currentPalette.primary;
-		colors[ImGuiCol_PlotHistogramHovered] = s_currentPalette.primaryHover;
-		colors[ImGuiCol_TableHeaderBg] = s_currentPalette.surface;
-		colors[ImGuiCol_TableBorderStrong] = s_currentPalette.border;
-		colors[ImGuiCol_TableBorderLight] = ImVec4(s_currentPalette.border.x * 0.7f, s_currentPalette.border.y * 0.7f, s_currentPalette.border.z * 0.7f, 1.0f);
-		colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-		colors[ImGuiCol_TableRowBgAlt] = ImVec4(0.07f, 0.07f, 0.10f, 0.50f);
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.35f);
-		colors[ImGuiCol_DragDropTarget] = s_currentPalette.primary;
-		colors[ImGuiCol_NavHighlight] = s_currentPalette.primary;
-		colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
-		colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
-		colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.60f);
+		s_currentPalette.tableRowBgAlt = ImVec4(0.07f, 0.07f, 0.10f, 0.50f);
+
+		// Apply palette
+		applyPaletteToStyle(s_currentPalette);
 	}
 
 	void applyOceanTheme()
 	{
-		ImGuiStyle &style = ImGui::GetStyle();
-		ImVec4 *colors = style.Colors;
-
 		// Deep ocean blue palette
 		s_currentPalette.primary = ImVec4(0.30f, 0.60f, 0.90f, 1.00f);
 		s_currentPalette.primaryHover = ImVec4(0.40f, 0.70f, 0.95f, 1.00f);
@@ -221,6 +226,7 @@ namespace HypertubeTheme
 		s_currentPalette.background = ImVec4(0.06f, 0.10f, 0.15f, 1.00f);
 		s_currentPalette.backgroundDark = ImVec4(0.04f, 0.07f, 0.12f, 1.00f);
 		s_currentPalette.backgroundLight = ImVec4(0.10f, 0.15f, 0.20f, 1.00f);
+		s_currentPalette.popupBg = ImVec4(0.08f, 0.12f, 0.18f, 0.98f);
 
 		s_currentPalette.surface = ImVec4(0.10f, 0.16f, 0.22f, 1.00f);
 		s_currentPalette.surfaceHover = ImVec4(0.14f, 0.20f, 0.28f, 1.00f);
@@ -242,69 +248,14 @@ namespace HypertubeTheme
 		s_currentPalette.progressUpload = s_currentPalette.accent;
 		s_currentPalette.progressBackground = s_currentPalette.surface;
 
-		// Apply same structure as modern dark
-		colors[ImGuiCol_Text] = s_currentPalette.textPrimary;
-		colors[ImGuiCol_TextDisabled] = s_currentPalette.textDisabled;
-		colors[ImGuiCol_WindowBg] = s_currentPalette.background;
-		colors[ImGuiCol_ChildBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_PopupBg] = ImVec4(0.08f, 0.12f, 0.18f, 0.98f);
-		colors[ImGuiCol_Border] = s_currentPalette.border;
-		colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-		colors[ImGuiCol_FrameBg] = s_currentPalette.surface;
-		colors[ImGuiCol_FrameBgHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_FrameBgActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_TitleBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_TitleBgActive] = s_currentPalette.surface;
-		colors[ImGuiCol_TitleBgCollapsed] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_MenuBarBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_ScrollbarBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_ScrollbarGrab] = s_currentPalette.surface;
-		colors[ImGuiCol_ScrollbarGrabHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_ScrollbarGrabActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_CheckMark] = s_currentPalette.primary;
-		colors[ImGuiCol_SliderGrab] = s_currentPalette.primary;
-		colors[ImGuiCol_SliderGrabActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_Button] = s_currentPalette.surface;
-		colors[ImGuiCol_ButtonHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_ButtonActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_Header] = s_currentPalette.surface;
-		colors[ImGuiCol_HeaderHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_HeaderActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_Separator] = s_currentPalette.border;
-		colors[ImGuiCol_SeparatorHovered] = s_currentPalette.primary;
-		colors[ImGuiCol_SeparatorActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_ResizeGrip] = s_currentPalette.surface;
-		colors[ImGuiCol_ResizeGripHovered] = s_currentPalette.primary;
-		colors[ImGuiCol_ResizeGripActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_Tab] = s_currentPalette.surface;
-		colors[ImGuiCol_TabHovered] = s_currentPalette.primary;
-		colors[ImGuiCol_TabActive] = ImVec4(s_currentPalette.primary.x * 0.7f, s_currentPalette.primary.y * 0.7f, s_currentPalette.primary.z * 0.7f, 1.0f);
-		colors[ImGuiCol_TabUnfocused] = s_currentPalette.surface;
-		colors[ImGuiCol_TabUnfocusedActive] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_DockingPreview] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.5f);
-		colors[ImGuiCol_DockingEmptyBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_PlotLines] = s_currentPalette.primary;
-		colors[ImGuiCol_PlotLinesHovered] = s_currentPalette.primaryHover;
-		colors[ImGuiCol_PlotHistogram] = s_currentPalette.primary;
-		colors[ImGuiCol_PlotHistogramHovered] = s_currentPalette.primaryHover;
-		colors[ImGuiCol_TableHeaderBg] = s_currentPalette.surface;
-		colors[ImGuiCol_TableBorderStrong] = s_currentPalette.border;
-		colors[ImGuiCol_TableBorderLight] = ImVec4(s_currentPalette.border.x * 0.7f, s_currentPalette.border.y * 0.7f, s_currentPalette.border.z * 0.7f, 1.0f);
-		colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-		colors[ImGuiCol_TableRowBgAlt] = ImVec4(0.05f, 0.08f, 0.12f, 0.50f);
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.35f);
-		colors[ImGuiCol_DragDropTarget] = s_currentPalette.primary;
-		colors[ImGuiCol_NavHighlight] = s_currentPalette.primary;
-		colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
-		colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
-		colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.60f);
+		s_currentPalette.tableRowBgAlt = ImVec4(0.05f, 0.08f, 0.12f, 0.50f);
+
+		// Apply palette
+		applyPaletteToStyle(s_currentPalette);
 	}
 
 	void applyNordTheme()
 	{
-		ImGuiStyle &style = ImGui::GetStyle();
-		ImVec4 *colors = style.Colors;
-
 		// Nord color palette
 		s_currentPalette.primary = ImVec4(0.53f, 0.75f, 0.82f, 1.00f);		// Nord8
 		s_currentPalette.primaryHover = ImVec4(0.58f, 0.80f, 0.87f, 1.00f); // Lighter Nord8
@@ -317,6 +268,7 @@ namespace HypertubeTheme
 		s_currentPalette.background = ImVec4(0.18f, 0.20f, 0.25f, 1.00f);	  // Nord0
 		s_currentPalette.backgroundDark = ImVec4(0.15f, 0.17f, 0.21f, 1.00f); // Darker Nord0
 		s_currentPalette.backgroundLight = ImVec4(0.23f, 0.26f, 0.32f, 1.00f);
+		s_currentPalette.popupBg = ImVec4(0.20f, 0.22f, 0.28f, 0.98f);
 
 		s_currentPalette.surface = ImVec4(0.23f, 0.26f, 0.32f, 1.00f); // Nord1
 		s_currentPalette.surfaceHover = ImVec4(0.26f, 0.30f, 0.37f, 1.00f);
@@ -338,69 +290,14 @@ namespace HypertubeTheme
 		s_currentPalette.progressUpload = s_currentPalette.accent;
 		s_currentPalette.progressBackground = s_currentPalette.surface;
 
-		// Apply colors (same structure as others)
-		colors[ImGuiCol_Text] = s_currentPalette.textPrimary;
-		colors[ImGuiCol_TextDisabled] = s_currentPalette.textDisabled;
-		colors[ImGuiCol_WindowBg] = s_currentPalette.background;
-		colors[ImGuiCol_ChildBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_PopupBg] = ImVec4(0.20f, 0.22f, 0.28f, 0.98f);
-		colors[ImGuiCol_Border] = s_currentPalette.border;
-		colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-		colors[ImGuiCol_FrameBg] = s_currentPalette.surface;
-		colors[ImGuiCol_FrameBgHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_FrameBgActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_TitleBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_TitleBgActive] = s_currentPalette.surface;
-		colors[ImGuiCol_TitleBgCollapsed] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_MenuBarBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_ScrollbarBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_ScrollbarGrab] = s_currentPalette.surface;
-		colors[ImGuiCol_ScrollbarGrabHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_ScrollbarGrabActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_CheckMark] = s_currentPalette.primary;
-		colors[ImGuiCol_SliderGrab] = s_currentPalette.primary;
-		colors[ImGuiCol_SliderGrabActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_Button] = s_currentPalette.surface;
-		colors[ImGuiCol_ButtonHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_ButtonActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_Header] = s_currentPalette.surface;
-		colors[ImGuiCol_HeaderHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_HeaderActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_Separator] = s_currentPalette.border;
-		colors[ImGuiCol_SeparatorHovered] = s_currentPalette.primary;
-		colors[ImGuiCol_SeparatorActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_ResizeGrip] = s_currentPalette.surface;
-		colors[ImGuiCol_ResizeGripHovered] = s_currentPalette.primary;
-		colors[ImGuiCol_ResizeGripActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_Tab] = s_currentPalette.surface;
-		colors[ImGuiCol_TabHovered] = s_currentPalette.primary;
-		colors[ImGuiCol_TabActive] = ImVec4(s_currentPalette.primary.x * 0.7f, s_currentPalette.primary.y * 0.7f, s_currentPalette.primary.z * 0.7f, 1.0f);
-		colors[ImGuiCol_TabUnfocused] = s_currentPalette.surface;
-		colors[ImGuiCol_TabUnfocusedActive] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_DockingPreview] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.5f);
-		colors[ImGuiCol_DockingEmptyBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_PlotLines] = s_currentPalette.primary;
-		colors[ImGuiCol_PlotLinesHovered] = s_currentPalette.primaryHover;
-		colors[ImGuiCol_PlotHistogram] = s_currentPalette.primary;
-		colors[ImGuiCol_PlotHistogramHovered] = s_currentPalette.primaryHover;
-		colors[ImGuiCol_TableHeaderBg] = s_currentPalette.surface;
-		colors[ImGuiCol_TableBorderStrong] = s_currentPalette.border;
-		colors[ImGuiCol_TableBorderLight] = ImVec4(s_currentPalette.border.x * 0.7f, s_currentPalette.border.y * 0.7f, s_currentPalette.border.z * 0.7f, 1.0f);
-		colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-		colors[ImGuiCol_TableRowBgAlt] = ImVec4(0.20f, 0.22f, 0.27f, 0.40f);
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.35f);
-		colors[ImGuiCol_DragDropTarget] = s_currentPalette.primary;
-		colors[ImGuiCol_NavHighlight] = s_currentPalette.primary;
-		colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
-		colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
-		colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.60f);
+		s_currentPalette.tableRowBgAlt = ImVec4(0.20f, 0.22f, 0.27f, 0.40f);
+
+		// Apply palette
+		applyPaletteToStyle(s_currentPalette);
 	}
 
 	void applyDraculaTheme()
 	{
-		ImGuiStyle &style = ImGui::GetStyle();
-		ImVec4 *colors = style.Colors;
-
 		// Dracula color palette
 		s_currentPalette.primary = ImVec4(0.74f, 0.58f, 0.98f, 1.00f);		// Purple
 		s_currentPalette.primaryHover = ImVec4(0.80f, 0.64f, 1.00f, 1.00f); // Lighter purple
@@ -413,6 +310,7 @@ namespace HypertubeTheme
 		s_currentPalette.background = ImVec4(0.16f, 0.16f, 0.21f, 1.00f);	  // Background
 		s_currentPalette.backgroundDark = ImVec4(0.11f, 0.11f, 0.15f, 1.00f); // Darker
 		s_currentPalette.backgroundLight = ImVec4(0.21f, 0.21f, 0.27f, 1.00f);
+		s_currentPalette.popupBg = ImVec4(0.18f, 0.18f, 0.24f, 0.98f);
 
 		s_currentPalette.surface = ImVec4(0.27f, 0.28f, 0.35f, 1.00f); // Current line
 		s_currentPalette.surfaceHover = ImVec4(0.32f, 0.33f, 0.42f, 1.00f);
@@ -434,69 +332,14 @@ namespace HypertubeTheme
 		s_currentPalette.progressUpload = s_currentPalette.primary;
 		s_currentPalette.progressBackground = s_currentPalette.surface;
 
-		// Apply colors
-		colors[ImGuiCol_Text] = s_currentPalette.textPrimary;
-		colors[ImGuiCol_TextDisabled] = s_currentPalette.textDisabled;
-		colors[ImGuiCol_WindowBg] = s_currentPalette.background;
-		colors[ImGuiCol_ChildBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_PopupBg] = ImVec4(0.18f, 0.18f, 0.24f, 0.98f);
-		colors[ImGuiCol_Border] = s_currentPalette.border;
-		colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-		colors[ImGuiCol_FrameBg] = s_currentPalette.surface;
-		colors[ImGuiCol_FrameBgHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_FrameBgActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_TitleBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_TitleBgActive] = s_currentPalette.surface;
-		colors[ImGuiCol_TitleBgCollapsed] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_MenuBarBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_ScrollbarBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_ScrollbarGrab] = s_currentPalette.surface;
-		colors[ImGuiCol_ScrollbarGrabHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_ScrollbarGrabActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_CheckMark] = s_currentPalette.primary;
-		colors[ImGuiCol_SliderGrab] = s_currentPalette.primary;
-		colors[ImGuiCol_SliderGrabActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_Button] = s_currentPalette.surface;
-		colors[ImGuiCol_ButtonHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_ButtonActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_Header] = s_currentPalette.surface;
-		colors[ImGuiCol_HeaderHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_HeaderActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_Separator] = s_currentPalette.border;
-		colors[ImGuiCol_SeparatorHovered] = s_currentPalette.primary;
-		colors[ImGuiCol_SeparatorActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_ResizeGrip] = s_currentPalette.surface;
-		colors[ImGuiCol_ResizeGripHovered] = s_currentPalette.primary;
-		colors[ImGuiCol_ResizeGripActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_Tab] = s_currentPalette.surface;
-		colors[ImGuiCol_TabHovered] = s_currentPalette.primary;
-		colors[ImGuiCol_TabActive] = ImVec4(s_currentPalette.primary.x * 0.7f, s_currentPalette.primary.y * 0.7f, s_currentPalette.primary.z * 0.7f, 1.0f);
-		colors[ImGuiCol_TabUnfocused] = s_currentPalette.surface;
-		colors[ImGuiCol_TabUnfocusedActive] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_DockingPreview] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.5f);
-		colors[ImGuiCol_DockingEmptyBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_PlotLines] = s_currentPalette.primary;
-		colors[ImGuiCol_PlotLinesHovered] = s_currentPalette.primaryHover;
-		colors[ImGuiCol_PlotHistogram] = s_currentPalette.primary;
-		colors[ImGuiCol_PlotHistogramHovered] = s_currentPalette.primaryHover;
-		colors[ImGuiCol_TableHeaderBg] = s_currentPalette.surface;
-		colors[ImGuiCol_TableBorderStrong] = s_currentPalette.border;
-		colors[ImGuiCol_TableBorderLight] = ImVec4(s_currentPalette.border.x * 0.7f, s_currentPalette.border.y * 0.7f, s_currentPalette.border.z * 0.7f, 1.0f);
-		colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-		colors[ImGuiCol_TableRowBgAlt] = ImVec4(0.20f, 0.20f, 0.26f, 0.40f);
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.35f);
-		colors[ImGuiCol_DragDropTarget] = s_currentPalette.primary;
-		colors[ImGuiCol_NavHighlight] = s_currentPalette.primary;
-		colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
-		colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
-		colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.60f);
+		s_currentPalette.tableRowBgAlt = ImVec4(0.20f, 0.20f, 0.26f, 0.40f);
+
+		// Apply palette
+		applyPaletteToStyle(s_currentPalette);
 	}
 
 	void applyCyberPunkTheme()
 	{
-		ImGuiStyle &style = ImGui::GetStyle();
-		ImVec4 *colors = style.Colors;
-
 		// Cyberpunk color palette - neon yellow/pink on dark
 		s_currentPalette.primary = ImVec4(1.00f, 0.96f, 0.00f, 1.00f);		// Neon yellow
 		s_currentPalette.primaryHover = ImVec4(1.00f, 1.00f, 0.30f, 1.00f); // Brighter yellow
@@ -509,6 +352,7 @@ namespace HypertubeTheme
 		s_currentPalette.background = ImVec4(0.04f, 0.04f, 0.06f, 1.00f);	  // Near black
 		s_currentPalette.backgroundDark = ImVec4(0.02f, 0.02f, 0.04f, 1.00f); // Darker
 		s_currentPalette.backgroundLight = ImVec4(0.08f, 0.08f, 0.10f, 1.00f);
+		s_currentPalette.popupBg = ImVec4(0.06f, 0.06f, 0.09f, 0.98f);
 
 		s_currentPalette.surface = ImVec4(0.10f, 0.10f, 0.14f, 1.00f);
 		s_currentPalette.surfaceHover = ImVec4(0.14f, 0.14f, 0.20f, 1.00f);
@@ -530,62 +374,19 @@ namespace HypertubeTheme
 		s_currentPalette.progressUpload = s_currentPalette.accent;
 		s_currentPalette.progressBackground = s_currentPalette.surface;
 
-		// Apply colors
-		colors[ImGuiCol_Text] = s_currentPalette.textPrimary;
-		colors[ImGuiCol_TextDisabled] = s_currentPalette.textDisabled;
-		colors[ImGuiCol_WindowBg] = s_currentPalette.background;
-		colors[ImGuiCol_ChildBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_PopupBg] = ImVec4(0.06f, 0.06f, 0.09f, 0.98f);
-		colors[ImGuiCol_Border] = s_currentPalette.border;
-		colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-		colors[ImGuiCol_FrameBg] = s_currentPalette.surface;
-		colors[ImGuiCol_FrameBgHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_FrameBgActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_TitleBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_TitleBgActive] = s_currentPalette.surface;
-		colors[ImGuiCol_TitleBgCollapsed] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_MenuBarBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_ScrollbarBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_ScrollbarGrab] = s_currentPalette.surface;
-		colors[ImGuiCol_ScrollbarGrabHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_ScrollbarGrabActive] = s_currentPalette.primary;
-		colors[ImGuiCol_CheckMark] = s_currentPalette.primary;
-		colors[ImGuiCol_SliderGrab] = s_currentPalette.primary;
-		colors[ImGuiCol_SliderGrabActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_Button] = s_currentPalette.surface;
-		colors[ImGuiCol_ButtonHovered] = ImVec4(s_currentPalette.primary.x * 0.2f, s_currentPalette.primary.y * 0.2f, s_currentPalette.primary.z * 0.2f, 1.0f);
-		colors[ImGuiCol_ButtonActive] = ImVec4(s_currentPalette.primary.x * 0.3f, s_currentPalette.primary.y * 0.3f, s_currentPalette.primary.z * 0.3f, 1.0f);
-		colors[ImGuiCol_Header] = s_currentPalette.surface;
-		colors[ImGuiCol_HeaderHovered] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_HeaderActive] = s_currentPalette.surfaceActive;
-		colors[ImGuiCol_Separator] = s_currentPalette.border;
-		colors[ImGuiCol_SeparatorHovered] = s_currentPalette.primary;
-		colors[ImGuiCol_SeparatorActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_ResizeGrip] = s_currentPalette.surface;
-		colors[ImGuiCol_ResizeGripHovered] = s_currentPalette.primary;
-		colors[ImGuiCol_ResizeGripActive] = s_currentPalette.primaryActive;
-		colors[ImGuiCol_Tab] = s_currentPalette.surface;
-		colors[ImGuiCol_TabHovered] = ImVec4(s_currentPalette.primary.x * 0.3f, s_currentPalette.primary.y * 0.3f, s_currentPalette.primary.z * 0.3f, 1.0f);
-		colors[ImGuiCol_TabActive] = ImVec4(s_currentPalette.primary.x * 0.2f, s_currentPalette.primary.y * 0.2f, s_currentPalette.primary.z * 0.2f, 1.0f);
-		colors[ImGuiCol_TabUnfocused] = s_currentPalette.surface;
-		colors[ImGuiCol_TabUnfocusedActive] = s_currentPalette.surfaceHover;
-		colors[ImGuiCol_DockingPreview] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.5f);
-		colors[ImGuiCol_DockingEmptyBg] = s_currentPalette.backgroundDark;
-		colors[ImGuiCol_PlotLines] = s_currentPalette.primary;
-		colors[ImGuiCol_PlotLinesHovered] = s_currentPalette.primaryHover;
-		colors[ImGuiCol_PlotHistogram] = s_currentPalette.primary;
-		colors[ImGuiCol_PlotHistogramHovered] = s_currentPalette.primaryHover;
-		colors[ImGuiCol_TableHeaderBg] = s_currentPalette.surface;
-		colors[ImGuiCol_TableBorderStrong] = s_currentPalette.border;
-		colors[ImGuiCol_TableBorderLight] = ImVec4(s_currentPalette.border.x * 0.7f, s_currentPalette.border.y * 0.7f, s_currentPalette.border.z * 0.7f, 1.0f);
-		colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-		colors[ImGuiCol_TableRowBgAlt] = ImVec4(0.06f, 0.06f, 0.08f, 0.50f);
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(s_currentPalette.primary.x, s_currentPalette.primary.y, s_currentPalette.primary.z, 0.35f);
-		colors[ImGuiCol_DragDropTarget] = s_currentPalette.primary;
-		colors[ImGuiCol_NavHighlight] = s_currentPalette.primary;
-		colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
-		colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
-		colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.70f);
+		s_currentPalette.tableRowBgAlt = ImVec4(0.06f, 0.06f, 0.08f, 0.50f);
+
+		// Apply palette
+		applyPaletteToStyle(s_currentPalette);
+
+		// Cyberpunk-specific overrides
+		ImGuiStyle &style = ImGui::GetStyle();
+		style.Colors[ImGuiCol_ScrollbarGrabActive] = s_currentPalette.primary;
+		style.Colors[ImGuiCol_ButtonHovered] = ImVec4(s_currentPalette.primary.x * 0.2f, s_currentPalette.primary.y * 0.2f, s_currentPalette.primary.z * 0.2f, 1.0f);
+		style.Colors[ImGuiCol_ButtonActive] = ImVec4(s_currentPalette.primary.x * 0.3f, s_currentPalette.primary.y * 0.3f, s_currentPalette.primary.z * 0.3f, 1.0f);
+		style.Colors[ImGuiCol_TabHovered] = ImVec4(s_currentPalette.primary.x * 0.3f, s_currentPalette.primary.y * 0.3f, s_currentPalette.primary.z * 0.3f, 1.0f);
+		style.Colors[ImGuiCol_TabActive] = ImVec4(s_currentPalette.primary.x * 0.2f, s_currentPalette.primary.y * 0.2f, s_currentPalette.primary.z * 0.2f, 1.0f);
+		style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.70f);
 	}
 
 	void configureFonts(ImGuiIO &io, float fontSize)
