@@ -88,6 +88,8 @@ private:
 	void displayCategories();
 	void displayTorrentManagement();
 	void displayMenuBar();
+	void displayToolbar();
+	void displayStatusBar();
 	void setupDocking(ImGuiID dockspace_id);
 
 	// Helper methods
