@@ -216,6 +216,8 @@ Result SearchEngine::searchTorrents(const SearchQuery &query, SearchResponse &re
 
 Result SearchEngine::makeHttpRequest(const std::string &url, std::string &response)
 {
+	std::lock_guard<std::mutex> lockHandle(curlMutex);
+
 	CURL *curl = static_cast<CURL *>(curlHandle);
 	if (!curl)
 	{

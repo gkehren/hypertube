@@ -9,6 +9,7 @@
 #include <mutex>
 #include <atomic>
 #include <unordered_set>
+#include <condition_variable>
 
 struct TorrentSearchResult
 {
@@ -98,6 +99,7 @@ private:
 	int timeoutSeconds;
 	int maxRetries;
 	void* curlHandle;
+	std::mutex curlMutex;
 	std::atomic<bool> searching;
 	std::atomic<bool> cancelRequested;
 
