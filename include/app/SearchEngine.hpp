@@ -9,7 +9,6 @@
 #include <mutex>
 #include <atomic>
 #include <unordered_set>
-#include <condition_variable>
 
 struct TorrentSearchResult
 {
@@ -98,23 +97,11 @@ private:
 	std::string apiUrl;
 	int timeoutSeconds;
 	int maxRetries;
-	void* curlHandle;
-	std::mutex curlMutex;
 	std::atomic<bool> searching;
 	std::atomic<bool> cancelRequested;
 
-	// Threading for async searches
-	std::thread workerThread;
-	std::mutex workerMutex;
-	std::condition_variable workerCV;
-	bool stopWorker;
-
-	struct SearchTask
-	{
-		std::unique_ptr<SearchQuery> query;
-		std::function<void(Result, SearchResponse)> callback;
-		bool hasTask = false;
-	} pendingTask;
+	std::mutex searchMutex;
+	std::thread searchThread;
 
 	std::vector<std::string> searchHistory;
 	std::vector<TorrentSearchResult> favorites;

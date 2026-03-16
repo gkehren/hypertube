@@ -3,7 +3,11 @@
 #include "StringUtils.hpp"
 #include "SystemUtils.hpp"
 #include "Theme.hpp"
+#include <iostream>
+#include <iomanip>
+#include <sstream>
 #include <cstdio>
+#include <cmath>
 #include <optional>
 
 TorrentTableUI::TorrentTableUI(TorrentManager &torrentManager)

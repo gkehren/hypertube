@@ -79,9 +79,12 @@ namespace HypertubeTheme
 	const ColorPalette &getCurrentPalette();
 
 	// Custom styled widgets
+	void drawProgressBarColored(float fraction, const ImVec4 &color, const ImVec2 &size = ImVec2(-1, 0));
+	void drawStatusBadge(const char *label, const ImVec4 &color);
 	bool drawStyledButton(const char *label, const ImVec2 &size = ImVec2(0, 0), bool isPrimary = false);
 	void drawSectionHeader(const char *label);
 	void drawTooltip(const char *text);
+	void drawSearchBar(const char *label, char *buffer, size_t bufferSize, bool *enterPressed = nullptr);
 
 	// Category sidebar item
 	bool drawCategoryItem(const char *label, const char *icon, bool selected, int count = -1);

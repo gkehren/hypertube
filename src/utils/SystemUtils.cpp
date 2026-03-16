@@ -18,24 +18,12 @@
 namespace Utils {
     namespace SystemUtils {
 
-        std::string sanitizePath(const std::string& path) {
-            if (!path.empty() && path[0] == '-') {
-#ifdef _WIN32
-                return ".\\" + path;
-#else
-                return "./" + path;
-#endif
-            }
-            return path;
-        }
-
         void openFileExplorer(const std::string& path) {
 #ifdef _WIN32
             // Launch the system command in a detached thread to avoid blocking the UI
             std::thread([path]() {
-                std::string safePath = sanitizePath(path);
                 // ShellExecute is safer than system() as it doesn't involve a shell for parsing
-                HINSTANCE result = ShellExecuteA(NULL, "open", safePath.c_str(), NULL, NULL, SW_SHOWNORMAL);
+                HINSTANCE result = ShellExecuteA(NULL, "open", path.c_str(), NULL, NULL, SW_SHOWNORMAL);
                 if ((INT_PTR)result <= 32) {
                     std::cerr << "Failed to open file explorer for path: " << path << std::endl;
                 }
@@ -45,14 +33,13 @@ namespace Utils {
             std::thread([path]() {
                 pid_t pid = fork();
                 if (pid == 0) {
-                    std::string safePath = sanitizePath(path);
                     // Child process: execute the command directly without a shell
 #ifdef __APPLE__
                     const char* cmd = "open";
 #else
                     const char* cmd = "xdg-open";
 #endif
-                    execlp(cmd, cmd, safePath.c_str(), (char*)NULL);
+                    execlp(cmd, cmd, path.c_str(), (char*)NULL);
                     // If execlp fails, exit the child process
                     _exit(1);
                 } else if (pid > 0) {
@@ -134,9 +121,8 @@ namespace Utils {
 #ifdef _WIN32
             // Launch the system command in a detached thread to avoid blocking the UI
             std::thread([filePath]() {
-                std::string safePath = sanitizePath(filePath);
                 // ShellExecute is safer than system() as it doesn't involve a shell for parsing
-                HINSTANCE result = ShellExecuteA(NULL, "open", safePath.c_str(), NULL, NULL, SW_SHOWNORMAL);
+                HINSTANCE result = ShellExecuteA(NULL, "open", filePath.c_str(), NULL, NULL, SW_SHOWNORMAL);
                 if ((INT_PTR)result <= 32) {
                     std::cerr << "Failed to open file for preview: " << filePath << std::endl;
                 }
@@ -146,14 +132,13 @@ namespace Utils {
             std::thread([filePath]() {
                 pid_t pid = fork();
                 if (pid == 0) {
-                    std::string safePath = sanitizePath(filePath);
                     // Child process: execute the command directly without a shell
 #ifdef __APPLE__
                     const char* cmd = "open";
 #else
                     const char* cmd = "xdg-open";
 #endif
-                    execlp(cmd, cmd, safePath.c_str(), (char*)NULL);
+                    execlp(cmd, cmd, filePath.c_str(), (char*)NULL);
                     // If execlp fails, exit the child process
                     _exit(1);
                 } else if (pid > 0) {

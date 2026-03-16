@@ -16,9 +16,6 @@ SearchUI::SearchUI(SearchEngine &searchEngine)
 
 void SearchUI::displayIntegratedSearch()
 {
-	// Ensure favorites cache is up to date
-	updateFavoritesCache();
-
 	// Process any pending results from async search
 	processPendingResults();
 
@@ -108,46 +105,6 @@ void SearchUI::displayIntegratedSearch()
 	}
 }
 
-void SearchUI::displaySearchWindow()
-{
-	// Ensure favorites cache is up to date
-	updateFavoritesCache();
-
-	if (!ImGui::Begin("Torrent Search", &showSearchWindow, ImGuiWindowFlags_AlwaysAutoResize))
-	{
-		ImGui::End();
-		return;
-	}
-
-	// Search input
-	ImGui::Text("Search Query:");
-	ImGui::SameLine();
-	if (ImGui::InputText("##search", searchQueryBuffer, sizeof(searchQueryBuffer), ImGuiInputTextFlags_EnterReturnsTrue))
-	{
-		performSearch(std::string(searchQueryBuffer));
-	}
-
-	ImGui::SameLine();
-	if (ImGui::Button("Search"))
-	{
-		performSearch(std::string(searchQueryBuffer));
-	}
-
-	if (isSearching)
-	{
-		ImGui::Text("Searching...");
-		ImGui::ProgressBar(-1.0f * ImGui::GetTime());
-	}
-
-	// Display search results
-	if (!searchResults.empty())
-	{
-		displaySearchResults();
-	}
-
-	ImGui::End();
-}
-
 void SearchUI::displayEnhancedSearchResults()
 {
 	// Results header with count
@@ -203,10 +160,15 @@ void SearchUI::displayEnhancedSearchResults()
 
 void SearchUI::displayFavorites()
 {
-	uint64_t oldRevision = lastFavoritesRevision;
-	// Update favorites cache (this updates favoritesDisplay too)
-	updateFavoritesCache();
-	bool revisionChanged = (lastFavoritesRevision != oldRevision);
+	uint64_t currentRevision = searchEngine.getFavoritesRevision();
+	bool revisionChanged = (currentRevision != lastFavoritesRevision);
+
+	// Update local cache if favorites have changed
+	if (revisionChanged)
+	{
+		favoritesDisplay = searchEngine.getFavorites();
+		lastFavoritesRevision = currentRevision;
+	}
 
 	HypertubeTheme::drawSectionHeader("Favorites");
 
@@ -730,25 +692,7 @@ void SearchUI::processPendingResults()
 
 bool SearchUI::isInFavorites(const std::string &infoHash) const
 {
-	return favoriteHashesCache.find(infoHash) != favoriteHashesCache.end();
-}
-
-void SearchUI::updateFavoritesCache()
-{
-	uint64_t currentRevision = searchEngine.getFavoritesRevision();
-	if (currentRevision != lastFavoritesRevision)
-	{
-		const auto &favorites = searchEngine.getFavorites();
-		favoritesDisplay = favorites;
-
-		favoriteHashesCache.clear();
-		for (const auto &fav : favorites)
-		{
-			favoriteHashesCache.insert(fav.infoHash);
-		}
-
-		lastFavoritesRevision = currentRevision;
-	}
+	return searchEngine.isFavorite(infoHash);
 }
 
 void SearchUI::sortTorrentResults(std::vector<TorrentSearchResult> &results, ImGuiTableSortSpecs *sort_specs)

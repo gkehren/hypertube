@@ -3,7 +3,6 @@
 #include <imgui.h>
 #include <string>
 #include <vector>
-#include <unordered_set>
 #include <functional>
 #include <mutex>
 #include <atomic>
@@ -53,7 +52,6 @@ private:
 	char searchQueryBuffer[256] = {0};
 	std::vector<TorrentSearchResult> searchResults;
 	std::vector<TorrentSearchResult> favoritesDisplay;
-	std::unordered_set<std::string> favoriteHashesCache;
 	uint64_t lastFavoritesRevision = 0;
 	TorrentSearchResult selectedSearchResult;
 	std::atomic<bool> isSearching;
@@ -74,6 +72,5 @@ private:
 
 	// Internal methods
 	void processPendingResults();
-	void updateFavoritesCache();
 	bool isInFavorites(const std::string &infoHash) const;
 };
