@@ -105,43 +105,6 @@ void SearchUI::displayIntegratedSearch()
 	}
 }
 
-void SearchUI::displaySearchWindow()
-{
-	if (!ImGui::Begin("Torrent Search", &showSearchWindow, ImGuiWindowFlags_AlwaysAutoResize))
-	{
-		ImGui::End();
-		return;
-	}
-
-	// Search input
-	ImGui::Text("Search Query:");
-	ImGui::SameLine();
-	if (ImGui::InputText("##search", searchQueryBuffer, sizeof(searchQueryBuffer), ImGuiInputTextFlags_EnterReturnsTrue))
-	{
-		performSearch(std::string(searchQueryBuffer));
-	}
-
-	ImGui::SameLine();
-	if (ImGui::Button("Search"))
-	{
-		performSearch(std::string(searchQueryBuffer));
-	}
-
-	if (isSearching)
-	{
-		ImGui::Text("Searching...");
-		ImGui::ProgressBar(-1.0f * ImGui::GetTime());
-	}
-
-	// Display search results
-	if (!searchResults.empty())
-	{
-		displaySearchResults();
-	}
-
-	ImGui::End();
-}
-
 void SearchUI::displayEnhancedSearchResults()
 {
 	// Results header with count
@@ -184,43 +147,6 @@ void SearchUI::displayEnhancedSearchResults()
 		for (int i = 0; i < (int)searchResults.size(); ++i)
 		{
 			displayEnhancedSearchResultRow(searchResults[i], i);
-		}
-
-		ImGui::EndTable();
-	}
-
-	// Pagination controls at the bottom
-	ImGui::PushID("bottom_pagination");
-	displayPaginationControls();
-	ImGui::PopID();
-}
-
-void SearchUI::displaySearchResults()
-{
-	ImGui::Separator();
-	ImGui::Text("Search Results (%d found):", (int)searchResults.size());
-
-	// Pagination controls at the top
-	ImGui::PushID("top_pagination");
-	displayPaginationControls();
-	ImGui::PopID();
-
-	// Create a table for search results
-	if (ImGui::BeginTable("SearchResultsTable", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable | ImGuiTableFlags_Sortable | ImGuiTableFlags_ScrollY, ImVec2(0, 300)))
-	{
-		ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-		ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 80);
-		ImGui::TableSetupColumn("Seeders", ImGuiTableColumnFlags_WidthFixed, 60);
-		ImGui::TableSetupColumn("Leechers", ImGuiTableColumnFlags_WidthFixed, 60);
-		ImGui::TableSetupColumn("Completed", ImGuiTableColumnFlags_WidthFixed, 70);
-		ImGui::TableSetupColumn("Created", ImGuiTableColumnFlags_WidthFixed, 90);
-		ImGui::TableSetupColumn("Category", ImGuiTableColumnFlags_WidthFixed, 80);
-		ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 80);
-		ImGui::TableHeadersRow();
-
-		for (int i = 0; i < (int)searchResults.size(); ++i)
-		{
-			displaySearchResultRow(searchResults[i], i);
 		}
 
 		ImGui::EndTable();
@@ -574,75 +500,6 @@ void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result,
 	ImGui::PopStyleColor(3);
 
 	ImGui::PopID();
-}
-
-void SearchUI::displaySearchResultRow(const TorrentSearchResult &result, int index)
-{
-	const float rowHeight = 26.0f;
-	ImGui::TableNextRow(ImGuiTableRowFlags_None, rowHeight);
-
-	const auto &palette = HypertubeTheme::getCurrentPalette();
-
-	// Name
-	ImGui::TableSetColumnIndex(0);
-	ImGui::AlignTextToFramePadding();
-	ImGui::Text("%s", result.name.c_str());
-
-	// Size
-	ImGui::TableSetColumnIndex(1);
-	ImGui::AlignTextToFramePadding();
-	char sizeBuf[64];
-	Utils::formatBytes(result.sizeBytes, false, sizeBuf, sizeof(sizeBuf));
-	ImGui::Text("%s", sizeBuf);
-
-	// Seeders
-	ImGui::TableSetColumnIndex(2);
-	ImGui::AlignTextToFramePadding();
-	if (result.seeders > 0)
-		ImGui::TextColored(palette.success, "%d", result.seeders);
-	else
-		ImGui::Text("%d", result.seeders);
-
-	// Leechers
-	ImGui::TableSetColumnIndex(3);
-	ImGui::AlignTextToFramePadding();
-	ImGui::Text("%d", result.leechers);
-
-	// Completed
-	ImGui::TableSetColumnIndex(4);
-	ImGui::AlignTextToFramePadding();
-	if (result.completed > 0)
-		ImGui::TextColored(palette.success, "%d", result.completed);
-	else
-		ImGui::Text("%d", result.completed);
-
-	// Created date
-	ImGui::TableSetColumnIndex(5);
-	ImGui::AlignTextToFramePadding();
-	char createdDate[32];
-	formatUnixTime(result.createdUnix, createdDate, sizeof(createdDate));
-	ImGui::Text("%s", createdDate);
-
-	// Category
-	ImGui::TableSetColumnIndex(6);
-	ImGui::AlignTextToFramePadding();
-	ImGui::Text("%s", result.category.c_str());
-
-	// Action button with vertical centering
-	ImGui::TableSetColumnIndex(7);
-	float buttonHeight = ImGui::GetFrameHeight();
-	float buttonVerticalPadding = (rowHeight - buttonHeight) * 0.5f;
-	ImGui::SetCursorPosY(ImGui::GetCursorPosY() + buttonVerticalPadding);
-
-	ImGui::PushStyleColor(ImGuiCol_Button, palette.accent);
-	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(palette.accent.x * 1.2f, palette.accent.y * 1.2f, palette.accent.z * 1.2f, 1.0f));
-	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(palette.accent.x * 0.8f, palette.accent.y * 0.8f, palette.accent.z * 0.8f, 1.0f));
-	std::string buttonId = "Add##" + std::to_string(index);
-	if (ImGui::Button(buttonId.c_str(), ImVec2(-1, buttonHeight)))
-	{
-		handleSearchResultSelection(result);
-	}
-	ImGui::PopStyleColor(3);
 }
 
 void SearchUI::handleSearchResultSelection(const TorrentSearchResult &result)

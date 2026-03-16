@@ -18,13 +18,10 @@ public:
 
 	// Main display methods
 	void displayIntegratedSearch();
-	void displaySearchWindow();
-	void displaySearchResults();
 	void displayEnhancedSearchResults();
 	void displayFavorites();
 
 	// Search result display methods
-	void displaySearchResultRow(const TorrentSearchResult &result, int index);
 	void displayEnhancedSearchResultRow(const TorrentSearchResult &result, int index);
 	void displayFavoriteRow(const TorrentSearchResult &result, int index);
 
@@ -45,9 +42,6 @@ public:
 	void setShowFailurePopupCallback(std::function<void(const std::string &)> callback);
 
 	// State access
-	bool isShowSearchWindow() const { return showSearchWindow; }
-	void setShowSearchWindow(bool show) { showSearchWindow = show; }
-
 	const TorrentSearchResult &getSelectedSearchResult() const { return selectedSearchResult; }
 	void clearSelectedSearchResult() { selectedSearchResult = TorrentSearchResult(); }
 
@@ -60,7 +54,6 @@ private:
 	std::vector<TorrentSearchResult> favoritesDisplay;
 	uint64_t lastFavoritesRevision = 0;
 	TorrentSearchResult selectedSearchResult;
-	bool showSearchWindow = false;
 	std::atomic<bool> isSearching;
 	std::string currentSearchQuery;
 	std::string nextToken;
