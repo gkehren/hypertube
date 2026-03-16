@@ -602,63 +602,6 @@ namespace HypertubeTheme
 	}
 
 	// Custom widget implementations
-	void drawProgressBarColored(float fraction, const ImVec4 &color, const ImVec2 &size)
-	{
-		ImGuiWindow *window = ImGui::GetCurrentWindow();
-		if (window->SkipItems)
-			return;
-
-		ImGuiContext &g = *GImGui;
-		const ImGuiStyle &style = g.Style;
-
-		ImVec2 pos = window->DC.CursorPos;
-		ImVec2 actualSize = ImGui::CalcItemSize(size, ImGui::CalcItemWidth(), g.FontSize + style.FramePadding.y * 2.0f);
-		ImRect bb(pos, ImVec2(pos.x + actualSize.x, pos.y + actualSize.y));
-		ImGui::ItemSize(bb, style.FramePadding.y);
-		if (!ImGui::ItemAdd(bb, 0))
-			return;
-
-		// Background
-		const float rounding = style.FrameRounding;
-		ImGui::RenderFrame(bb.Min, bb.Max, ImGui::GetColorU32(s_currentPalette.progressBackground), true, rounding);
-
-		// Progress fill
-		fraction = ImClamp(fraction, 0.0f, 1.0f);
-		bb.Expand(ImVec2(-style.FrameBorderSize, -style.FrameBorderSize));
-		float fillWidth = bb.GetWidth() * fraction;
-		if (fillWidth > 0.0f)
-		{
-			ImRect fillBb(bb.Min, ImVec2(bb.Min.x + fillWidth, bb.Max.y));
-			window->DrawList->AddRectFilled(fillBb.Min, fillBb.Max, ImGui::GetColorU32(color), rounding);
-		}
-	}
-
-	void drawStatusBadge(const char *label, const ImVec4 &color)
-	{
-		ImVec2 textSize = ImGui::CalcTextSize(label);
-		ImVec2 padding(8.0f, 4.0f);
-
-		ImVec2 pos = ImGui::GetCursorScreenPos();
-		ImRect bb(pos, ImVec2(pos.x + textSize.x + padding.x * 2, pos.y + textSize.y + padding.y * 2));
-
-		ImGui::GetWindowDrawList()->AddRectFilled(
-			bb.Min, bb.Max,
-			ImGui::GetColorU32(ImVec4(color.x, color.y, color.z, 0.2f)),
-			4.0f);
-
-		ImGui::GetWindowDrawList()->AddRect(
-			bb.Min, bb.Max,
-			ImGui::GetColorU32(color),
-			4.0f, 0, 1.5f);
-
-		ImGui::SetCursorScreenPos(ImVec2(pos.x + padding.x, pos.y + padding.y));
-		ImGui::PushStyleColor(ImGuiCol_Text, color);
-		ImGui::Text("%s", label);
-		ImGui::PopStyleColor();
-
-		ImGui::SetCursorScreenPos(ImVec2(pos.x, bb.Max.y + ImGui::GetStyle().ItemSpacing.y));
-	}
-
 	bool drawStyledButton(const char *label, const ImVec2 &size, bool isPrimary)
 	{
 		if (isPrimary)
@@ -699,18 +642,6 @@ namespace HypertubeTheme
 			ImGui::PopTextWrapPos();
 			ImGui::EndTooltip();
 		}
-	}
-
-	void drawSearchBar(const char *label, char *buffer, size_t bufferSize, bool *enterPressed)
-	{
-		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 20.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(16.0f, 8.0f));
-
-		bool enter = ImGui::InputText(label, buffer, bufferSize, ImGuiInputTextFlags_EnterReturnsTrue);
-		if (enterPressed)
-			*enterPressed = enter;
-
-		ImGui::PopStyleVar(2);
 	}
 
 	bool drawCategoryItem(const char *label, const char *icon, bool selected, int count)
