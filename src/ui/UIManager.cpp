@@ -31,11 +31,19 @@ void UIManager::setDefaultSavePath()
 {
 // Set defaultSavePath to downloads directory of the current user
 #ifdef _WIN32
-	this->defaultSavePath = std::string(std::getenv("USERPROFILE")) + "\\Downloads";
-#elif __APPLE__
-	this->defaultSavePath = std::string(std::getenv("HOME")) + "/Downloads";
-#elif __linux__
-	this->defaultSavePath = std::string(std::getenv("HOME")) + "/Downloads";
+	const char* user_profile = std::getenv("USERPROFILE");
+	if (user_profile && user_profile[0] != '\0') {
+		this->defaultSavePath = std::string(user_profile) + "\\Downloads";
+	} else {
+		this->defaultSavePath = "C:\\Users\\Public\\Downloads";
+	}
+#else
+	const char* home_dir = std::getenv("HOME");
+	if (home_dir && home_dir[0] != '\0') {
+		this->defaultSavePath = std::string(home_dir) + "/Downloads";
+	} else {
+		this->defaultSavePath = "/var/tmp";
+	}
 #endif
 }
 

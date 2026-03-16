@@ -45,5 +45,13 @@ namespace Utils {
          * @param filePath The full path to the file to preview.
          */
         void openFilePreview(const std::string& filePath);
+
+        /**
+         * @brief Sanitizes a path to prevent it from being interpreted as a command-line argument.
+         *
+         * @param path The path to sanitize.
+         * @return The sanitized path.
+         */
+        std::string sanitizePath(const std::string& path);
     }
 }
