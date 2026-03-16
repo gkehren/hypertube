@@ -3,7 +3,6 @@
 #include <imgui.h>
 #include <string>
 #include <vector>
-#include <unordered_set>
 #include <functional>
 #include <mutex>
 #include <atomic>
@@ -19,13 +18,10 @@ public:
 
 	// Main display methods
 	void displayIntegratedSearch();
-	void displaySearchWindow();
-	void displaySearchResults();
 	void displayEnhancedSearchResults();
 	void displayFavorites();
 
 	// Search result display methods
-	void displaySearchResultRow(const TorrentSearchResult &result, int index);
 	void displayEnhancedSearchResultRow(const TorrentSearchResult &result, int index);
 	void displayFavoriteRow(const TorrentSearchResult &result, int index);
 
@@ -46,9 +42,6 @@ public:
 	void setShowFailurePopupCallback(std::function<void(const std::string &)> callback);
 
 	// State access
-	bool isShowSearchWindow() const { return showSearchWindow; }
-	void setShowSearchWindow(bool show) { showSearchWindow = show; }
-
 	const TorrentSearchResult &getSelectedSearchResult() const { return selectedSearchResult; }
 	void clearSelectedSearchResult() { selectedSearchResult = TorrentSearchResult(); }
 
@@ -59,10 +52,8 @@ private:
 	char searchQueryBuffer[256] = {0};
 	std::vector<TorrentSearchResult> searchResults;
 	std::vector<TorrentSearchResult> favoritesDisplay;
-	std::unordered_set<std::string> favoriteHashesCache;
 	uint64_t lastFavoritesRevision = 0;
 	TorrentSearchResult selectedSearchResult;
-	bool showSearchWindow = false;
 	std::atomic<bool> isSearching;
 	std::string currentSearchQuery;
 	std::string nextToken;
@@ -81,6 +72,5 @@ private:
 
 	// Internal methods
 	void processPendingResults();
-	void updateFavoritesCache();
 	bool isInFavorites(const std::string &infoHash) const;
 };

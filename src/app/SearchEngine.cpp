@@ -44,108 +44,20 @@ SearchEngine::SearchEngine()
 	: apiUrl("https://torrents-csv.com/service/search"),
 	  timeoutSeconds(30),
 	  maxRetries(3),
-	  curlHandle(nullptr),
 	  searching(false),
-	  cancelRequested(false),
-	  stopWorker(false)
+	  cancelRequested(false)
 {
 	// Initialize cURL globally
 	curl_global_init(CURL_GLOBAL_DEFAULT);
-	curlHandle = curl_easy_init();
-
-	// Start persistent worker thread
-	workerThread = std::thread([this]()
-							   {
-		while (true)
-		{
-			SearchTask task;
-			{
-				std::unique_lock<std::mutex> lock(workerMutex);
-				workerCV.wait(lock, [this]()
-							  { return stopWorker || pendingTask.hasTask; });
-
-				if (stopWorker && !pendingTask.hasTask)
-				{
-					break;
-				}
-
-				task.query = std::move(pendingTask.query);
-				task.callback = std::move(pendingTask.callback);
-				task.hasTask = pendingTask.hasTask;
-
-				pendingTask.hasTask = false;
-				if (task.hasTask)
-				{
-					searching = true;
-				}
-			}
-
-			if (task.hasTask && task.query)
-			{
-				SearchResponse response;
-				Result result = Result::Failure("Unknown error");
-
-				// Check cancellation before starting
-				if (cancelRequested.load())
-				{
-					result = Result::Failure("Search cancelled");
-				}
-				else
-				{
-					std::string url = buildSearchUrl(*task.query);
-					std::cout << "Worker searching with URL: " << url << std::endl;
-					std::string httpResponse;
-
-					Result httpResult = makeHttpRequest(url, httpResponse);
-
-					// Check cancellation after HTTP request
-					if (cancelRequested.load())
-					{
-						result = Result::Failure("Search cancelled");
-					}
-					else if (httpResult)
-					{
-						result = parseSearchResponse(httpResponse, response);
-						if (result)
-						{
-							addToSearchHistory(task.query->query);
-						}
-					}
-					else
-					{
-						result = httpResult;
-					}
-				}
-
-				searching = false;
-
-				// Always call the callback to reset UI state
-				if (task.callback)
-				{
-					task.callback(result, response);
-				}
-			}
-		} });
 }
 
 SearchEngine::~SearchEngine()
 {
-	// Signal worker to stop and cancel any ongoing search
+	// Cancel any ongoing search and wait for thread to finish
+	cancelCurrentSearch();
+	if (searchThread.joinable())
 	{
-		std::lock_guard<std::mutex> lock(workerMutex);
-		stopWorker = true;
-		cancelRequested = true;
-	}
-	workerCV.notify_one();
-
-	if (workerThread.joinable())
-	{
-		workerThread.join();
-	}
-
-	if (curlHandle)
-	{
-		curl_easy_cleanup(static_cast<CURL *>(curlHandle));
+		searchThread.join();
 	}
 	curl_global_cleanup();
 }
@@ -216,15 +128,13 @@ Result SearchEngine::searchTorrents(const SearchQuery &query, SearchResponse &re
 
 Result SearchEngine::makeHttpRequest(const std::string &url, std::string &response)
 {
-	std::lock_guard<std::mutex> lockHandle(curlMutex);
-
-	CURL *curl = static_cast<CURL *>(curlHandle);
+	CURL *curl = curl_easy_init();
 	if (!curl)
 	{
-		return Result::Failure("cURL handle not initialized");
+		return Result::Failure("Failed to initialize cURL");
 	}
 
-	CURLcode res = CURLE_OK;
+	CURLcode res;
 	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
@@ -242,12 +152,12 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 	// Perform the request
 	for (int attempt = 0; attempt < maxRetries; ++attempt)
 	{
-		response.clear(); // Clear any partial data from previous attempt
 		res = curl_easy_perform(curl);
 
 		// Check if operation was cancelled
 		if (res == CURLE_ABORTED_BY_CALLBACK)
 		{
+			curl_easy_cleanup(curl);
 			return Result::Failure("Search cancelled by user");
 		}
 
@@ -258,10 +168,12 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 
 			if (response_code == 200)
 			{
+				curl_easy_cleanup(curl);
 				return Result::Success();
 			}
 			else
 			{
+				curl_easy_cleanup(curl);
 				return Result::Failure("HTTP Error: " + std::to_string(response_code));
 			}
 		}
@@ -269,17 +181,12 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 		// If not the last attempt, wait a bit before retrying
 		if (attempt < maxRetries - 1)
 		{
-			std::unique_lock<std::mutex> lock(workerMutex);
-			if (workerCV.wait_for(lock, std::chrono::milliseconds(1000 * (attempt + 1)), [this]()
-								  { return cancelRequested.load() || stopWorker; }))
-			{
-				// Interrupted by cancellation or stop request
-				break;
-			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(1000 * (attempt + 1)));
 		}
 	}
 
 	std::string error_msg = "cURL Error: " + std::string(curl_easy_strerror(res));
+	curl_easy_cleanup(curl);
 	return Result::Failure(error_msg);
 }
 
@@ -739,23 +646,72 @@ bool SearchEngine::isSearching() const
 void SearchEngine::cancelCurrentSearch()
 {
 	cancelRequested = true;
-	workerCV.notify_all();
 }
 
-// Async search implementation with persistent worker thread
+// Async search implementation with threading
 void SearchEngine::searchTorrentsAsync(const SearchQuery &query, std::function<void(Result, SearchResponse)> callback)
 {
-	std::lock_guard<std::mutex> lock(workerMutex);
-
-	// If already searching or task is pending, ignore this request
-	if (searching.load() || pendingTask.hasTask)
+	// If already searching, ignore this request
+	if (searching.load())
 	{
 		return;
 	}
 
+	// Join previous thread if it exists
+	if (searchThread.joinable())
+	{
+		searchThread.join();
+	}
+
+	// Reset cancellation flag
 	cancelRequested = false;
-	pendingTask.query = std::make_unique<SearchQuery>(query);
-	pendingTask.callback = callback;
-	pendingTask.hasTask = true;
-	workerCV.notify_one();
+
+	// Launch search in separate thread
+	searchThread = std::thread([this, query, callback]()
+							   {
+		searching = true;
+		SearchResponse response;
+		response.torrents.clear();
+		response.nextToken.clear();
+		response.hasMore = false;
+
+		Result result = Result::Failure("Unknown error");
+
+		// Check cancellation before starting
+		if (cancelRequested.load())
+		{
+			result = Result::Failure("Search cancelled");
+		}
+		else
+		{
+			// Perform the search directly (bypass the searching flag check)
+			std::string url = buildSearchUrl(query);
+			std::cout << "Searching with URL: " << url << std::endl;
+			std::string httpResponse;
+
+			Result httpResult = makeHttpRequest(url, httpResponse);
+
+			// Check cancellation after HTTP request
+			if (cancelRequested.load())
+			{
+				result = Result::Failure("Search cancelled");
+			}
+			else if (httpResult)
+			{
+				result = parseSearchResponse(httpResponse, response);
+				if (result)
+				{
+					addToSearchHistory(query.query);
+				}
+			}
+			else
+			{
+				result = httpResult;
+			}
+		}
+
+		searching = false;
+
+		// Always call the callback to reset UI state, even if cancelled
+		callback(result, response); });
 }
