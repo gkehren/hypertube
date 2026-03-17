@@ -15,4 +15,7 @@ public:
 
 	operator bool() const { return this->success; };
 	operator std::string() const { return this->message; }
+
+	// Get error message
+	const std::string& getError() const { return this->message; }
 };

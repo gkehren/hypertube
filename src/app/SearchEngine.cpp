@@ -45,10 +45,14 @@ SearchEngine::SearchEngine()
 	  timeoutSeconds(30),
 	  maxRetries(3),
 	  searching(false),
-	  cancelRequested(false)
+	  cancelRequested(false),
+	  activeProviderName("torrents-csv.com")
 {
 	// Initialize cURL globally
 	curl_global_init(CURL_GLOBAL_DEFAULT);
+
+	// Initialize providers
+	initializeProviders();
 }
 
 SearchEngine::~SearchEngine()
@@ -684,21 +688,10 @@ void SearchEngine::searchTorrentsAsync(const SearchQuery &query, std::function<v
 		}
 		else
 		{
-			// Perform the search directly (bypass the searching flag check)
-			std::string url = buildSearchUrl(query);
-			std::cout << "Searching with URL: " << url << std::endl;
-			std::string httpResponse;
-
-			Result httpResult = makeHttpRequest(url, httpResponse);
-
-			// Check cancellation after HTTP request
-			if (cancelRequested.load())
+			// Use the active provider to perform the search
+			if (activeProvider)
 			{
-				result = Result::Failure("Search cancelled");
-			}
-			else if (httpResult)
-			{
-				result = parseSearchResponse(httpResponse, response);
+				result = activeProvider->search(query, response);
 				if (result)
 				{
 					addToSearchHistory(query.query);
@@ -706,7 +699,7 @@ void SearchEngine::searchTorrentsAsync(const SearchQuery &query, std::function<v
 			}
 			else
 			{
-				result = httpResult;
+				result = Result::Failure("No active search provider");
 			}
 		}
 
@@ -714,4 +707,80 @@ void SearchEngine::searchTorrentsAsync(const SearchQuery &query, std::function<v
 
 		// Always call the callback to reset UI state, even if cancelled
 		callback(result, response); });
+}
+
+// ============================================================================
+// Provider Management
+// ============================================================================
+
+void SearchEngine::initializeProviders()
+{
+	// Create provider instances
+	torrentsCsvProvider = std::make_shared<TorrentsCsvProvider>();
+	bitsearchProvider = std::make_shared<BitsearchProvider>();
+	multiProvider = std::make_shared<MultiProvider>();
+
+	// Set default timeouts and retries
+	torrentsCsvProvider->setTimeout(timeoutSeconds);
+	torrentsCsvProvider->setMaxRetries(maxRetries);
+	bitsearchProvider->setTimeout(timeoutSeconds);
+	bitsearchProvider->setMaxRetries(maxRetries);
+	multiProvider->setTimeout(timeoutSeconds);
+	multiProvider->setMaxRetries(maxRetries);
+
+	// Set default active provider
+	activeProvider = torrentsCsvProvider;
+}
+
+void SearchEngine::setActiveProvider(const std::string &providerName)
+{
+	if (providerName == "torrents-csv.com" || providerName == "torrents-csv")
+	{
+		activeProvider = torrentsCsvProvider;
+		activeProviderName = "torrents-csv.com";
+	}
+	else if (providerName == "Bitsearch.to" || providerName == "bitsearch")
+	{
+		activeProvider = bitsearchProvider;
+		activeProviderName = "Bitsearch.to";
+	}
+	else if (providerName == "All Sources" || providerName == "multi" || providerName == "all")
+	{
+		activeProvider = multiProvider;
+		activeProviderName = "All Sources";
+	}
+	else
+	{
+		// Default to torrents-csv if unknown
+		activeProvider = torrentsCsvProvider;
+		activeProviderName = "torrents-csv.com";
+	}
+
+	std::cout << "Switched to provider: " << activeProviderName << std::endl;
+}
+
+void SearchEngine::loadProviderFromConfig(ConfigManager &configManager)
+{
+	std::string savedProvider = configManager.getSearchProvider();
+	setActiveProvider(savedProvider);
+}
+
+void SearchEngine::saveProviderToConfig(ConfigManager &configManager)
+{
+	configManager.setSearchProvider(activeProviderName);
+}
+
+
+const std::string &SearchEngine::getActiveProviderName() const
+{
+	return activeProviderName;
+}
+
+std::vector<std::string> SearchEngine::getAvailableProviders() const
+{
+	std::vector<std::string> providers;
+	providers.push_back("torrents-csv.com");
+	providers.push_back("Bitsearch.to");
+	providers.push_back("All Sources");
+	return providers;
 }

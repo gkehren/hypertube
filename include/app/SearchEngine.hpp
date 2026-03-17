@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Result.hpp"
+#include "SearchProvider.hpp"
 #include <string>
 #include <vector>
 #include <memory>
@@ -9,50 +10,6 @@
 #include <mutex>
 #include <atomic>
 #include <unordered_set>
-
-struct TorrentSearchResult
-{
-	std::string name;
-	std::string magnetUri;
-	std::string infoHash;
-	size_t sizeBytes;
-	int seeders;
-	int leechers;
-	std::string dateUploaded;
-	std::string category;
-	int64_t createdUnix;
-	int64_t scrapedDate;
-	int completed;
-
-	TorrentSearchResult() = default;
-	TorrentSearchResult(const std::string &name, const std::string &magnetUri,
-						const std::string &infoHash, size_t sizeBytes, int seeders,
-						int leechers, const std::string &dateUploaded, const std::string &category,
-						int64_t createdUnix = 0, int64_t scrapedDate = 0, int completed = 0)
-		: name(name), magnetUri(magnetUri), infoHash(infoHash),
-		  sizeBytes(sizeBytes), seeders(seeders), leechers(leechers),
-		  dateUploaded(dateUploaded), category(category), createdUnix(createdUnix),
-		  scrapedDate(scrapedDate), completed(completed) {}
-};
-
-struct SearchQuery
-{
-	std::string query;
-	int maxResults = 0;			// 0 means use API default (don't send size parameter)
-	std::string nextToken = ""; // Token for pagination (from API 'next' field)
-
-	SearchQuery(const std::string &q) : query(q) {}
-	SearchQuery(const std::string &q, int max) : query(q), maxResults(max) {}
-	SearchQuery(const std::string &q, int max, const std::string &next)
-		: query(q), maxResults(max), nextToken(next) {}
-};
-
-struct SearchResponse
-{
-	std::vector<TorrentSearchResult> torrents;
-	std::string nextToken;
-	bool hasMore = false;
-};
 
 class SearchEngine
 {
@@ -88,6 +45,16 @@ public:
 	void setTimeout(int seconds);
 	void setMaxRetries(int retries);
 
+	// Provider management
+	void setActiveProvider(const std::string &providerName);
+	const std::string &getActiveProviderName() const;
+	std::vector<std::string> getAvailableProviders() const;
+	std::shared_ptr<SearchProvider> getActiveProvider() const { return activeProvider; }
+
+	// Provider persistence
+	void loadProviderFromConfig(class ConfigManager &configManager);
+	void saveProviderToConfig(class ConfigManager &configManager);
+
 	// Status
 	bool isSearching() const;
 	void cancelCurrentSearch();
@@ -103,17 +70,25 @@ private:
 	std::mutex searchMutex;
 	std::thread searchThread;
 
+	// Provider management
+	std::shared_ptr<SearchProvider> activeProvider;
+	std::shared_ptr<TorrentsCsvProvider> torrentsCsvProvider;
+	std::shared_ptr<BitsearchProvider> bitsearchProvider;
+	std::shared_ptr<MultiProvider> multiProvider;
+	std::string activeProviderName;
+
 	std::vector<std::string> searchHistory;
 	std::vector<TorrentSearchResult> favorites;
 	std::atomic<uint64_t> favoritesRevision{0};
 	std::unordered_set<std::string> favoriteHashes;
 	mutable std::mutex favoritesMutex;
 
-	// HTTP client methods
+	// HTTP client methods (kept for backward compatibility)
 	Result makeHttpRequest(const std::string &url, std::string &response);
 	std::string buildSearchUrl(const SearchQuery &query) const;
 	Result parseSearchResponse(const std::string &response, std::vector<TorrentSearchResult> &results);
 	Result parseSearchResponse(const std::string &response, SearchResponse &searchResponse);
 
 	// Utility methods
+	void initializeProviders();
 };

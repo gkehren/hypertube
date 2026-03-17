@@ -29,6 +29,12 @@ public:
 	void performSearch(const std::string &query);
 	void loadMoreResults();
 	void displayPaginationControls();
+	void displayProviderSelection();
+	void displayDirectDownload();
+	void handleDirectDownload(const std::string &input);
+
+	// Provider management
+	void setConfigManager(class ConfigManager *configManager) { this->configManager = configManager; }
 
 	// Selection handling
 	void handleSearchResultSelection(const TorrentSearchResult &result);
@@ -50,6 +56,7 @@ private:
 
 	// Search state
 	char searchQueryBuffer[256] = {0};
+	char directDownloadBuffer[512] = {0};
 	std::vector<TorrentSearchResult> searchResults;
 	std::vector<TorrentSearchResult> favoritesDisplay;
 	uint64_t lastFavoritesRevision = 0;
@@ -58,6 +65,10 @@ private:
 	std::string currentSearchQuery;
 	std::string nextToken;
 	bool hasMoreResults = true;
+	int selectedProviderIndex = 0;
+
+	// Configuration manager for persistence
+	class ConfigManager *configManager = nullptr;
 
 	// Async search state (protected by mutex)
 	std::mutex resultsMutex;

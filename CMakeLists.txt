@@ -132,6 +132,7 @@ target_link_libraries(hypertube_utils PUBLIC
 # Create the search library
 add_library(hypertube_search STATIC
     src/app/SearchEngine.cpp
+    src/app/SearchProvider.cpp
 )
 
 target_link_libraries(hypertube_search PUBLIC

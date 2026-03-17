@@ -15,6 +15,12 @@ UIManager::UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine,
 	modalDialogs = std::make_unique<ModalDialogs>(torrentManager);
 	logsUI = std::make_unique<LogsUI>(torrentManager);
 
+	// Link SearchUI with ConfigManager for provider persistence
+	searchUI->setConfigManager(&settingsConfigManager);
+
+	// Load saved search provider preference
+	searchEngine.loadProviderFromConfig(settingsConfigManager);
+
 	// Setup callbacks
 	setupUICallbacks();
 }

@@ -684,3 +684,28 @@ bool ConfigManager::validateConfig()
 
 	return true;
 }
+
+void ConfigManager::setSearchProvider(const std::string &providerName)
+{
+	ensureSettingsStructure();
+	config["settings"]["search_provider"] = providerName;
+	enqueueSave("config/settings.json", config);
+}
+
+std::string ConfigManager::getSearchProvider() const
+{
+	// Return default if not found
+	if (!config.contains("settings") || !config["settings"].is_object())
+	{
+		return "torrents-csv.com";
+	}
+
+	const auto &settings = config["settings"];
+	if (!settings.contains("search_provider") || !settings["search_provider"].is_string())
+	{
+		return "torrents-csv.com";
+	}
+
+	return settings["search_provider"].get<std::string>();
+}
+

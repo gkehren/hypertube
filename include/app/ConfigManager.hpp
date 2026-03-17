@@ -40,6 +40,10 @@ public:
 	void saveFavoritesAndHistory(const std::vector<TorrentSearchResult> &favorites, const std::vector<std::string> &searchHistory);
 	void loadFavoritesAndHistory(std::vector<TorrentSearchResult> &favorites, std::vector<std::string> &searchHistory);
 
+	// Search provider configuration
+	void setSearchProvider(const std::string &providerName);
+	std::string getSearchProvider() const;
+
 	// Speed limit configuration
 	void setDownloadSpeedLimit(int bytesPerSecond);
 	void setUploadSpeedLimit(int bytesPerSecond);

@@ -22,6 +22,11 @@ void SearchUI::displayIntegratedSearch()
 	// Search input section with styled header
 	HypertubeTheme::drawSectionHeader("Torrent Search");
 
+	// Provider selection dropdown
+	displayProviderSelection();
+
+	ImGui::Spacing();
+
 	// Search input with better styling
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 20.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(16.0f, 8.0f));
@@ -37,6 +42,11 @@ void SearchUI::displayIntegratedSearch()
 	{
 		performSearch(std::string(searchQueryBuffer));
 	}
+
+	ImGui::Spacing();
+
+	// Direct download section
+	displayDirectDownload();
 
 	// Display search history as clickable suggestions
 	const auto &history = searchEngine.getSearchHistory();
@@ -767,3 +777,181 @@ void SearchUI::sortTorrentResults(std::vector<TorrentSearchResult> &results, ImG
 
 	sort_specs->SpecsDirty = false;
 }
+
+void SearchUI::displayProviderSelection()
+{
+	// Get available providers
+	auto providers = searchEngine.getAvailableProviders();
+	std::string currentProvider = searchEngine.getActiveProviderName();
+
+	// Find the index of the current provider
+	for (size_t i = 0; i < providers.size(); ++i)
+	{
+		if (providers[i] == currentProvider)
+		{
+			selectedProviderIndex = static_cast<int>(i);
+			break;
+		}
+	}
+
+	ImGui::Text("Search Provider:");
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(200.0f);
+
+	// Create combo box
+	if (ImGui::BeginCombo("##provider", currentProvider.c_str()))
+	{
+		for (size_t i = 0; i < providers.size(); ++i)
+		{
+			bool isSelected = (selectedProviderIndex == static_cast<int>(i));
+			if (ImGui::Selectable(providers[i].c_str(), isSelected))
+			{
+				selectedProviderIndex = static_cast<int>(i);
+				searchEngine.setActiveProvider(providers[i]);
+
+				// Save provider preference to configuration
+				if (configManager)
+				{
+					searchEngine.saveProviderToConfig(*configManager);
+				}
+			}
+			if (isSelected)
+			{
+				ImGui::SetItemDefaultFocus();
+			}
+		}
+		ImGui::EndCombo();
+	}
+}
+
+void SearchUI::displayDirectDownload()
+{
+	// Direct download section
+	ImGui::Separator();
+	ImGui::Spacing();
+	ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Direct Download");
+	ImGui::Spacing();
+
+	// Input field for magnet links, .torrent URLs, or HTTP/HTTPS downloads
+	ImGui::PushItemWidth(-160.0f);
+	bool enterPressedDirect = ImGui::InputTextWithHint(
+		"##directdownload",
+		"Enter magnet link, .torrent URL, or HTTP/HTTPS download link",
+		directDownloadBuffer,
+		sizeof(directDownloadBuffer),
+		ImGuiInputTextFlags_EnterReturnsTrue);
+	ImGui::PopItemWidth();
+
+	ImGui::SameLine();
+	bool addClicked = HypertubeTheme::drawStyledButton("Add", ImVec2(140, 0), true);
+
+	if (enterPressedDirect || addClicked)
+	{
+		std::string input(directDownloadBuffer);
+		if (!input.empty())
+		{
+			handleDirectDownload(input);
+			// Clear the buffer after adding
+			directDownloadBuffer[0] = '\0';
+		}
+	}
+
+	ImGui::Spacing();
+	ImGui::Separator();
+}
+
+void SearchUI::handleDirectDownload(const std::string &input)
+{
+	// Check if it's a magnet link
+	if (input.find("magnet:?xt=urn:btih:") == 0)
+	{
+		// It's a magnet link - create a pseudo search result and handle it
+		TorrentSearchResult result;
+		result.magnetUri = input;
+		result.name = "Direct Magnet Download";
+
+		// Try to extract infohash from magnet link
+		size_t btihPos = input.find("btih:");
+		if (btihPos != std::string::npos)
+		{
+			size_t start = btihPos + 5;
+			size_t end = input.find('&', start);
+			if (end == std::string::npos)
+			{
+				end = input.length();
+			}
+			result.infoHash = input.substr(start, end - start);
+		}
+
+		// Try to extract name from magnet link
+		size_t dnPos = input.find("&dn=");
+		if (dnPos != std::string::npos)
+		{
+			size_t start = dnPos + 4;
+			size_t end = input.find('&', start);
+			if (end == std::string::npos)
+			{
+				end = input.length();
+			}
+			std::string encodedName = input.substr(start, end - start);
+			// Simple URL decode (replace + with space, %20 with space)
+			for (size_t i = 0; i < encodedName.length(); ++i)
+			{
+				if (encodedName[i] == '+')
+				{
+					encodedName[i] = ' ';
+				}
+			}
+			size_t pos = 0;
+			while ((pos = encodedName.find("%20", pos)) != std::string::npos)
+			{
+				encodedName.replace(pos, 3, " ");
+				pos += 1;
+			}
+			result.name = encodedName;
+		}
+
+		result.sizeBytes = 0;
+		result.seeders = 0;
+		result.leechers = 0;
+		result.category = "Direct";
+
+		handleSearchResultSelection(result);
+	}
+	// Check if it's a .torrent URL
+	else if (input.find("http://") == 0 || input.find("https://") == 0)
+	{
+		// Check if it's a .torrent file
+		if (input.find(".torrent") != std::string::npos)
+		{
+			// Create a pseudo search result for torrent file URL
+			TorrentSearchResult result;
+			result.magnetUri = input; // Store URL in magnetUri field
+			result.name = "Direct Torrent File Download";
+			result.infoHash = ""; // Will be determined after download
+			result.sizeBytes = 0;
+			result.seeders = 0;
+			result.leechers = 0;
+			result.category = "Direct";
+
+			handleSearchResultSelection(result);
+		}
+		else
+		{
+			// It's a direct HTTP/HTTPS download
+			if (onShowFailurePopup)
+			{
+				onShowFailurePopup("Direct HTTP/HTTPS downloads are not yet supported. Please use magnet links or .torrent files.");
+			}
+		}
+	}
+	else
+	{
+		// Unknown format
+		if (onShowFailurePopup)
+		{
+			onShowFailurePopup("Invalid input. Please enter a magnet link (magnet:?xt=urn:btih:...) or a .torrent URL (http://.../.torrent)");
+		}
+	}
+}
+
