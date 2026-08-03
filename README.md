@@ -151,17 +151,52 @@ Stores the state of active torrents to restore them when the application restart
    ```
 
 2. **Install Dependencies:**
-   Ensure you have the required dependencies installed. You can use a package manager like vcpkg:
-   ```sh
-   vcpkg install glfw3 imgui libtorrent curl boost-system boost-filesystem
-   ```
+
+   Hypertube is multiplatform and requires C++17 support. If any optional dependency is not found locally, CMake will automatically download and build it using `FetchContent`.
+
+   - **Linux (Ubuntu / Debian):**
+     ```sh
+     sudo apt update
+     sudo apt install -y cmake build-essential libtorrent-rasterbar-dev libcurl4-openssl-dev libgl1-mesa-dev libglfw3-dev libx11-dev
+     ```
+
+   - **Linux (Arch Linux):**
+     ```sh
+     sudo pacman -S cmake base-devel libtorrent-rasterbar curl glfw-x11 mesa
+     ```
+
+   - **Linux (Fedora):**
+     ```sh
+     sudo dnf install cmake gcc-c++ libtorrent-rasterbar-devel libcurl-devel glfw-devel mesa-libGL-devel
+     ```
+
+   - **macOS (Homebrew):**
+     ```sh
+     brew install cmake glfw libtorrent-rasterbar curl nlohmann-json
+     ```
+
+   - **Windows (vcpkg):**
+     ```cmd
+     vcpkg install glfw3 imgui libtorrent curl nlohmann-json
+     ```
 
 3. **Build the Project:**
+
+   - **Linux / macOS:**
+     ```sh
+     cmake -B build -DCMAKE_BUILD_TYPE=Release
+     cmake --build build -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+     ```
+
+   - **Windows (with vcpkg):**
+     ```cmd
+     cmake -B build -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DCMAKE_BUILD_TYPE=Release
+     cmake --build build --config Release
+     ```
+
+4. **Run Tests:**
    ```sh
-   mkdir build
-   cd build
-   cmake .. -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
-   make
+   ctest --test-dir build --output-on-failure
    ```
 
 ## Usage
