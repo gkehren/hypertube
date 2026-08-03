@@ -36,13 +36,17 @@ ctest --test-dir build --output-on-failure
 4. Use the torrent table to pause, resume, inspect, filter, or remove torrents.
 5. Open the details view to inspect files, peers, trackers, speeds, and progress.
 
-Torrent state is persisted when the application shuts down and restored at the next startup when the saved entries are valid.
+Torrent state and bounded fast-resume data are persisted periodically and during orderly shutdown, then restored at the next startup when the saved entries are valid.
 
 ## Search, favorites, and history
 
 The Search view uses the active registered search provider. Search supports pagination, cancellation, history, and favorites. Selecting a result opens the save-path flow before the torrent is added.
 
 Search failures and cancellation are reported in the UI and in the local diagnostics log. See [Troubleshooting](troubleshooting.md) if the provider cannot be reached.
+
+Preferences can switch search to a local Jackett/Prowlarr Torznab endpoint. Enter its API key in the password field; Hypertube stores it in the operating-system credential store. If the initial Torznab request fails, search falls back to torrents-csv and records the provider failure in diagnostics.
+
+The same Preferences dialog can route both search and BitTorrent traffic through an HTTP or SOCKS5 proxy. Proxy passwords use the same native credential store. On Linux, install `secret-tool` and unlock a Secret Service-compatible keyring before saving credentials.
 
 ## Portable mode
 

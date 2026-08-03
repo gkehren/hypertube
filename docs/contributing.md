@@ -45,7 +45,7 @@ Protect torrent maps and status cache with their existing mutexes. Return snapsh
 
 ### Search
 
-Keep requests bounded and cancellable. Protect provider, settings, history, and favorites state. Do not let worker callbacks access destroyed UI state.
+Keep requests bounded and cancellable. Protect provider, settings, history, favorites, cache, and completion state. Publish owned worker results for polling on the UI thread; do not let workers access UI state.
 
 ### UI
 

@@ -84,6 +84,55 @@ TEST_F(ConfigManagerTest, SaveAndLoadConfig)
 	EXPECT_TRUE(manager2.getEnableNATPMP());
 }
 
+TEST_F(ConfigManagerTest, PersistsSearchAndProxySettingsWithoutSecrets)
+{
+	ConfigManager manager;
+	const std::string configPath = (testDir / "network-settings.json").string();
+	manager.setTorznabEnabled(true);
+	manager.setTorznabUrl("http://127.0.0.1:9696/torznab/api");
+	manager.setProxyEnabled(true);
+	manager.setProxyType("http");
+	manager.setProxyHost("proxy.local");
+	manager.setProxyPort(8080);
+	manager.setProxyUsername("user");
+	manager.save(configPath);
+	manager.waitForAsyncOperations();
+
+	ConfigManager restored;
+	ASSERT_TRUE(restored.load(configPath));
+	EXPECT_TRUE(restored.getTorznabEnabled());
+	EXPECT_EQ(restored.getTorznabUrl(), "http://127.0.0.1:9696/torznab/api");
+	EXPECT_TRUE(restored.getProxyEnabled());
+	EXPECT_EQ(restored.getProxyType(), "http");
+	EXPECT_EQ(restored.getProxyHost(), "proxy.local");
+	EXPECT_EQ(restored.getProxyPort(), 8080);
+	EXPECT_EQ(restored.getProxyUsername(), "user");
+	EXPECT_EQ(restored.getConfig().dump().find("password"), std::string::npos);
+	EXPECT_EQ(restored.getConfig().dump().find("api_key"), std::string::npos);
+}
+
+TEST_F(ConfigManagerTest, FillsMissingNestedDefaultsWithoutDroppingUnknownSettings)
+{
+	const std::string configPath = (testDir / "partial-settings.json").string();
+	{
+		std::ofstream file(configPath);
+		file << R"({
+			"version": 1,
+			"settings": {
+				"search": {"torznab_enabled": true},
+				"custom_future_setting": 42
+			}
+		})";
+	}
+
+	ConfigManager manager;
+	ASSERT_TRUE(manager.load(configPath));
+	EXPECT_TRUE(manager.getTorznabEnabled());
+	EXPECT_FALSE(manager.getTorznabUrl().empty());
+	EXPECT_EQ(manager.getProxyPort(), 1080);
+	EXPECT_EQ(manager.getConfig()["settings"]["custom_future_setting"], 42);
+}
+
 TEST_F(ConfigManagerTest, MigrateFromLegacyConfig)
 {
 	std::string configPath = (testDir / "legacy.json").string();
@@ -256,6 +305,29 @@ TEST_F(ConfigManagerTest, LoadTorrentsInvalidJson)
     Result res = manager.loadTorrents(configPath, torrents);
     EXPECT_FALSE(res.success);
 	EXPECT_TRUE(torrents.empty());
+}
+
+TEST_F(ConfigManagerTest, IgnoresMalformedResumeDataAndKeepsFallbackIdentity)
+{
+	const std::string configPath = (testDir / "invalid-resume.json").string();
+	{
+		std::ofstream file(configPath);
+		file << R"({
+			"version": 2,
+			"torrents": [{
+				"magnet_uri": "magnet:?xt=urn:btih:0123456789012345678901234567890123456789",
+				"save_path": "/downloads",
+				"resume_data": "not-hex"
+			}]
+		})";
+	}
+
+	ConfigManager manager;
+	std::vector<TorrentConfigData> torrents;
+	ASSERT_TRUE(manager.loadTorrents(configPath, torrents));
+	ASSERT_EQ(torrents.size(), 1u);
+	EXPECT_TRUE(torrents.front().resumeData.empty());
+	EXPECT_FALSE(torrents.front().magnetUri.empty());
 }
 
 TEST_F(ConfigManagerTest, RecoversTorrentsFromBackupAfterPrimaryParseFailure)

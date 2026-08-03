@@ -10,6 +10,9 @@
 #include <atomic>
 #include <unordered_map>
 #include <unordered_set>
+#include <optional>
+#include <cstdint>
+#include <chrono>
 
 struct TorrentSearchResult
 {
@@ -55,6 +58,13 @@ struct SearchResponse
 	bool hasMore = false;
 };
 
+struct CompletedSearch
+{
+	uint64_t requestId = 0;
+	Result result = Result::Failure("Search did not complete", ResultCode::Internal);
+	SearchResponse response;
+};
+
 class SearchEngine
 {
 public:
@@ -70,9 +80,13 @@ public:
 	Result setActiveSearchProvider(const std::string &id);
 	std::string getActiveSearchProvider() const;
 	std::vector<std::string> getSearchProviders() const;
+	Result configureTorznabProvider(const std::string &url, const std::string &apiKey = "");
+	void clearSearchCache();
 
-	// Async search with proper threading
-	void searchTorrentsAsync(const SearchQuery &query, std::function<void(Result, SearchResponse)> callback);
+	// Async searches publish owned completions for the UI thread to consume.
+	Result startSearch(const SearchQuery &query, uint64_t &requestId);
+	std::optional<CompletedSearch> takeCompletedSearch();
+	void shutdown();
 
 	// Search history and favorites
 	void addToSearchHistory(const std::string &query);
@@ -93,6 +107,8 @@ public:
 	void setApiUrl(const std::string &url);
 	void setTimeout(int seconds);
 	void setMaxRetries(int retries);
+	Result setProxyConfig(bool enabled, const std::string &type, const std::string &host,
+		int port, const std::string &username = "", const std::string &password = "");
 
 	// Status
 	bool isSearching() const;
@@ -103,12 +119,22 @@ private:
 	std::string apiUrl;
 	int timeoutSeconds;
 	int maxRetries;
+	bool proxyEnabled = false;
+	std::string proxyType = "socks5";
+	std::string proxyHost;
+	int proxyPort = 1080;
+	std::string proxyUsername;
+	std::string proxyPassword;
 	std::atomic<bool> searching;
 	std::atomic<bool> cancelRequested;
+	std::atomic<bool> shuttingDown{false};
+	std::atomic<uint64_t> nextRequestId{1};
 
 	std::mutex searchMutex;
 	std::mutex threadMutex;
 	std::thread searchThread;
+	std::mutex completionMutex;
+	std::optional<CompletedSearch> completedSearch;
 
 	std::vector<std::string> searchHistory;
 	std::vector<TorrentSearchResult> favorites;
@@ -120,12 +146,20 @@ private:
 	mutable std::mutex providersMutex;
 	std::unordered_map<std::string, SearchProvider> providers;
 	std::string activeProvider = "torrents-csv";
+	struct CachedSearch
+	{
+		SearchResponse response;
+		std::chrono::steady_clock::time_point expiresAt;
+	};
+	mutable std::mutex cacheMutex;
+	std::unordered_map<std::string, CachedSearch> searchCache;
 
 	// HTTP client methods
 	Result makeHttpRequest(const std::string &url, std::string &response);
 	std::string buildSearchUrl(const SearchQuery &query) const;
 	Result parseSearchResponse(const std::string &response, std::vector<TorrentSearchResult> &results);
 	Result parseSearchResponse(const std::string &response, SearchResponse &searchResponse);
+	Result parseTorznabResponse(const std::string &response, SearchResponse &searchResponse);
 	Result performSearch(const SearchQuery &query, SearchResponse &response);
 	bool tryStartSearch();
 	void finishSearch();

@@ -2,6 +2,11 @@
 #include "SearchEngine.hpp"
 #include <vector>
 #include <string>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#include <climits>
 
 // Define the test class to be a friend
 class SearchEngineTest : public ::testing::Test {
@@ -17,6 +22,10 @@ protected:
     Result parseResponse(const std::string& response, SearchResponse& searchResponse) {
         return engine.parseSearchResponse(response, searchResponse);
     }
+
+	Result parseTorznab(const std::string& response, SearchResponse& searchResponse) {
+		return engine.parseTorznabResponse(response, searchResponse);
+	}
 
     // Helper to access private buildSearchUrl
     std::string buildSearchUrl(const SearchQuery& query) {
@@ -130,7 +139,7 @@ TEST_F(SearchEngineTest, ParseMissingFields) {
         },
         {
             "name": "Valid Item",
-            "infohash": "validhashvaliditem",
+			"infohash": "0123456789abcdef0123456789abcdef01234567",
             "size_bytes": 100
         }
     ])";
@@ -148,7 +157,7 @@ TEST_F(SearchEngineTest, ParsePagination) {
         "torrents": [
             {
                 "name": "Item 1",
-                "infohash": "hash1",
+				"infohash": "1111111111111111111111111111111111111111",
                 "size_bytes": 100
             }
         ],
@@ -182,12 +191,12 @@ TEST_F(SearchEngineTest, ParseDuplicates) {
     std::string json = R"([
         {
             "name": "Item 1",
-            "infohash": "hash1",
+			"infohash": "1111111111111111111111111111111111111111",
             "size_bytes": 100
         },
         {
             "name": "Item 1 Duplicate",
-            "infohash": "hash1",
+			"infohash": "1111111111111111111111111111111111111111",
             "size_bytes": 100
         }
     ])";
@@ -203,7 +212,7 @@ TEST_F(SearchEngineTest, ParseNumericFields) {
     std::string json = R"([
         {
             "name": "Item",
-            "infohash": "hash",
+			"infohash": "2222222222222222222222222222222222222222",
             "size_bytes": 1024,
             "seeders": 10,
             "leechers": 5,
@@ -225,6 +234,27 @@ TEST_F(SearchEngineTest, ParseNumericFields) {
     EXPECT_EQ(results[0].scrapedDate, 1600000001);
     EXPECT_EQ(results[0].completed, 100);
     EXPECT_EQ(results[0].dateUploaded, "1600000000");
+}
+
+TEST_F(SearchEngineTest, ClampsOrClearsInvalidNumericFieldsWithoutDroppingResult) {
+	std::string json = R"([{
+		"name": "Malformed counters",
+		"infohash": "3333333333333333333333333333333333333333",
+		"size_bytes": -1,
+		"seeders": 999999999999,
+		"leechers": "unknown",
+		"created_unix": -10,
+		"completed": -2
+	}])";
+
+	std::vector<TorrentSearchResult> results;
+	ASSERT_TRUE(parseResponse(json, results));
+	ASSERT_EQ(results.size(), 1u);
+	EXPECT_EQ(results.front().sizeBytes, 0u);
+	EXPECT_EQ(results.front().seeders, INT_MAX);
+	EXPECT_EQ(results.front().leechers, 0);
+	EXPECT_EQ(results.front().createdUnix, 0);
+	EXPECT_EQ(results.front().completed, 0);
 }
 
 TEST_F(SearchEngineTest, BuildSearchUrlEncodesNextToken) {
@@ -254,4 +284,147 @@ TEST_F(SearchEngineTest, CustomProviderCanBeSelected) {
     ASSERT_EQ(response.torrents.size(), 1);
     EXPECT_EQ(response.torrents.front().name, "fixture");
     EXPECT_EQ(engine.getActiveSearchProvider(), "local-fixture");
+}
+
+TEST_F(SearchEngineTest, ReusesBoundedCacheForIdenticalProviderQuery) {
+	int calls = 0;
+	ASSERT_TRUE(engine.registerSearchProvider(
+		"cached-fixture",
+		[&](const SearchQuery &, SearchResponse &response, const std::function<bool()> &) {
+			++calls;
+			response.torrents.emplace_back("Cached", "magnet:?xt=urn:btih:fixture", "fixture", 1, 1, 0, "", "Test");
+			return Result::Success();
+		}));
+	ASSERT_TRUE(engine.setActiveSearchProvider("cached-fixture"));
+
+	SearchResponse first;
+	SearchResponse second;
+	ASSERT_TRUE(engine.searchTorrents(SearchQuery("same"), first));
+	ASSERT_TRUE(engine.searchTorrents(SearchQuery("same"), second));
+	EXPECT_EQ(calls, 1);
+	ASSERT_EQ(second.torrents.size(), 1u);
+}
+
+TEST_F(SearchEngineTest, AsyncSearchRejectsConcurrentRequestAndPublishesCompletion) {
+    std::mutex mutex;
+    std::condition_variable enteredCv;
+    bool entered = false;
+    bool release = false;
+    ASSERT_TRUE(engine.registerSearchProvider(
+        "blocking-fixture",
+        [&](const SearchQuery &query, SearchResponse &response, const std::function<bool()> &cancelled) {
+            std::unique_lock<std::mutex> lock(mutex);
+            entered = true;
+            enteredCv.notify_one();
+            enteredCv.wait(lock, [&] { return release || cancelled(); });
+            if (cancelled())
+                return Result::Failure("cancelled", ResultCode::Cancelled);
+            response.torrents.emplace_back(query.query, "magnet:?xt=urn:btih:fixture", "fixture", 1, 1, 0, "", "Test");
+            return Result::Success();
+        }));
+    ASSERT_TRUE(engine.setActiveSearchProvider("blocking-fixture"));
+
+    uint64_t firstRequest = 0;
+    ASSERT_TRUE(engine.startSearch(SearchQuery("first"), firstRequest));
+    {
+        std::unique_lock<std::mutex> lock(mutex);
+        ASSERT_TRUE(enteredCv.wait_for(lock, std::chrono::seconds(2), [&] { return entered; }));
+    }
+
+    uint64_t rejectedRequest = 0;
+    Result busy = engine.startSearch(SearchQuery("second"), rejectedRequest);
+    EXPECT_FALSE(busy);
+    EXPECT_EQ(busy.code, ResultCode::Busy);
+
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        release = true;
+    }
+    enteredCv.notify_one();
+
+    std::optional<CompletedSearch> completion;
+    for (int i = 0; i < 200 && !completion; ++i) {
+        completion = engine.takeCompletedSearch();
+        if (!completion)
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    ASSERT_TRUE(completion.has_value());
+    EXPECT_EQ(completion->requestId, firstRequest);
+    EXPECT_TRUE(completion->result);
+    ASSERT_EQ(completion->response.torrents.size(), 1);
+}
+
+TEST_F(SearchEngineTest, ShutdownCancelsAndJoinsActiveSearch) {
+    ASSERT_TRUE(engine.registerSearchProvider(
+        "cancel-fixture",
+        [](const SearchQuery &, SearchResponse &, const std::function<bool()> &cancelled) {
+            while (!cancelled())
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            return Result::Failure("cancelled", ResultCode::Cancelled);
+        }));
+    ASSERT_TRUE(engine.setActiveSearchProvider("cancel-fixture"));
+
+    uint64_t requestId = 0;
+    ASSERT_TRUE(engine.startSearch(SearchQuery("cancel me"), requestId));
+    engine.shutdown();
+
+    EXPECT_FALSE(engine.isSearching());
+    auto completion = engine.takeCompletedSearch();
+    ASSERT_TRUE(completion.has_value());
+    EXPECT_EQ(completion->requestId, requestId);
+    EXPECT_EQ(completion->result.code, ResultCode::Cancelled);
+
+    uint64_t rejectedRequest = 0;
+    Result stopped = engine.startSearch(SearchQuery("too late"), rejectedRequest);
+    EXPECT_FALSE(stopped);
+    EXPECT_EQ(stopped.code, ResultCode::Unavailable);
+}
+
+TEST_F(SearchEngineTest, ParsesTorznabResultsAndPagination) {
+	const std::string xml = R"(<?xml version="1.0"?>
+	<rss xmlns:newznab="http://www.newznab.com/DTD/2010/feeds/attributes/" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+	<channel><newznab:response offset="0" total="2"/>
+	<item><title>Linux &amp; Tools</title><guid>0123456789abcdef0123456789abcdef01234567</guid>
+	<size>2048</size><category>PC</category>
+	<torznab:attr name="seeders" value="12"/><torznab:attr name="peers" value="4"/>
+	<torznab:attr name="magneturl" value="magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&amp;dn=Linux"/>
+	</item></channel></rss>)";
+
+	SearchResponse response;
+	ASSERT_TRUE(parseTorznab(xml, response));
+	ASSERT_EQ(response.torrents.size(), 1u);
+	EXPECT_EQ(response.torrents.front().name, "Linux & Tools");
+	EXPECT_EQ(response.torrents.front().seeders, 12);
+	EXPECT_EQ(response.torrents.front().leechers, 4);
+	EXPECT_TRUE(response.hasMore);
+	EXPECT_EQ(response.nextToken, "1");
+}
+
+TEST_F(SearchEngineTest, RejectsInvalidTorznabConfigurationAndProviderErrors) {
+	Result invalid = engine.configureTorznabProvider("file:///tmp/feed");
+	EXPECT_FALSE(invalid);
+	EXPECT_EQ(invalid.code, ResultCode::InvalidInput);
+
+	SearchResponse response;
+	Result providerError = parseTorznab("<error code=\"100\" description=\"Bad API key\"/>", response);
+	EXPECT_FALSE(providerError);
+	EXPECT_EQ(providerError.code, ResultCode::Unavailable);
+	EXPECT_EQ(providerError.message, "Bad API key");
+}
+
+TEST_F(SearchEngineTest, ValidatesProxyConfiguration) {
+	Result missingHost = engine.setProxyConfig(true, "socks5", "", 1080);
+	EXPECT_FALSE(missingHost);
+	EXPECT_EQ(missingHost.code, ResultCode::InvalidInput);
+
+	Result invalidPort = engine.setProxyConfig(true, "http", "proxy.local", 70000);
+	EXPECT_FALSE(invalidPort);
+	EXPECT_EQ(invalidPort.code, ResultCode::InvalidInput);
+
+	Result invalidType = engine.setProxyConfig(false, "ftp", "", 1);
+	EXPECT_FALSE(invalidType);
+	EXPECT_EQ(invalidType.code, ResultCode::InvalidInput);
+
+	EXPECT_TRUE(engine.setProxyConfig(true, "socks5", "127.0.0.1", 1080, "user", "secret"));
+	EXPECT_TRUE(engine.setProxyConfig(false, "socks5", "", 1080));
 }

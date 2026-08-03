@@ -11,6 +11,123 @@
 #include <thread>
 #include <chrono>
 #include <set>
+#include <cctype>
+#include <cstring>
+#include <climits>
+
+namespace
+{
+bool normalizeInfoHash(std::string &hash)
+{
+	if (hash.size() != 40 && hash.size() != 64)
+		return false;
+	for (char &character : hash)
+	{
+		if (!std::isxdigit(static_cast<unsigned char>(character)))
+			return false;
+		character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+	}
+	return true;
+}
+
+std::string decodeXml(std::string value)
+{
+	const std::pair<const char *, const char *> entities[] = {
+		{"&amp;", "&"}, {"&quot;", "\""}, {"&apos;", "'"}, {"&lt;", "<"}, {"&gt;", ">"}};
+	for (const auto &[encoded, decoded] : entities)
+	{
+		std::size_t position = 0;
+		while ((position = value.find(encoded, position)) != std::string::npos)
+		{
+			value.replace(position, std::strlen(encoded), decoded);
+			position += std::strlen(decoded);
+		}
+	}
+	return value;
+}
+
+std::string xmlTagValue(const std::string &item, const std::string &tag)
+{
+	const std::string opening = "<" + tag;
+	const auto openingPosition = item.find(opening);
+	if (openingPosition == std::string::npos)
+		return {};
+	const auto valuePosition = item.find('>', openingPosition + opening.size());
+	if (valuePosition == std::string::npos)
+		return {};
+	const auto closingPosition = item.find("</" + tag + ">", valuePosition + 1);
+	if (closingPosition == std::string::npos)
+		return {};
+	return decodeXml(item.substr(valuePosition + 1, closingPosition - valuePosition - 1));
+}
+
+std::string xmlAttribute(const std::string &element, const std::string &attribute)
+{
+	const std::string marker = attribute + "=\"";
+	const auto start = element.find(marker);
+	if (start == std::string::npos)
+		return {};
+	const auto valueStart = start + marker.size();
+	const auto end = element.find('"', valueStart);
+	return end == std::string::npos ? std::string{} : decodeXml(element.substr(valueStart, end - valueStart));
+}
+
+std::string torznabAttribute(const std::string &item, const std::string &name)
+{
+	std::size_t position = 0;
+	while ((position = item.find("<torznab:attr", position)) != std::string::npos)
+	{
+		const auto end = item.find('>', position);
+		if (end == std::string::npos)
+			return {};
+		const std::string element = item.substr(position, end - position + 1);
+		if (xmlAttribute(element, "name") == name)
+			return xmlAttribute(element, "value");
+		position = end + 1;
+	}
+	return {};
+}
+
+long long parseNonNegative(const std::string &value)
+{
+	if (value.empty())
+		return 0;
+	try
+	{
+		std::size_t consumed = 0;
+		const long long parsed = std::stoll(value, &consumed);
+		return consumed == value.size() && parsed >= 0 ? parsed : 0;
+	}
+	catch (...)
+	{
+		return 0;
+	}
+}
+
+uint64_t jsonNonNegativeInteger(const nlohmann::json &value, uint64_t maximum)
+{
+	try
+	{
+		uint64_t parsed = 0;
+		if (value.is_number_unsigned())
+			parsed = value.get<uint64_t>();
+		else if (value.is_number_integer())
+		{
+			const int64_t signedValue = value.get<int64_t>();
+			if (signedValue < 0)
+				return 0;
+			parsed = static_cast<uint64_t>(signedValue);
+		}
+		else
+			return 0;
+		return std::min(parsed, maximum);
+	}
+	catch (...)
+	{
+		return 0;
+	}
+}
+}
 
 using json = nlohmann::json;
 
@@ -57,8 +174,13 @@ SearchEngine::SearchEngine()
 
 SearchEngine::~SearchEngine()
 {
-	// Cancel any ongoing search and wait for thread to finish
-	cancelCurrentSearch();
+	shutdown();
+}
+
+void SearchEngine::shutdown()
+{
+	shuttingDown = true;
+	cancelRequested = true;
 	std::thread threadToJoin;
 	{
 		std::lock_guard<std::mutex> lock(threadMutex);
@@ -74,7 +196,7 @@ Result SearchEngine::searchTorrents(const SearchQuery &query, std::vector<Torren
 {
 	if (!tryStartSearch())
 	{
-		return Result::Failure("Search already in progress");
+		return Result::Failure("Search already in progress", ResultCode::Busy, true);
 	}
 
 	results.clear();
@@ -100,7 +222,7 @@ Result SearchEngine::searchTorrents(const SearchQuery &query, SearchResponse &re
 {
 	if (!tryStartSearch())
 	{
-		return Result::Failure("Search already in progress");
+		return Result::Failure("Search already in progress", ResultCode::Busy, true);
 	}
 
 	response.torrents.clear();
@@ -118,7 +240,7 @@ Result SearchEngine::searchTorrents(const SearchQuery &query, SearchResponse &re
 Result SearchEngine::registerSearchProvider(const std::string &id, SearchProvider provider)
 {
 	if (id.empty() || !provider)
-		return Result::Failure("Search provider id and callback are required");
+		return Result::Failure("Search provider id and callback are required", ResultCode::InvalidInput);
 	std::lock_guard<std::mutex> lock(providersMutex);
 	providers[id] = std::move(provider);
 	return Result::Success();
@@ -126,10 +248,13 @@ Result SearchEngine::registerSearchProvider(const std::string &id, SearchProvide
 
 Result SearchEngine::setActiveSearchProvider(const std::string &id)
 {
-	std::lock_guard<std::mutex> lock(providersMutex);
-	if (id != "torrents-csv" && providers.find(id) == providers.end())
-		return Result::Failure("Unknown search provider: " + id);
-	activeProvider = id;
+	{
+		std::lock_guard<std::mutex> lock(providersMutex);
+		if (id != "torrents-csv" && providers.find(id) == providers.end())
+			return Result::Failure("Unknown search provider: " + id, ResultCode::NotFound);
+		activeProvider = id;
+	}
+	clearSearchCache();
 	return Result::Success();
 }
 
@@ -148,28 +273,99 @@ std::vector<std::string> SearchEngine::getSearchProviders() const
 	return result;
 }
 
+Result SearchEngine::configureTorznabProvider(const std::string &url, const std::string &apiKey)
+{
+	if (url.rfind("http://", 0) != 0 && url.rfind("https://", 0) != 0)
+		return Result::Failure("Torznab URL must use http:// or https://", ResultCode::InvalidInput);
+	std::string endpoint = url;
+	while (!endpoint.empty() && endpoint.back() == '/')
+		endpoint.pop_back();
+	return registerSearchProvider("torznab", [this, endpoint, apiKey](const SearchQuery &query, SearchResponse &response, const std::function<bool()> &cancelled)
+	{
+		if (cancelled())
+			return Result::Failure("Search cancelled", ResultCode::Cancelled);
+		std::string requestUrl = endpoint + (endpoint.find('?') == std::string::npos ? "?" : "&");
+		requestUrl += "t=search&q=" + Utils::urlEncode(query.query);
+		if (query.maxResults > 0)
+			requestUrl += "&limit=" + std::to_string(query.maxResults);
+		if (!query.nextToken.empty())
+			requestUrl += "&offset=" + Utils::urlEncode(query.nextToken);
+		if (!apiKey.empty())
+			requestUrl += "&apikey=" + Utils::urlEncode(apiKey);
+		std::string body;
+		Result request = makeHttpRequest(requestUrl, body);
+		if (!request)
+			return request;
+		return parseTorznabResponse(body, response);
+	});
+}
+
+void SearchEngine::clearSearchCache()
+{
+	std::lock_guard<std::mutex> lock(cacheMutex);
+	searchCache.clear();
+}
+
 Result SearchEngine::performSearch(const SearchQuery &query, SearchResponse &response)
 {
 	try
 	{
 		SearchProvider provider;
+		std::string providerId;
 		{
 			std::lock_guard<std::mutex> lock(providersMutex);
+			providerId = activeProvider;
 			auto it = providers.find(activeProvider);
 			if (it != providers.end())
 				provider = it->second;
 		}
+		const std::string cacheKey = providerId + "\n" + query.query + "\n" + std::to_string(query.maxResults) + "\n" + query.nextToken;
+		{
+			std::lock_guard<std::mutex> lock(cacheMutex);
+			auto cached = searchCache.find(cacheKey);
+			if (cached != searchCache.end())
+			{
+				if (cached->second.expiresAt > std::chrono::steady_clock::now())
+				{
+					response = cached->second.response;
+					return Result::Success();
+				}
+				searchCache.erase(cached);
+			}
+		}
 
 		if (provider)
-			return provider(query, response, [this] { return cancelRequested.load(); });
+		{
+			Result providerResult = provider(query, response, [this] { return cancelRequested.load(); });
+			if (providerResult)
+			{
+				std::lock_guard<std::mutex> lock(cacheMutex);
+				if (searchCache.size() >= 100)
+					searchCache.clear();
+				searchCache[cacheKey] = CachedSearch{response, std::chrono::steady_clock::now() + std::chrono::minutes(5)};
+				return providerResult;
+			}
+			if (providerResult.code == ResultCode::Cancelled || !query.nextToken.empty())
+				return providerResult;
+			Utils::Logger::warning("search", "Active provider failed; falling back to torrents-csv: " + providerResult.message);
+			response = SearchResponse{};
+		}
 
 		std::string httpResponse;
 		Result httpResult = makeHttpRequest(buildSearchUrl(query), httpResponse);
 		if (!httpResult)
 			return httpResult;
 		if (cancelRequested.load())
-			return Result::Failure("Search cancelled by user");
-		return parseSearchResponse(httpResponse, response);
+			return Result::Failure("Search cancelled by user", ResultCode::Cancelled);
+		Result parseResult = parseSearchResponse(httpResponse, response);
+		if (parseResult)
+		{
+			std::lock_guard<std::mutex> lock(cacheMutex);
+			if (searchCache.size() >= 100)
+				searchCache.clear();
+			searchCache[cacheKey] = CachedSearch{response, std::chrono::steady_clock::now() + std::chrono::minutes(5)};
+		}
+		return parseResult;
 	}
 	catch (const std::exception &e)
 	{
@@ -187,10 +383,22 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 {
 	int timeout = 30;
 	int retries = 3;
+	bool useProxy = false;
+	std::string configuredProxyType;
+	std::string configuredProxyHost;
+	std::string configuredProxyUsername;
+	std::string configuredProxyPassword;
+	int configuredProxyPort = 0;
 	{
 		std::lock_guard<std::mutex> lock(settingsMutex);
 		timeout = timeoutSeconds;
 		retries = maxRetries;
+		useProxy = proxyEnabled;
+		configuredProxyType = proxyType;
+		configuredProxyHost = proxyHost;
+		configuredProxyPort = proxyPort;
+		configuredProxyUsername = proxyUsername;
+		configuredProxyPassword = proxyPassword;
 	}
 	retries = std::max(retries, 1);
 	CURL *curl = curl_easy_init();
@@ -199,16 +407,32 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 		return Result::Failure("Failed to initialize cURL");
 	}
 
-	CURLcode res;
+	CURLcode res = CURLE_OK;
+	long lastResponseCode = 0;
 	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
 	curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout));
+	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, static_cast<long>(std::min(timeout, 10)));
 	curl_easy_setopt(curl, CURLOPT_MAXFILESIZE, 10L * 1024L * 1024L); // 10 MB limit
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, "Hypertube/1.0");
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+	curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "http,https");
+	curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
+	if (useProxy)
+	{
+		curl_easy_setopt(curl, CURLOPT_PROXY, configuredProxyHost.c_str());
+		curl_easy_setopt(curl, CURLOPT_PROXYPORT, static_cast<long>(configuredProxyPort));
+		curl_easy_setopt(curl, CURLOPT_PROXYTYPE,
+			configuredProxyType == "http" ? CURLPROXY_HTTP : CURLPROXY_SOCKS5_HOSTNAME);
+		if (!configuredProxyUsername.empty())
+		{
+			curl_easy_setopt(curl, CURLOPT_PROXYUSERNAME, configuredProxyUsername.c_str());
+			curl_easy_setopt(curl, CURLOPT_PROXYPASSWORD, configuredProxyPassword.c_str());
+		}
+	}
 
 	// Enable progress callback for cancellation support
 	curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, ProgressCallback);
@@ -218,42 +442,62 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 	// Perform the request
 	for (int attempt = 0; attempt < retries; ++attempt)
 	{
+		response.clear();
 		res = curl_easy_perform(curl);
 
 		// Check if operation was cancelled
 		if (res == CURLE_ABORTED_BY_CALLBACK)
 		{
 			curl_easy_cleanup(curl);
-			return Result::Failure("Search cancelled by user");
+			return Result::Failure("Search cancelled by user", ResultCode::Cancelled);
 		}
 
 		if (res == CURLE_OK)
 		{
-			long response_code;
-			curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+			curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &lastResponseCode);
 
-			if (response_code == 200)
+			if (lastResponseCode == 200)
 			{
 				curl_easy_cleanup(curl);
 				return Result::Success();
 			}
-			else
+			if (lastResponseCode == 401 || lastResponseCode == 403)
 			{
 				curl_easy_cleanup(curl);
-				return Result::Failure("HTTP Error: " + std::to_string(response_code));
+				return Result::Failure("HTTP Error: " + std::to_string(lastResponseCode), ResultCode::Unauthorized);
+			}
+			const bool transientHttpError = lastResponseCode == 429 || lastResponseCode >= 500;
+			if (!transientHttpError || attempt == retries - 1)
+			{
+				curl_easy_cleanup(curl);
+				if (lastResponseCode == 429)
+					return Result::Failure("HTTP Error: 429", ResultCode::RateLimited, true);
+				return Result::Failure("HTTP Error: " + std::to_string(lastResponseCode), ResultCode::Network, transientHttpError);
 			}
 		}
 
 		// If not the last attempt, wait a bit before retrying
 		if (attempt < retries - 1)
 		{
-			std::this_thread::sleep_for(std::chrono::milliseconds(1000 * (attempt + 1)));
+			const auto deadline = std::chrono::steady_clock::now()
+				+ std::chrono::milliseconds(500 * (1 << std::min(attempt, 4)));
+			while (std::chrono::steady_clock::now() < deadline)
+			{
+				if (cancelRequested.load())
+				{
+					curl_easy_cleanup(curl);
+					return Result::Failure("Search cancelled by user", ResultCode::Cancelled);
+				}
+				std::this_thread::sleep_for(std::chrono::milliseconds(25));
+			}
 		}
 	}
 
-	std::string error_msg = "cURL Error: " + std::string(curl_easy_strerror(res));
+	std::string error_msg = lastResponseCode != 0
+		? "HTTP Error: " + std::to_string(lastResponseCode)
+		: "cURL Error: " + std::string(curl_easy_strerror(res));
 	curl_easy_cleanup(curl);
-	return Result::Failure(error_msg);
+	return Result::Failure(error_msg, ResultCode::Network, true);
 }
 
 std::string SearchEngine::buildSearchUrl(const SearchQuery &query) const
@@ -329,6 +573,8 @@ Result SearchEngine::parseSearchResponse(const std::string &response, std::vecto
 			if (itInfoHash != item.end() && itInfoHash->is_string())
 			{
 				result.infoHash = itInfoHash->get<std::string>();
+				if (!normalizeInfoHash(result.infoHash))
+					continue;
 			}
 			else
 			{
@@ -340,42 +586,23 @@ Result SearchEngine::parseSearchResponse(const std::string &response, std::vecto
 
 			// Parse numeric fields safely
 			auto itSizeBytes = item.find("size_bytes");
-			if (itSizeBytes != item.end() && itSizeBytes->is_number())
-			{
-				result.sizeBytes = itSizeBytes->get<size_t>();
-			}
-			else
-			{
-				result.sizeBytes = 0;
-			}
+			if (itSizeBytes != item.end())
+				result.sizeBytes = static_cast<size_t>(jsonNonNegativeInteger(*itSizeBytes, SIZE_MAX));
 
 			auto itSeeders = item.find("seeders");
-			if (itSeeders != item.end() && itSeeders->is_number())
-			{
-				result.seeders = itSeeders->get<int>();
-			}
-			else
-			{
-				result.seeders = 0;
-			}
+			if (itSeeders != item.end())
+				result.seeders = static_cast<int>(jsonNonNegativeInteger(*itSeeders, INT_MAX));
 
 			auto itLeechers = item.find("leechers");
-			if (itLeechers != item.end() && itLeechers->is_number())
-			{
-				result.leechers = itLeechers->get<int>();
-			}
-			else
-			{
-				result.leechers = 0;
-			}
+			if (itLeechers != item.end())
+				result.leechers = static_cast<int>(jsonNonNegativeInteger(*itLeechers, INT_MAX));
 
 			// Handle created_unix as number and convert to string (legacy field)
 			auto itCreatedUnix = item.find("created_unix");
-			if (itCreatedUnix != item.end() && itCreatedUnix->is_number())
+			if (itCreatedUnix != item.end())
 			{
-				result.dateUploaded = std::to_string(itCreatedUnix->get<long long>());
-				// Also populate the new createdUnix field
-				result.createdUnix = itCreatedUnix->get<long long>();
+				result.createdUnix = static_cast<int64_t>(jsonNonNegativeInteger(*itCreatedUnix, INT64_MAX));
+				result.dateUploaded = result.createdUnix == 0 ? "" : std::to_string(result.createdUnix);
 			}
 			else
 			{
@@ -385,25 +612,13 @@ Result SearchEngine::parseSearchResponse(const std::string &response, std::vecto
 
 			// Handle scraped_date field
 			auto itScrapedDate = item.find("scraped_date");
-			if (itScrapedDate != item.end() && itScrapedDate->is_number())
-			{
-				result.scrapedDate = itScrapedDate->get<long long>();
-			}
-			else
-			{
-				result.scrapedDate = 0;
-			}
+			if (itScrapedDate != item.end())
+				result.scrapedDate = static_cast<int64_t>(jsonNonNegativeInteger(*itScrapedDate, INT64_MAX));
 
 			// Handle completed field
 			auto itCompleted = item.find("completed");
-			if (itCompleted != item.end() && itCompleted->is_number())
-			{
-				result.completed = itCompleted->get<int>();
-			}
-			else
-			{
-				result.completed = 0;
-			}
+			if (itCompleted != item.end())
+				result.completed = static_cast<int>(jsonNonNegativeInteger(*itCompleted, INT_MAX));
 
 			// Category is often not present in torrents-csv, set default
 			result.category = "General";
@@ -495,6 +710,8 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 			if (itInfoHash != item.end() && itInfoHash->is_string())
 			{
 				result.infoHash = itInfoHash->get<std::string>();
+				if (!normalizeInfoHash(result.infoHash))
+					continue;
 			}
 			else
 			{
@@ -513,42 +730,23 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 
 			// Parse numeric fields safely
 			auto itSizeBytes = item.find("size_bytes");
-			if (itSizeBytes != item.end() && itSizeBytes->is_number())
-			{
-				result.sizeBytes = itSizeBytes->get<size_t>();
-			}
-			else
-			{
-				result.sizeBytes = 0;
-			}
+			if (itSizeBytes != item.end())
+				result.sizeBytes = static_cast<size_t>(jsonNonNegativeInteger(*itSizeBytes, SIZE_MAX));
 
 			auto itSeeders = item.find("seeders");
-			if (itSeeders != item.end() && itSeeders->is_number())
-			{
-				result.seeders = itSeeders->get<int>();
-			}
-			else
-			{
-				result.seeders = 0;
-			}
+			if (itSeeders != item.end())
+				result.seeders = static_cast<int>(jsonNonNegativeInteger(*itSeeders, INT_MAX));
 
 			auto itLeechers = item.find("leechers");
-			if (itLeechers != item.end() && itLeechers->is_number())
-			{
-				result.leechers = itLeechers->get<int>();
-			}
-			else
-			{
-				result.leechers = 0;
-			}
+			if (itLeechers != item.end())
+				result.leechers = static_cast<int>(jsonNonNegativeInteger(*itLeechers, INT_MAX));
 
 			// Handle created_unix as number and convert to string (legacy field)
 			auto itCreatedUnix = item.find("created_unix");
-			if (itCreatedUnix != item.end() && itCreatedUnix->is_number())
+			if (itCreatedUnix != item.end())
 			{
-				result.dateUploaded = std::to_string(itCreatedUnix->get<long long>());
-				// Also populate the new createdUnix field
-				result.createdUnix = itCreatedUnix->get<long long>();
+				result.createdUnix = static_cast<int64_t>(jsonNonNegativeInteger(*itCreatedUnix, INT64_MAX));
+				result.dateUploaded = result.createdUnix == 0 ? "" : std::to_string(result.createdUnix);
 			}
 			else
 			{
@@ -558,25 +756,13 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 
 			// Handle scraped_date field
 			auto itScrapedDate = item.find("scraped_date");
-			if (itScrapedDate != item.end() && itScrapedDate->is_number())
-			{
-				result.scrapedDate = itScrapedDate->get<long long>();
-			}
-			else
-			{
-				result.scrapedDate = 0;
-			}
+			if (itScrapedDate != item.end())
+				result.scrapedDate = static_cast<int64_t>(jsonNonNegativeInteger(*itScrapedDate, INT64_MAX));
 
 			// Handle completed field
 			auto itCompleted = item.find("completed");
-			if (itCompleted != item.end() && itCompleted->is_number())
-			{
-				result.completed = itCompleted->get<int>();
-			}
-			else
-			{
-				result.completed = 0;
-			}
+			if (itCompleted != item.end())
+				result.completed = static_cast<int>(jsonNonNegativeInteger(*itCompleted, INT_MAX));
 
 			// Category is often not present in torrents-csv, set default
 			result.category = "General";
@@ -597,6 +783,79 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 	{
 		return Result::Failure("Parse Error: " + std::string(e.what()));
 	}
+}
+
+Result SearchEngine::parseTorznabResponse(const std::string &response, SearchResponse &searchResponse)
+{
+	searchResponse = SearchResponse{};
+	if (response.empty())
+		return Result::Failure("Torznab returned an empty response", ResultCode::Parse);
+	if (response.find("<error") != std::string::npos)
+	{
+		const auto errorPosition = response.find("<error");
+		const auto errorEnd = response.find('>', errorPosition);
+		const std::string element = errorEnd == std::string::npos ? std::string{} : response.substr(errorPosition, errorEnd - errorPosition + 1);
+		const std::string description = xmlAttribute(element, "description");
+		return Result::Failure(description.empty() ? "Torznab provider returned an error" : description, ResultCode::Unavailable);
+	}
+
+	std::unordered_set<std::string> seen;
+	std::size_t position = 0;
+	while (searchResponse.torrents.size() < 500 && (position = response.find("<item", position)) != std::string::npos)
+	{
+		const auto itemStart = response.find('>', position);
+		const auto itemEnd = response.find("</item>", itemStart);
+		if (itemStart == std::string::npos || itemEnd == std::string::npos)
+			return Result::Failure("Malformed Torznab item", ResultCode::Parse);
+		const std::string item = response.substr(itemStart + 1, itemEnd - itemStart - 1);
+		position = itemEnd + 7;
+
+		TorrentSearchResult result;
+		result.name = xmlTagValue(item, "title");
+		result.infoHash = torznabAttribute(item, "infohash");
+		result.magnetUri = torznabAttribute(item, "magneturl");
+		if (result.magnetUri.empty())
+		{
+			const std::string link = xmlTagValue(item, "link");
+			if (link.rfind("magnet:?", 0) == 0)
+				result.magnetUri = link;
+		}
+		if (result.infoHash.empty() && !result.magnetUri.empty())
+		{
+			const auto hashPosition = result.magnetUri.find("btih:");
+			if (hashPosition != std::string::npos && hashPosition + 45 <= result.magnetUri.size())
+				result.infoHash = result.magnetUri.substr(hashPosition + 5, 40);
+		}
+		if (result.infoHash.empty())
+			result.infoHash = xmlTagValue(item, "guid");
+		if (result.name.empty() || !normalizeInfoHash(result.infoHash) || !seen.insert(result.infoHash).second)
+			continue;
+		if (result.magnetUri.empty())
+			result.magnetUri = Utils::formatMagnetUri(result.infoHash, result.name);
+
+		result.sizeBytes = static_cast<std::size_t>(parseNonNegative(xmlTagValue(item, "size")));
+		result.seeders = static_cast<int>(std::min<long long>(parseNonNegative(torznabAttribute(item, "seeders")), INT_MAX));
+		result.leechers = static_cast<int>(std::min<long long>(parseNonNegative(torznabAttribute(item, "peers")), INT_MAX));
+		result.category = xmlTagValue(item, "category");
+		if (result.category.empty())
+			result.category = "General";
+		result.dateUploaded = xmlTagValue(item, "pubDate");
+		searchResponse.torrents.push_back(std::move(result));
+	}
+
+	const auto responsePosition = response.find("newznab:response");
+	if (responsePosition != std::string::npos)
+	{
+		const auto responseEnd = response.find('>', responsePosition);
+		const std::string element = responseEnd == std::string::npos ? std::string{} : response.substr(responsePosition, responseEnd - responsePosition + 1);
+		const long long offset = parseNonNegative(xmlAttribute(element, "offset"));
+		const long long total = parseNonNegative(xmlAttribute(element, "total"));
+		const long long next = offset + static_cast<long long>(searchResponse.torrents.size());
+		searchResponse.hasMore = next < total;
+		if (searchResponse.hasMore)
+			searchResponse.nextToken = std::to_string(next);
+	}
+	return Result::Success();
 }
 
 void SearchEngine::addToSearchHistory(const std::string &query)
@@ -708,8 +967,11 @@ void SearchEngine::loadFavoritesAndHistory(ConfigManager &configManager)
 
 void SearchEngine::setApiUrl(const std::string &url)
 {
-	std::lock_guard<std::mutex> lock(settingsMutex);
-	apiUrl = url;
+	{
+		std::lock_guard<std::mutex> lock(settingsMutex);
+		apiUrl = url;
+	}
+	clearSearchCache();
 }
 
 void SearchEngine::setTimeout(int seconds)
@@ -722,6 +984,28 @@ void SearchEngine::setMaxRetries(int retries)
 {
 	std::lock_guard<std::mutex> lock(settingsMutex);
 	maxRetries = std::max(retries, 1);
+}
+
+Result SearchEngine::setProxyConfig(bool enabled, const std::string &type, const std::string &host,
+	int port, const std::string &username, const std::string &password)
+{
+	if (enabled && host.empty())
+		return Result::Failure("Proxy host cannot be empty", ResultCode::InvalidInput);
+	if (enabled && (port < 1 || port > 65535))
+		return Result::Failure("Proxy port must be between 1 and 65535", ResultCode::InvalidInput);
+	if (type != "socks5" && type != "http")
+		return Result::Failure("Proxy type must be socks5 or http", ResultCode::InvalidInput);
+	{
+		std::lock_guard<std::mutex> lock(settingsMutex);
+		proxyEnabled = enabled;
+		proxyType = type;
+		proxyHost = host;
+		proxyPort = port;
+		proxyUsername = username;
+		proxyPassword = password;
+	}
+	clearSearchCache();
+	return Result::Success();
 }
 
 bool SearchEngine::isSearching() const
@@ -750,30 +1034,29 @@ void SearchEngine::finishSearch()
 	searching = false;
 }
 
-// Async search implementation with threading
-void SearchEngine::searchTorrentsAsync(const SearchQuery &query, std::function<void(Result, SearchResponse)> callback)
+Result SearchEngine::startSearch(const SearchQuery &query, uint64_t &requestId)
 {
-	// If already searching, ignore this request
-	if (searching.load())
-		return;
+	if (query.query.empty())
+		return Result::Failure("Search query cannot be empty", ResultCode::InvalidInput);
+	if (shuttingDown.load())
+		return Result::Failure("Search service is shutting down", ResultCode::Unavailable);
+	if (!tryStartSearch())
+		return Result::Failure("Search already in progress", ResultCode::Busy);
 
-	// Join previous thread if it exists
 	std::thread previousThread;
 	{
 		std::lock_guard<std::mutex> lock(threadMutex);
 		previousThread = std::move(searchThread);
 	}
 	if (previousThread.joinable())
-	{
 		previousThread.join();
-	}
 
-	// Reset cancellation flag
-	if (!tryStartSearch())
-		return;
-
-	// Launch search in separate thread
-	std::thread worker([this, query, callback]()
+	requestId = nextRequestId.fetch_add(1);
+	const uint64_t workerRequestId = requestId;
+	std::thread worker;
+	try
+	{
+		worker = std::thread([this, query, workerRequestId]()
 	{
 		SearchResponse response;
 		Result result = Result::Failure("Unknown error");
@@ -782,13 +1065,13 @@ void SearchEngine::searchTorrentsAsync(const SearchQuery &query, std::function<v
 		{
 			if (cancelRequested.load())
 			{
-				result = Result::Failure("Search cancelled");
+				result = Result::Failure("Search cancelled", ResultCode::Cancelled);
 			}
 			else
 			{
 				Result httpResult = performSearch(query, response);
 				if (cancelRequested.load())
-					result = Result::Failure("Search cancelled");
+					result = Result::Failure("Search cancelled", ResultCode::Cancelled);
 				else
 				{
 					result = httpResult;
@@ -808,25 +1091,31 @@ void SearchEngine::searchTorrentsAsync(const SearchQuery &query, std::function<v
 			Utils::Logger::error("search", result.message);
 		}
 
-		finishSearch();
-		if (callback)
 		{
-			try
-			{
-				callback(result, response);
-			}
-			catch (const std::exception &e)
-			{
-				Utils::Logger::error("search", "Search callback failed: " + std::string(e.what()));
-			}
-			catch (...)
-			{
-				Utils::Logger::error("search", "Search callback failed with an unknown exception");
-			}
+			std::lock_guard<std::mutex> lock(completionMutex);
+			completedSearch = CompletedSearch{workerRequestId, std::move(result), std::move(response)};
 		}
+		finishSearch();
 	});
+	}
+	catch (const std::exception &e)
+	{
+		finishSearch();
+		return Result::Failure("Failed to start search worker: " + std::string(e.what()), ResultCode::Internal);
+	}
 	{
 		std::lock_guard<std::mutex> lock(threadMutex);
 		searchThread = std::move(worker);
 	}
+	return Result::Success();
+}
+
+std::optional<CompletedSearch> SearchEngine::takeCompletedSearch()
+{
+	std::lock_guard<std::mutex> lock(completionMutex);
+	if (!completedSearch)
+		return std::nullopt;
+	auto completion = std::move(completedSearch);
+	completedSearch.reset();
+	return completion;
 }

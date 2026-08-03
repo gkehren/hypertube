@@ -12,6 +12,8 @@ Hypertube handles untrusted torrent metadata, magnet links, provider responses, 
 - JSON files are parsed and schema-validated before values are applied.
 - Configuration writes use temporary files and a backup candidate to reduce corruption risk.
 - Shared service state and logger state are synchronized before being copied or displayed.
+- Torznab API keys and proxy passwords use the operating-system credential store rather than JSON configuration.
+- Search redirects are restricted to HTTP(S), and torrent/search proxy settings are applied together.
 
 ## Data handling rules
 
@@ -39,10 +41,18 @@ Validate paths before filesystem or OS integration operations. Do not concatenat
 
 Atomic persistence protects against interruption and partial writes, but it is not encryption. Users who need confidentiality must protect their profile or portable directory using operating-system controls.
 
+## Credential stores
+
+- Windows uses Credential Manager generic credentials.
+- macOS uses Keychain generic passwords.
+- Linux invokes `secret-tool` directly without a shell and sends secrets over standard input. An unlocked Secret Service-compatible keyring is required.
+
+Stored secrets are scoped to the `Hypertube` service and separate account names. They are not included in portable bundles or configuration backups.
+
 ## Known limitations
 
 - BitTorrent traffic and downloaded content are not made anonymous by Hypertube.
-- Proxy configuration exists at the service level but requires complete UI, secure credential storage, and end-to-end validation.
+- A proxy improves routing control but does not by itself guarantee anonymity or prevent all metadata leakage.
 - A valid HTTPS connection does not make third-party torrent metadata trustworthy.
 - The current release workflow does not yet provide automated artifact signing or checksums.
 

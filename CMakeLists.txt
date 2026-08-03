@@ -213,9 +213,8 @@ endif()
 
 # Source files
 set(SOURCES
-    src/main.cpp
-    src/app/App.cpp
-    src/app/TorrentManager.cpp
+	src/main.cpp
+	src/app/App.cpp
     src/ui/UIManager.cpp
     src/ui/TorrentTableUI.cpp
     src/ui/TorrentDetailsUI.cpp
@@ -231,6 +230,7 @@ add_library(hypertube_utils STATIC
     src/utils/Logger.cpp
     src/utils/StringUtils.cpp
     src/utils/SystemUtils.cpp
+	src/utils/CredentialStore.cpp
 )
 
 target_include_directories(hypertube_utils PUBLIC
@@ -241,6 +241,12 @@ target_include_directories(hypertube_utils PUBLIC
 target_link_libraries(hypertube_utils PUBLIC
     LibtorrentRasterbar::torrent-rasterbar
 )
+
+if(WIN32)
+    target_link_libraries(hypertube_utils PUBLIC Advapi32)
+elseif(APPLE)
+    target_link_libraries(hypertube_utils PUBLIC "-framework Security")
+endif()
 
 # Create the config library for testing
 add_library(hypertube_config STATIC
@@ -264,6 +270,24 @@ if(json_SOURCE_DIR)
         "${json_SOURCE_DIR}/single_include"
     )
 endif()
+
+# TorrentManager consumes the persisted TorrentConfigData model, so expose the
+# configuration target explicitly instead of relying on executable include paths.
+add_library(hypertube_torrent STATIC
+	src/app/TorrentManager.cpp
+)
+
+target_include_directories(hypertube_torrent PUBLIC
+	"include"
+	"include/app"
+	"include/utils"
+)
+
+target_link_libraries(hypertube_torrent PUBLIC
+	hypertube_config
+	hypertube_utils
+	LibtorrentRasterbar::torrent-rasterbar
+)
 
 # Create the search library
 add_library(hypertube_search STATIC
@@ -302,7 +326,8 @@ target_include_directories(hypertube PRIVATE
 
 # Link libraries using modern imported targets
 target_link_libraries(hypertube PRIVATE
-    hypertube_utils
+	hypertube_utils
+	hypertube_torrent
     hypertube_config
     hypertube_search
     LibtorrentRasterbar::torrent-rasterbar

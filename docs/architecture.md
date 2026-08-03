@@ -57,7 +57,7 @@ Dear ImGui calls stay on the main/rendering thread. Views consume copied data or
 
 ### SearchEngine
 
-`SearchEngine` owns provider registration, active-provider selection, HTTP search, pagination, cancellation, history, favorites, and asynchronous callbacks. Search settings, providers, favorites, and history have separate synchronization boundaries.
+`SearchEngine` owns provider registration, active-provider selection, HTTP search, pagination, cancellation, history, favorites, retries, fallback, and a bounded in-memory cache. Search settings, providers, favorites, history, completions, and cache entries have separate synchronization boundaries.
 
 Search requests are bounded by timeout and response-size limits, validate TLS peers/hosts, URL-encode query parameters, and expose cancellation to the cURL progress callback.
 
@@ -83,8 +83,10 @@ sequenceDiagram
     M->>A: construct
     A->>P: ensureDirectories
     A->>L: initialize log path
-    A->>C: load torrent configuration
     A->>C: load settings configuration
+    A->>T: apply discovery, limits, and proxy settings
+    A->>S: configure proxy and optional Torznab provider
+    A->>C: load torrent configuration
     A->>T: restore valid torrent entries
     A->>S: restore favorites/history
     A->>U: initialize window and UI
@@ -93,6 +95,7 @@ sequenceDiagram
         U->>S: submit or consume search state
     end
     U-->>A: shutdown requested
+    A->>T: collect bounded fast-resume snapshots
     A->>C: enqueue torrent and settings snapshots
     A->>C: waitForAsyncOperations
     A-->>M: destroy and clean up
@@ -107,16 +110,16 @@ sequenceDiagram
     participant W as Search worker
     participant P as Provider
 
-    UI->>E: searchTorrentsAsync(query, callback)
+    UI->>E: startSearch(query, requestId)
     E->>W: start one active search
     W->>P: bounded HTTP/provider request
     P-->>W: response or failure
-    W-->>E: Result and SearchResponse
-    E-->>UI: synchronized pending result
+    W-->>E: publish owned CompletedSearch
+    UI->>E: takeCompletedSearch()
     UI->>UI: update rendered state on main thread
 ```
 
-Worker callbacks must not outlive the owning UI or service. `SearchUI` uses synchronized pending results so rendering remains on the main thread.
+The worker never captures UI state. `SearchUI` polls an owned completion and ignores stale request identifiers, so rendering and UI mutation remain on the main thread. Shutdown cancels and joins the worker before owners are destroyed.
 
 ## Persistence flow
 
@@ -137,10 +140,11 @@ Locking must remain local to the owning component. Avoid holding a service mutex
 
 The CMake project builds:
 
-- `hypertube_utils`: paths, logger, string helpers, and system helpers;
+- `hypertube_utils`: paths, logger, credential storage, string helpers, and system helpers;
 - `hypertube_config`: configuration and persistence service;
+- `hypertube_torrent`: libtorrent session and torrent operations;
 - `hypertube_search`: search provider and HTTP service;
 - `hypertube`: UI and application executable;
-- `unit_tests`, `config_tests`, and `search_tests`: GoogleTest executables.
+- `unit_tests`, `config_tests`, `search_tests`, and `torrent_tests`: GoogleTest executables.
 
 New services should be isolated behind a small library when they need independent tests. UI code should depend on service interfaces and snapshots, not implementation details of persistence or libtorrent internals.

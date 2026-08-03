@@ -22,6 +22,7 @@ struct TorrentConfigData
 	std::string magnetUri;
 	std::string savePath;
 	std::string torrentFilePath;
+	std::vector<char> resumeData;
 };
 
 class ConfigManager
@@ -55,6 +56,20 @@ public:
 	bool getEnableUPnP() const;
 	void setEnableNATPMP(bool enable);
 	bool getEnableNATPMP() const;
+	void setTorznabUrl(const std::string &url);
+	std::string getTorznabUrl() const;
+	void setTorznabEnabled(bool enable);
+	bool getTorznabEnabled() const;
+	void setProxyEnabled(bool enable);
+	bool getProxyEnabled() const;
+	void setProxyType(const std::string &type);
+	std::string getProxyType() const;
+	void setProxyHost(const std::string &host);
+	std::string getProxyHost() const;
+	void setProxyPort(int port);
+	int getProxyPort() const;
+	void setProxyUsername(const std::string &username);
+	std::string getProxyUsername() const;
 
 	// Schema management
 	int getConfigVersion() const;

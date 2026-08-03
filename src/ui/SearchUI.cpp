@@ -551,24 +551,22 @@ void SearchUI::performSearch(const std::string &query)
 	if (query.empty() || isSearching.load())
 		return;
 
+	SearchQuery searchQuery(query);
+	uint64_t requestId = 0;
+	Result result = searchEngine.startSearch(searchQuery, requestId);
+	if (!result)
+	{
+		if (onShowFailurePopup)
+			onShowFailurePopup(result.message);
+		return;
+	}
 	isSearching = true;
+	loadingMore = false;
+	activeRequestId = requestId;
 	searchResults.clear();
 	currentSearchQuery = query;
 	nextToken.clear();
 	hasMoreResults = true;
-
-	SearchQuery searchQuery(query);
-
-	// Launch async search
-	searchEngine.searchTorrentsAsync(searchQuery,
-											 [this](Result result, SearchResponse response)
-											 {
-												 // This callback runs in worker thread, so we need to store results safely
-												 std::lock_guard<std::mutex> lock(resultsMutex);
-												 pendingResult = result;
-												 pendingResponse = response;
-												 hasPendingResults = true;
-											 });
 }
 
 void SearchUI::displayPaginationControls()
@@ -604,19 +602,18 @@ void SearchUI::loadMoreResults()
 {
 	if (hasMoreResults && !isSearching.load() && !currentSearchQuery.empty() && !nextToken.empty())
 	{
-		isSearching = true;
 		SearchQuery searchQuery(currentSearchQuery, 0, nextToken);
-
-		// Launch async search for more results
-		searchEngine.searchTorrentsAsync(searchQuery,
-												 [this](Result result, SearchResponse response)
-												 {
-													 // This callback runs in worker thread
-													 std::lock_guard<std::mutex> lock(resultsMutex);
-													 pendingResult = result;
-													 pendingResponse = response;
-													 hasPendingResults = true;
-												 });
+		uint64_t requestId = 0;
+		Result result = searchEngine.startSearch(searchQuery, requestId);
+		if (!result)
+		{
+			if (onShowFailurePopup)
+				onShowFailurePopup(result.message);
+			return;
+		}
+		isSearching = true;
+		loadingMore = true;
+		activeRequestId = requestId;
 	}
 }
 
@@ -678,19 +675,17 @@ void SearchUI::setShowFailurePopupCallback(std::function<void(const std::string 
 
 void SearchUI::processPendingResults()
 {
-	// Check if we have pending results from async search (must run in UI thread)
-	std::lock_guard<std::mutex> lock(resultsMutex);
-
-	if (hasPendingResults)
+	auto completion = searchEngine.takeCompletedSearch();
+	if (completion && completion->requestId == activeRequestId)
 	{
 		isSearching = false;
 
-		if (!pendingResult.has_value() || !pendingResult.value())
+		if (!completion->result)
 		{
-			std::string errorMsg = pendingResult.has_value() ? pendingResult.value().message : "Unknown error";
+			const std::string &errorMsg = completion->result.message;
 
-			// Don't show error popup for cancelled searches
-			if (errorMsg.find("cancelled") == std::string::npos)
+			// Cancellation is an expected terminal state, not an application error.
+			if (completion->result.code != ResultCode::Cancelled)
 			{
 				if (onShowFailurePopup)
 				{
@@ -701,27 +696,19 @@ void SearchUI::processPendingResults()
 		else
 		{
 			// Check if this is a "load more" request by seeing if we already have results
-			bool isLoadMore = !searchResults.empty() && !pendingResponse.torrents.empty();
-
-			if (isLoadMore)
+			if (loadingMore)
 			{
-				// Append new results
 				searchResults.insert(searchResults.end(),
-									 pendingResponse.torrents.begin(),
-									 pendingResponse.torrents.end());
+										 completion->response.torrents.begin(),
+										 completion->response.torrents.end());
 			}
 			else
-			{
-				// Replace results (new search)
-				searchResults = pendingResponse.torrents;
-			}
+				searchResults = std::move(completion->response.torrents);
 
-			nextToken = pendingResponse.nextToken;
-			hasMoreResults = pendingResponse.hasMore;
+			nextToken = completion->response.nextToken;
+			hasMoreResults = completion->response.hasMore;
 		}
-
-		hasPendingResults = false;
-		pendingResult.reset();
+		loadingMore = false;
 	}
 }
 

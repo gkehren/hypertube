@@ -10,6 +10,7 @@
 #include <GLFW/glfw3.h>
 #include <functional>
 #include <string>
+#include <array>
 #include "TorrentManager.hpp"
 #include "SearchEngine.hpp"
 #include "Result.hpp"
@@ -31,10 +32,10 @@ struct MenuBarItem
 
 struct TorrentRemovalInfo
 {
-	lt::sha1_hash hash;
+	lt::info_hash_t hash;
 	RemoveTorrentType removeType;
 
-	TorrentRemovalInfo(const lt::sha1_hash &hash, RemoveTorrentType removeType)
+	TorrentRemovalInfo(const lt::info_hash_t &hash, RemoveTorrentType removeType)
 		: hash(hash), removeType(removeType) {}
 };
 
@@ -78,6 +79,19 @@ private:
 	int tempDownloadSpeedLimit = 0;
 	int tempUploadSpeedLimit = 0;
 	int tempSelectedTheme = 0;
+	std::array<char, 1024> tempDownloadPath{};
+	bool tempEnableDht = true;
+	bool tempEnableUpnp = true;
+	bool tempEnableNatPmp = true;
+	bool tempTorznabEnabled = false;
+	std::array<char, 1024> tempTorznabUrl{};
+	std::array<char, 512> tempTorznabApiKey{};
+	bool tempProxyEnabled = false;
+	int tempProxyType = 0;
+	std::array<char, 256> tempProxyHost{};
+	int tempProxyPort = 1080;
+	std::array<char, 256> tempProxyUsername{};
+	std::array<char, 512> tempProxyPassword{};
 	int currentTheme = 0;
 	int selectedCategory = 0;
 

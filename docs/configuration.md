@@ -42,7 +42,18 @@ The current settings schema is version 1:
     "download_path": "~/Downloads",
     "enable_dht": true,
     "enable_upnp": true,
-    "enable_natpmp": true
+    "enable_natpmp": true,
+    "search": {
+      "torznab_enabled": false,
+      "torznab_url": "http://127.0.0.1:9696/api/v1/indexer/all/results/torznab/api"
+    },
+    "proxy": {
+      "enabled": false,
+      "type": "socks5",
+      "host": "127.0.0.1",
+      "port": 1080,
+      "username": ""
+    }
   }
 }
 ```
@@ -56,6 +67,15 @@ The current settings schema is version 1:
 | `settings.enable_dht` | boolean | Enable DHT peer discovery. |
 | `settings.enable_upnp` | boolean | Enable UPnP port mapping. |
 | `settings.enable_natpmp` | boolean | Enable NAT-PMP port mapping. |
+| `settings.search.torznab_enabled` | boolean | Use the configured Torznab endpoint, with torrents-csv fallback on initial-page failure. |
+| `settings.search.torznab_url` | string | HTTP(S) Jackett/Prowlarr Torznab endpoint. |
+| `settings.proxy.enabled` | boolean | Route both search HTTP and BitTorrent traffic through the proxy. |
+| `settings.proxy.type` | string | `socks5` or `http`. |
+| `settings.proxy.host` | string | Proxy hostname or IP address. |
+| `settings.proxy.port` | integer | Proxy port from 1 to 65535. |
+| `settings.proxy.username` | string | Optional non-secret proxy username. |
+
+Torznab API keys and proxy passwords are not stored in this file. Preferences writes them to Windows Credential Manager, macOS Keychain, or Linux Secret Service. Linux needs the `secret-tool` command and an unlocked keyring. `HYPERTUBE_TORZNAB_API_KEY` remains a startup-only fallback when no stored Torznab key exists.
 
 Older unversioned configurations are treated as version 0 and migrated to the current structure. Missing defaults are filled by `ConfigManager`; invalid values do not replace a valid backup candidate with defaults without first attempting recovery.
 
@@ -65,17 +85,19 @@ Torrent restoration state has this shape:
 
 ```json
 {
+  "version": 2,
   "torrents": [
     {
       "magnet_uri": "magnet:?xt=urn:btih:...",
       "save_path": "/path/to/downloads",
-      "torrent_path": "/path/to/file.torrent"
+      "torrent_path": "/path/to/file.torrent",
+      "resume_data": "646..."
     }
   ]
 }
 ```
 
-`magnet_uri` identifies a magnet torrent, `save_path` identifies the data directory, and `torrent_path` is optional when the torrent was added from a file. Entries are validated before being passed to `TorrentManager`.
+`magnet_uri` identifies a magnet torrent, `save_path` identifies the data directory, `torrent_path` is optional when the torrent was added from a file, and `resume_data` is bounded hex-encoded libtorrent fast-resume state. Invalid resume data is ignored while a valid magnet or torrent-file identity remains usable. Torrent state is refreshed periodically and once more during orderly shutdown.
 
 ## Favorites and history
 

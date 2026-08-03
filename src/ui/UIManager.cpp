@@ -1,14 +1,25 @@
 #include "UIManager.hpp"
 #include "Theme.hpp"
 #include "AppPaths.hpp"
+#include "CredentialStore.hpp"
 #include "imgui_internal.h"
+#include <algorithm>
 #include <filesystem>
 #include <iostream>
 #include <memory>
+#include <cstring>
+#include <cstdio>
+#include <cstdlib>
 
 UIManager::UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine, ConfigManager &settingsConfigManager)
 	: torrentManager(torrentManager), searchEngine(searchEngine), settingsConfigManager(settingsConfigManager)
 {
+	const std::optional<std::string> torznabApiKey = Utils::CredentialStore::load("torznab_api_key");
+	const char *environmentApiKey = std::getenv("HYPERTUBE_TORZNAB_API_KEY");
+	const std::string initialApiKey = torznabApiKey.value_or(environmentApiKey ? environmentApiKey : "");
+	std::snprintf(tempTorznabApiKey.data(), tempTorznabApiKey.size(), "%s", initialApiKey.c_str());
+	const std::optional<std::string> proxyPassword = Utils::CredentialStore::load("proxy_password");
+	std::snprintf(tempProxyPassword.data(), tempProxyPassword.size(), "%s", proxyPassword.value_or("").c_str());
 	// Initialize UI components
 	torrentTableUI = std::make_unique<TorrentTableUI>(torrentManager);
 	torrentDetailsUI = std::make_unique<TorrentDetailsUI>(torrentManager);
@@ -30,9 +41,15 @@ void UIManager::init(GLFWwindow *window)
 
 void UIManager::setDefaultSavePath()
 {
+	const std::string configuredPath = settingsConfigManager.getDownloadPath();
 // Set defaultSavePath to downloads directory of the current user
 #ifdef _WIN32
 	const char *userProfile = std::getenv("USERPROFILE");
+	if (!configuredPath.empty() && configuredPath != "~/Downloads")
+	{
+		this->defaultSavePath = configuredPath;
+		return;
+	}
 	if (userProfile && std::strlen(userProfile) > 0)
 	{
 		this->defaultSavePath = std::string(userProfile) + "\\Downloads";
@@ -43,9 +60,16 @@ void UIManager::setDefaultSavePath()
 	}
 #else
 	const char *home = std::getenv("HOME");
+	if (!configuredPath.empty() && configuredPath.rfind("~/", 0) != 0)
+	{
+		this->defaultSavePath = configuredPath;
+		return;
+	}
 	if (home && std::strlen(home) > 0)
 	{
-		this->defaultSavePath = std::string(home) + "/Downloads";
+		this->defaultSavePath = configuredPath.rfind("~/", 0) == 0
+			? std::string(home) + configuredPath.substr(1)
+			: std::string(home) + "/Downloads";
 	}
 	else
 	{
@@ -87,7 +111,7 @@ void UIManager::initImGui(GLFWwindow *window)
 void UIManager::setupUICallbacks()
 {
 	// Setup torrent table callbacks
-	torrentTableUI->setRemoveTorrentCallback([this](const lt::sha1_hash &hash, RemoveTorrentType removeType)
+	torrentTableUI->setRemoveTorrentCallback([this](const lt::info_hash_t &hash, RemoveTorrentType removeType)
 											 { torrentsToRemove.emplace_back(hash, removeType); });
 
 	// Setup search UI callbacks
@@ -426,11 +450,25 @@ void UIManager::displayPreferencesDialog()
 		tempDownloadSpeedLimit = settingsConfigManager.getDownloadSpeedLimit();
 		tempUploadSpeedLimit = settingsConfigManager.getUploadSpeedLimit();
 		tempSelectedTheme = currentTheme;
+		std::snprintf(tempDownloadPath.data(), tempDownloadPath.size(), "%s", defaultSavePath.c_str());
+		tempEnableDht = settingsConfigManager.getEnableDHT();
+		tempEnableUpnp = settingsConfigManager.getEnableUPnP();
+		tempEnableNatPmp = settingsConfigManager.getEnableNATPMP();
+		tempTorznabEnabled = settingsConfigManager.getTorznabEnabled();
+		const std::string torznabUrl = settingsConfigManager.getTorznabUrl();
+		std::snprintf(tempTorznabUrl.data(), tempTorznabUrl.size(), "%s", torznabUrl.c_str());
+		tempProxyEnabled = settingsConfigManager.getProxyEnabled();
+		tempProxyType = settingsConfigManager.getProxyType() == "http" ? 1 : 0;
+		const std::string proxyHost = settingsConfigManager.getProxyHost();
+		std::snprintf(tempProxyHost.data(), tempProxyHost.size(), "%s", proxyHost.c_str());
+		tempProxyPort = settingsConfigManager.getProxyPort();
+		const std::string proxyUsername = settingsConfigManager.getProxyUsername();
+		std::snprintf(tempProxyUsername.data(), tempProxyUsername.size(), "%s", proxyUsername.c_str());
 	}
 
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(450, 380), ImGuiCond_Appearing);
+	ImGui::SetNextWindowSize(ImVec2(560, 700), ImGuiCond_Appearing);
 
 	if (ImGui::BeginPopupModal("Preferences", nullptr, ImGuiWindowFlags_NoResize))
 	{
@@ -484,6 +522,43 @@ void UIManager::displayPreferencesDialog()
 		HypertubeTheme::drawTooltip("Set to 0 for unlimited upload speed");
 
 		ImGui::Spacing();
+		HypertubeTheme::drawSectionHeader("Downloads and discovery");
+		ImGui::Text("Default download directory:");
+		ImGui::SetNextItemWidth(-1);
+		ImGui::InputText("##DownloadPath", tempDownloadPath.data(), tempDownloadPath.size());
+		ImGui::Checkbox("DHT", &tempEnableDht);
+		ImGui::SameLine();
+		ImGui::Checkbox("UPnP", &tempEnableUpnp);
+		ImGui::SameLine();
+		ImGui::Checkbox("NAT-PMP", &tempEnableNatPmp);
+
+		ImGui::Spacing();
+		HypertubeTheme::drawSectionHeader("Search provider");
+		ImGui::Checkbox("Enable local Torznab (Jackett/Prowlarr)", &tempTorznabEnabled);
+		ImGui::SetNextItemWidth(-1);
+		ImGui::InputText("##TorznabUrl", tempTorznabUrl.data(), tempTorznabUrl.size());
+		ImGui::Text("API key:");
+		ImGui::SetNextItemWidth(-1);
+		ImGui::InputText("##TorznabApiKey", tempTorznabApiKey.data(), tempTorznabApiKey.size(), ImGuiInputTextFlags_Password);
+		HypertubeTheme::drawTooltip("Stored in Windows Credential Manager, macOS Keychain, or Linux Secret Service; never in settings.json");
+
+		ImGui::Spacing();
+		HypertubeTheme::drawSectionHeader("Network proxy");
+		ImGui::Checkbox("Route torrent and search traffic through a proxy", &tempProxyEnabled);
+		const char *proxyTypes[] = {"SOCKS5", "HTTP"};
+		ImGui::SetNextItemWidth(130);
+		ImGui::Combo("Type", &tempProxyType, proxyTypes, IM_ARRAYSIZE(proxyTypes));
+		ImGui::SetNextItemWidth(-1);
+		ImGui::InputText("Host", tempProxyHost.data(), tempProxyHost.size());
+		ImGui::InputInt("Port", &tempProxyPort);
+		tempProxyPort = std::clamp(tempProxyPort, 1, 65535);
+		ImGui::SetNextItemWidth(-1);
+		ImGui::InputText("Username", tempProxyUsername.data(), tempProxyUsername.size());
+		ImGui::SetNextItemWidth(-1);
+		ImGui::InputText("Password", tempProxyPassword.data(), tempProxyPassword.size(), ImGuiInputTextFlags_Password);
+		HypertubeTheme::drawTooltip("The password is stored in the operating-system credential store");
+
+		ImGui::Spacing();
 		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::Spacing();
@@ -498,6 +573,39 @@ void UIManager::displayPreferencesDialog()
 
 		if (HypertubeTheme::drawStyledButton("Apply", ImVec2(buttonWidth, 35), true))
 		{
+			const std::string proxyType = tempProxyType == 1 ? "http" : "socks5";
+			Result proxyValidation = searchEngine.setProxyConfig(tempProxyEnabled, proxyType,
+				tempProxyHost.data(), tempProxyPort, tempProxyUsername.data(), tempProxyPassword.data());
+			if (!proxyValidation)
+			{
+				showFailurePopupWithMessage(proxyValidation.message);
+				ImGui::EndPopup();
+				return;
+			}
+			if (tempTorznabEnabled)
+			{
+				Result credentialResult = tempTorznabApiKey[0] == '\0'
+					? Utils::CredentialStore::erase("torznab_api_key")
+					: Utils::CredentialStore::store("torznab_api_key", tempTorznabApiKey.data());
+				if (!credentialResult)
+				{
+					showFailurePopupWithMessage(credentialResult.message);
+					ImGui::EndPopup();
+					return;
+				}
+			}
+			if (tempProxyEnabled)
+			{
+				Result credentialResult = tempProxyPassword[0] == '\0'
+					? Utils::CredentialStore::erase("proxy_password")
+					: Utils::CredentialStore::store("proxy_password", tempProxyPassword.data());
+				if (!credentialResult)
+				{
+					showFailurePopupWithMessage(credentialResult.message);
+					ImGui::EndPopup();
+					return;
+				}
+			}
 			// Save theme
 			currentTheme = tempSelectedTheme;
 			settingsConfigManager.setTheme(currentTheme);
@@ -505,10 +613,35 @@ void UIManager::displayPreferencesDialog()
 			// Save speed limits
 			settingsConfigManager.setDownloadSpeedLimit(tempDownloadSpeedLimit);
 			settingsConfigManager.setUploadSpeedLimit(tempUploadSpeedLimit);
+			defaultSavePath = tempDownloadPath.data();
+			settingsConfigManager.setDownloadPath(defaultSavePath);
+			settingsConfigManager.setEnableDHT(tempEnableDht);
+			settingsConfigManager.setEnableUPnP(tempEnableUpnp);
+			settingsConfigManager.setEnableNATPMP(tempEnableNatPmp);
+			settingsConfigManager.setTorznabEnabled(tempTorznabEnabled);
+			settingsConfigManager.setTorznabUrl(tempTorznabUrl.data());
+			settingsConfigManager.setProxyEnabled(tempProxyEnabled);
+			settingsConfigManager.setProxyType(proxyType);
+			settingsConfigManager.setProxyHost(tempProxyHost.data());
+			settingsConfigManager.setProxyPort(tempProxyPort);
+			settingsConfigManager.setProxyUsername(tempProxyUsername.data());
 			settingsConfigManager.save(Utils::AppPaths::settingsConfigPath().string());
 
 			// Apply to torrent manager
 			applySpeedLimits();
+			torrentManager.configureDiscovery(tempEnableDht, tempEnableUpnp, tempEnableNatPmp);
+			torrentManager.setProxyConfig(tempProxyHost.data(), tempProxyPort,
+				tempProxyUsername.data(), tempProxyPassword.data(), tempProxyEnabled ? tempProxyType + 1 : 0);
+			if (tempTorznabEnabled)
+			{
+				Result provider = searchEngine.configureTorznabProvider(tempTorznabUrl.data(), tempTorznabApiKey.data());
+				if (provider)
+					searchEngine.setActiveSearchProvider("torznab");
+				else
+					showFailurePopupWithMessage(provider.message);
+			}
+			else
+				searchEngine.setActiveSearchProvider("torrents-csv");
 
 			ImGui::CloseCurrentPopup();
 		}

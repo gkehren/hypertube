@@ -9,6 +9,8 @@
 #include <cstdio>
 #include <cmath>
 #include <optional>
+#include <filesystem>
+#include <cstdint>
 
 TorrentTableUI::TorrentTableUI(TorrentManager &torrentManager)
 	: torrentManager(torrentManager)
@@ -131,7 +133,7 @@ bool TorrentTableUI::matchesCategory(const ManagedTorrent &torrent, const lt::to
 	return true;
 }
 
-void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash, const lt::torrent_status *cachedStatus)
+void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, const lt::info_hash_t &info_hash, const lt::torrent_status *cachedStatus)
 {
 	const lt::torrent_status *statusPtr = cachedStatus;
 	std::optional<lt::torrent_status> liveStatus;
@@ -245,12 +247,18 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 	ImGui::PopID();
 }
 
-void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash)
+void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle, const lt::info_hash_t &info_hash)
 {
 	if (ImGui::BeginPopupContextItem("##context", ImGuiPopupFlags_MouseButtonRight))
 	{
 		if (ImGui::MenuItem("Open"))
 		{
+			const auto info = handle.torrent_file();
+			const auto status = handle.status(lt::torrent_handle::query_save_path);
+			if (info && info->files().num_files() == 1)
+				Utils::SystemUtils::openFilePreview((std::filesystem::path(status.save_path) / info->files().file_path(lt::file_index_t(0))).string());
+			else
+				Utils::SystemUtils::openFileExplorer(status.save_path);
 		}
 
 		if (ImGui::MenuItem("Open Containing Folder"))
@@ -282,12 +290,6 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 				handle.pause();
 		}
 
-		if (ImGui::MenuItem("Stop"))
-		{
-			handle.pause();
-			handle.force_recheck();
-		}
-
 		if (ImGui::MenuItem("Move Up Queue"))
 		{
 			handle.queue_position_up();
@@ -305,6 +307,32 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 				handle.unset_flags(lt::torrent_flags::sequential_download);
 			else
 				handle.set_flags(lt::torrent_flags::sequential_download);
+		}
+
+		if (ImGui::MenuItem("Open Largest Media File"))
+		{
+			const auto info = handle.torrent_file();
+			if (info)
+			{
+				lt::file_index_t selected{0};
+				std::int64_t largest = -1;
+				for (const auto index : info->files().file_range())
+				{
+					const std::string path = info->files().file_path(index);
+					if (Utils::SystemUtils::isPreviewableFile(path) && info->files().file_size(index) > largest)
+					{
+						selected = index;
+						largest = info->files().file_size(index);
+					}
+				}
+				if (largest >= 0)
+				{
+					handle.set_flags(lt::torrent_flags::sequential_download);
+					handle.file_priority(selected, lt::top_priority);
+					const auto status = handle.status(lt::torrent_handle::query_save_path);
+					Utils::SystemUtils::openFilePreview((std::filesystem::path(status.save_path) / info->files().file_path(selected)).string());
+				}
+			}
 		}
 
 		if (ImGui::BeginMenu("Remove"))
@@ -339,13 +367,15 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 
 		if (ImGui::MenuItem("Properties"))
 		{
+			selectedTorrent = handle;
+			ImGui::SetWindowFocus("Torrent Details");
 		}
 
 		ImGui::EndPopup();
 	}
 }
 
-void TorrentTableUI::setRemoveTorrentCallback(std::function<void(const lt::sha1_hash &, RemoveTorrentType)> callback)
+void TorrentTableUI::setRemoveTorrentCallback(std::function<void(const lt::info_hash_t &, RemoveTorrentType)> callback)
 {
 	onRemoveTorrent = callback;
 }

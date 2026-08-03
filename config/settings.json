@@ -6,6 +6,17 @@
         "enable_dht": true,
         "enable_natpmp": true,
         "enable_upnp": true,
+		"proxy": {
+			"enabled": false,
+			"host": "127.0.0.1",
+			"port": 1080,
+			"type": "socks5",
+			"username": ""
+		},
+		"search": {
+			"torznab_enabled": false,
+			"torznab_url": "http://127.0.0.1:9696/api/v1/indexer/all/results/torznab/api"
+		},
         "speed_limits": {
             "download": 0,
             "upload": 0

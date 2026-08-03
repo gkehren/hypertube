@@ -9,6 +9,7 @@ The project uses GoogleTest and CTest. Tests are service-level and deterministic
 | `unit_tests` | String formatting, URL encoding, magnet formatting, and ETA helpers. |
 | `config_tests` | Defaults, migration, schema validation, atomic saves, concurrency, and backup recovery. |
 | `search_tests` | Response parsing, malformed data, pagination, duplicate handling, URL construction, and custom providers. |
+| `torrent_tests` | Input validation, duplicate prevention, v2 magnets, and fast-resume restoration. |
 
 Run the full suite:
 
@@ -22,6 +23,7 @@ Run a target directly when diagnosing it:
 ./build/unit_tests
 ./build/config_tests
 ./build/search_tests
+./build/torrent_tests
 ```
 
 The exact executable location differs for multi-config generators.
@@ -58,6 +60,8 @@ Changes to `SearchEngine` should cover:
 - duplicate entries;
 - pagination tokens and URL encoding;
 - provider registration and selection;
+- Torznab parsing and provider errors;
+- proxy validation, retry, fallback, and cache behavior;
 - cancellation and provider failure behavior.
 
 Changes to UI/service boundaries should verify snapshot consistency, callback lifetime, and that blocking work is not introduced into the render path.

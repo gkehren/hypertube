@@ -18,7 +18,11 @@ add_executable(config_tests
 )
 
 add_executable(search_tests
-    test_search_engine.cpp
+	test_search_engine.cpp
+)
+
+add_executable(torrent_tests
+	test_torrent_manager.cpp
 )
 
 target_include_directories(config_tests PRIVATE
@@ -51,7 +55,14 @@ target_link_libraries(search_tests
     hypertube_search
 )
 
+target_link_libraries(torrent_tests
+	PRIVATE
+	gtest_main
+	hypertube_torrent
+)
+
 include(GoogleTest)
 gtest_discover_tests(unit_tests)
 gtest_discover_tests(config_tests)
 gtest_discover_tests(search_tests)
+gtest_discover_tests(torrent_tests)

@@ -4,30 +4,71 @@
 #include <iostream>
 #include <algorithm>
 #include <filesystem>
+#include <unordered_set>
+#include <libtorrent/alert_types.hpp>
+#include <libtorrent/read_resume_data.hpp>
+#include <libtorrent/write_resume_data.hpp>
 
 namespace
 {
-void invalidateStatusCache(std::mutex &cacheMutex, std::shared_ptr<const std::unordered_map<lt::sha1_hash, lt::torrent_status>> &cache)
+void invalidateStatusCache(std::mutex &cacheMutex, std::shared_ptr<const std::unordered_map<lt::info_hash_t, lt::torrent_status>> &cache)
 {
 	std::lock_guard<std::mutex> lock(cacheMutex);
-	cache = std::make_shared<std::unordered_map<lt::sha1_hash, lt::torrent_status>>();
+	cache = std::make_shared<std::unordered_map<lt::info_hash_t, lt::torrent_status>>();
+}
+
+std::string hashForLog(const lt::info_hash_t &hash)
+{
+	if (hash.has_v1())
+		return hash.v1.to_string();
+	if (hash.has_v2())
+		return hash.v2.to_string();
+	return "unknown";
+}
+
+Result validateAddPaths(const std::string &savePath, const std::string *torrentPath = nullptr)
+{
+	std::error_code error;
+	if (torrentPath)
+	{
+		const std::filesystem::path source(*torrentPath);
+		if (!std::filesystem::is_regular_file(source, error))
+			return Result::Failure("Torrent file does not exist or is not a regular file", ResultCode::InvalidInput);
+	}
+
+	if (savePath.empty())
+		return Result::Failure("Download path cannot be empty", ResultCode::InvalidInput);
+	const std::filesystem::path destination(savePath);
+	std::filesystem::create_directories(destination, error);
+	if (error || !std::filesystem::is_directory(destination, error))
+		return Result::Failure("Download path cannot be created or accessed: " + savePath, ResultCode::Storage);
+	return Result::Success();
 }
 }
 
 Result TorrentManager::addTorrent(const std::string &torrentPath, const std::string &savePath)
 {
+	Result validation = validateAddPaths(savePath, &torrentPath);
+	if (!validation)
+		return validation;
+	std::lock_guard<std::mutex> operationLock(operationMutex);
 	try
 	{
 		lt::add_torrent_params params;
 		params.save_path = savePath;
 		params.ti = std::make_shared<lt::torrent_info>(torrentPath);
-		lt::torrent_handle handle = this->session.add_torrent(params);
-
-		lt::sha1_hash hash = handle.info_hash();
+		params.flags |= lt::torrent_flags::duplicate_is_error;
+		const lt::info_hash_t expectedHash = params.ti->info_hashes();
 		{
 			std::lock_guard<std::mutex> lock(stateMutex);
-			if (torrents.find(hash) != torrents.end())
-				return Result::Failure("Torrent is already added");
+			if ((expectedHash.has_v1() || expectedHash.has_v2()) && torrents.find(expectedHash) != torrents.end())
+				return Result::Failure("Torrent is already added", ResultCode::Duplicate);
+		}
+		lt::torrent_handle handle = this->session.add_torrent(params);
+
+		lt::info_hash_t hash = handle.info_hashes();
+		{
+			std::lock_guard<std::mutex> lock(stateMutex);
 			torrents.emplace(hash, handle);
 			torrentFilePaths.emplace(hash, torrentPath);
 		}
@@ -47,17 +88,30 @@ Result TorrentManager::addTorrent(const std::string &torrentPath, const std::str
 
 Result TorrentManager::addMagnetTorrent(const std::string &magnetUri, const std::string &savePath)
 {
+	Result validation = validateAddPaths(savePath);
+	if (!validation)
+		return validation;
+	if (magnetUri.rfind("magnet:?", 0) != 0)
+		return Result::Failure("Invalid magnet URI", ResultCode::InvalidInput);
+	std::lock_guard<std::mutex> operationLock(operationMutex);
 	try
 	{
 		lt::add_torrent_params params = lt::parse_magnet_uri(magnetUri);
+		if (!params.info_hashes.has_v1() && !params.info_hashes.has_v2())
+			return Result::Failure("Magnet URI does not contain a supported info hash", ResultCode::InvalidInput);
 		std::cout << "Adding magnet torrent: " << params.name << " (hash: " << params.info_hashes.v1 << ")" << std::endl;
 		params.save_path = savePath;
-		lt::torrent_handle handle = this->session.add_torrent(params);
-		const lt::sha1_hash hash = handle.info_hash();
+		params.flags |= lt::torrent_flags::duplicate_is_error;
+		if (params.info_hashes.has_v1() || params.info_hashes.has_v2())
 		{
 			std::lock_guard<std::mutex> lock(stateMutex);
-			if (torrents.find(hash) != torrents.end())
-				return Result::Failure("Torrent is already added");
+			if (torrents.find(params.info_hashes) != torrents.end())
+				return Result::Failure("Torrent is already added", ResultCode::Duplicate);
+		}
+		lt::torrent_handle handle = this->session.add_torrent(params);
+		const lt::info_hash_t hash = handle.info_hashes();
+		{
+			std::lock_guard<std::mutex> lock(stateMutex);
 			torrents.emplace(hash, handle);
 		}
 
@@ -78,6 +132,31 @@ void TorrentManager::addTorrentsFromConfig(const std::vector<TorrentConfigData> 
 {
 	for (const auto &data : torrents)
 	{
+		if (!data.resumeData.empty())
+		{
+			std::lock_guard<std::mutex> operationLock(operationMutex);
+			try
+			{
+				lt::add_torrent_params params = lt::read_resume_data(data.resumeData);
+				if (!data.savePath.empty())
+					params.save_path = data.savePath;
+				params.flags |= lt::torrent_flags::duplicate_is_error;
+				lt::torrent_handle handle = session.add_torrent(params);
+				const lt::info_hash_t hash = handle.info_hashes();
+				{
+					std::lock_guard<std::mutex> lock(stateMutex);
+					this->torrents.emplace(hash, handle);
+					if (!data.torrentFilePath.empty())
+						torrentFilePaths.emplace(hash, data.torrentFilePath);
+				}
+				Utils::Logger::info("torrent", "Restored torrent from fast-resume data");
+				continue;
+			}
+			catch (const std::exception &e)
+			{
+				Utils::Logger::warning("torrent", "Fast-resume data was rejected; using the persisted source: " + std::string(e.what()));
+			}
+		}
 		// Try to add from file if path exists
 		if (!data.torrentFilePath.empty() && std::filesystem::exists(data.torrentFilePath))
 		{
@@ -90,15 +169,16 @@ void TorrentManager::addTorrentsFromConfig(const std::vector<TorrentConfigData> 
 	}
 }
 
-Result TorrentManager::removeTorrent(const lt::sha1_hash hash, RemoveTorrentType removeType)
+Result TorrentManager::removeTorrent(const lt::info_hash_t &hash, RemoveTorrentType removeType)
 {
+	std::lock_guard<std::mutex> operationLock(operationMutex);
 	lt::torrent_handle handle;
 	std::string torrentFilePath;
 	{
 		std::lock_guard<std::mutex> lock(stateMutex);
 		auto it = torrents.find(hash);
 		if (it == torrents.end())
-			return Result::Failure("Torrent not found");
+			return Result::Failure("Torrent not found", ResultCode::NotFound);
 		handle = it->second;
 		auto pathIt = torrentFilePaths.find(hash);
 		if (pathIt != torrentFilePaths.end())
@@ -138,7 +218,7 @@ Result TorrentManager::removeTorrent(const lt::sha1_hash hash, RemoveTorrentType
 			torrentFilePaths.erase(hash);
 		}
 		invalidateStatusCache(cacheMutex, statusCache);
-		Utils::Logger::info("torrent", "Removed torrent " + hash.to_string());
+		Utils::Logger::info("torrent", "Removed torrent " + hashForLog(hash));
 
 		return Result::Success();
 	}
@@ -152,13 +232,67 @@ std::vector<ManagedTorrent> TorrentManager::getTorrentSnapshot() const
 	snapshot.reserve(torrents.size());
 	for (const auto &[hash, handle] : torrents)
 	{
-		ManagedTorrent entry{hash, handle, {}};
+		ManagedTorrent entry{hash, handle, {}, {}};
 		auto pathIt = torrentFilePaths.find(hash);
 		if (pathIt != torrentFilePaths.end())
 			entry.torrentFilePath = pathIt->second;
 		snapshot.push_back(std::move(entry));
 	}
 	return snapshot;
+}
+
+Result TorrentManager::getPersistenceSnapshot(std::vector<ManagedTorrent> &snapshot, std::chrono::milliseconds timeout)
+{
+	std::lock_guard<std::mutex> operationLock(operationMutex);
+	snapshot = getTorrentSnapshot();
+	std::unordered_set<lt::info_hash_t> pending;
+	for (const auto &torrent : snapshot)
+	{
+		if (!torrent.handle.is_valid())
+			continue;
+		try
+		{
+			torrent.handle.save_resume_data();
+			pending.insert(torrent.hash);
+		}
+		catch (const std::exception &e)
+		{
+			Utils::Logger::warning("torrent", "Unable to request fast-resume data: " + std::string(e.what()));
+		}
+	}
+
+	const auto deadline = std::chrono::steady_clock::now() + timeout;
+	while (!pending.empty() && std::chrono::steady_clock::now() < deadline)
+	{
+		session.wait_for_alert(lt::milliseconds(100));
+		std::vector<lt::alert *> alerts;
+		session.pop_alerts(&alerts);
+		for (lt::alert *alert : alerts)
+		{
+			if (auto *saved = lt::alert_cast<lt::save_resume_data_alert>(alert))
+			{
+				const lt::info_hash_t hash = saved->handle.info_hashes();
+				for (auto &torrent : snapshot)
+				{
+					if (torrent.hash == hash)
+					{
+						torrent.resumeData = lt::write_resume_data_buf(saved->params);
+						break;
+					}
+				}
+				pending.erase(hash);
+			}
+			else if (auto *failed = lt::alert_cast<lt::save_resume_data_failed_alert>(alert))
+			{
+				pending.erase(failed->handle.info_hashes());
+				Utils::Logger::warning("torrent", "Unable to save fast-resume data: " + failed->error.message());
+			}
+		}
+	}
+
+	if (!pending.empty())
+		return Result::Failure("Timed out while collecting fast-resume data for " + std::to_string(pending.size()) + " torrent(s)", ResultCode::Storage, true);
+	return Result::Success();
 }
 
 void TorrentManager::setDownloadSpeedLimit(int bytesPerSecond)
@@ -185,7 +319,16 @@ int TorrentManager::getUploadSpeedLimit() const
 	return session.get_settings().get_int(lt::settings_pack::upload_rate_limit);
 }
 
-std::optional<lt::torrent_status> TorrentManager::getCachedStatus(const lt::sha1_hash &hash) const
+void TorrentManager::configureDiscovery(bool enableDht, bool enableUpnp, bool enableNatPmp)
+{
+	lt::settings_pack settings;
+	settings.set_bool(lt::settings_pack::enable_dht, enableDht);
+	settings.set_bool(lt::settings_pack::enable_upnp, enableUpnp);
+	settings.set_bool(lt::settings_pack::enable_natpmp, enableNatPmp);
+	session.apply_settings(settings);
+}
+
+std::optional<lt::torrent_status> TorrentManager::getCachedStatus(const lt::info_hash_t &hash) const
 {
 	auto cache = getStatusCache();
 	if (cache)
@@ -199,7 +342,7 @@ std::optional<lt::torrent_status> TorrentManager::getCachedStatus(const lt::sha1
 	return std::nullopt;
 }
 
-std::shared_ptr<const std::unordered_map<lt::sha1_hash, lt::torrent_status>> TorrentManager::getStatusCache() const
+std::shared_ptr<const std::unordered_map<lt::info_hash_t, lt::torrent_status>> TorrentManager::getStatusCache() const
 {
 	std::lock_guard<std::mutex> lock(cacheMutex);
 	return statusCache;
@@ -207,7 +350,7 @@ std::shared_ptr<const std::unordered_map<lt::sha1_hash, lt::torrent_status>> Tor
 
 void TorrentManager::refreshStatusCache()
 {
-	auto newCache = std::make_shared<std::unordered_map<lt::sha1_hash, lt::torrent_status>>();
+	auto newCache = std::make_shared<std::unordered_map<lt::info_hash_t, lt::torrent_status>>();
 	const auto torrentsSnapshot = getTorrentSnapshot();
 
 	// Refresh all torrent statuses
@@ -254,7 +397,7 @@ std::vector<lt::alert *> TorrentManager::pollAlerts()
 	return alerts;
 }
 
-void TorrentManager::setSequentialDownload(const lt::sha1_hash &hash, bool sequential)
+void TorrentManager::setSequentialDownload(const lt::info_hash_t &hash, bool sequential)
 {
 	lt::torrent_handle handle;
 	{
@@ -272,7 +415,7 @@ void TorrentManager::setSequentialDownload(const lt::sha1_hash &hash, bool seque
 	}
 }
 
-bool TorrentManager::isSequentialDownload(const lt::sha1_hash &hash) const
+bool TorrentManager::isSequentialDownload(const lt::info_hash_t &hash) const
 {
 	lt::torrent_handle handle;
 	{
@@ -295,6 +438,11 @@ void TorrentManager::setProxyConfig(const std::string &hostname, int port, const
 	settings.set_int(lt::settings_pack::proxy_port, port);
 	settings.set_str(lt::settings_pack::proxy_username, username);
 	settings.set_str(lt::settings_pack::proxy_password, password);
-	settings.set_int(lt::settings_pack::proxy_type, static_cast<lt::settings_pack::proxy_type_t>(proxyType));
+	lt::settings_pack::proxy_type_t libtorrentProxyType = lt::settings_pack::none;
+	if (proxyType == 1)
+		libtorrentProxyType = username.empty() ? lt::settings_pack::socks5 : lt::settings_pack::socks5_pw;
+	else if (proxyType == 2)
+		libtorrentProxyType = username.empty() ? lt::settings_pack::http : lt::settings_pack::http_pw;
+	settings.set_int(lt::settings_pack::proxy_type, libtorrentProxyType);
 	session.apply_settings(settings);
 }

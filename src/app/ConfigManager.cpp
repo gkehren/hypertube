@@ -8,9 +8,64 @@
 #include <algorithm>
 #include <filesystem>
 #include <system_error>
+#include <unordered_map>
 
 namespace
 {
+std::string encodeHex(const std::vector<char> &data)
+{
+	static constexpr char digits[] = "0123456789abcdef";
+	std::string encoded;
+	encoded.reserve(data.size() * 2);
+	for (const unsigned char byte : data)
+	{
+		encoded.push_back(digits[byte >> 4]);
+		encoded.push_back(digits[byte & 0x0f]);
+	}
+	return encoded;
+}
+
+bool decodeHex(const std::string &encoded, std::vector<char> &data)
+{
+	static constexpr std::size_t maxResumeDataSize = 16 * 1024 * 1024;
+	if (encoded.size() % 2 != 0 || encoded.size() / 2 > maxResumeDataSize)
+		return false;
+	auto value = [](char character) -> int
+	{
+		if (character >= '0' && character <= '9') return character - '0';
+		if (character >= 'a' && character <= 'f') return character - 'a' + 10;
+		if (character >= 'A' && character <= 'F') return character - 'A' + 10;
+		return -1;
+	};
+	data.clear();
+	data.reserve(encoded.size() / 2);
+	for (std::size_t index = 0; index < encoded.size(); index += 2)
+	{
+		const int high = value(encoded[index]);
+		const int low = value(encoded[index + 1]);
+		if (high < 0 || low < 0)
+		{
+			data.clear();
+			return false;
+		}
+		data.push_back(static_cast<char>((high << 4) | low));
+	}
+	return true;
+}
+
+void applyMissingDefaults(json &target, const json &defaults)
+{
+	if (!target.is_object() || !defaults.is_object())
+		return;
+	for (const auto &[key, value] : defaults.items())
+	{
+		if (!target.contains(key))
+			target[key] = value;
+		else if (target[key].is_object() && value.is_object())
+			applyMissingDefaults(target[key], value);
+	}
+}
+
 bool writeJsonAtomically(const std::string &path, const json &data, std::string &errorMessage)
 {
 	const std::filesystem::path target(path);
@@ -151,7 +206,18 @@ json ConfigManager::createDefaultConfig() const
 			{"download_path", "~/Downloads"},
 			{"enable_dht", true},
 			{"enable_upnp", true},
-			{"enable_natpmp", true}
+			{"enable_natpmp", true},
+			{"search", {
+				{"torznab_enabled", false},
+				{"torznab_url", "http://127.0.0.1:9696/api/v1/indexer/all/results/torznab/api"}
+			}},
+			{"proxy", {
+				{"enabled", false},
+				{"type", "socks5"},
+				{"host", "127.0.0.1"},
+				{"port", 1080},
+				{"username", ""}
+			}}
 		}}
 	};
 	return defaultConfig;
@@ -285,6 +351,18 @@ void ConfigManager::save(const std::string &path)
 void ConfigManager::saveTorrents(const std::vector<ManagedTorrent> &torrents)
 {
 	json torrentsJson;
+	std::unordered_map<std::string, std::string> previousResumeData;
+	{
+		std::lock_guard<std::mutex> lock(configMutex);
+		if (config.contains("torrents") && config["torrents"].is_array())
+		{
+			for (const auto &entry : config["torrents"])
+			{
+				if (entry.is_object() && entry.value("magnet_uri", "").size() > 0 && entry.contains("resume_data") && entry["resume_data"].is_string())
+					previousResumeData.emplace(entry["magnet_uri"].get<std::string>(), entry["resume_data"].get<std::string>());
+			}
+		}
+	}
 	for (const auto &torrent : torrents)
 	{
 		const auto &hash = torrent.hash;
@@ -299,6 +377,10 @@ void ConfigManager::saveTorrents(const std::vector<ManagedTorrent> &torrents)
 
 		if (!torrent.torrentFilePath.empty())
 			torrentEntry["torrent_path"] = torrent.torrentFilePath;
+		if (!torrent.resumeData.empty())
+			torrentEntry["resume_data"] = encodeHex(torrent.resumeData);
+		else if (auto previous = previousResumeData.find(magnetUri); previous != previousResumeData.end())
+			torrentEntry["resume_data"] = previous->second;
 
 		torrentsJson.push_back(torrentEntry);
 	}
@@ -306,7 +388,7 @@ void ConfigManager::saveTorrents(const std::vector<ManagedTorrent> &torrents)
 	{
 		std::lock_guard<std::mutex> lock(configMutex);
 		config["torrents"] = torrentsJson;
-		torrentsFile = {{"torrents", config["torrents"]}};
+		torrentsFile = {{"version", 2}, {"torrents", config["torrents"]}};
 	}
 	enqueueSave(Utils::AppPaths::torrentsConfigPath().string(), std::move(torrentsFile));
 }
@@ -386,6 +468,11 @@ Result ConfigManager::loadTorrents(const std::string &path, std::vector<TorrentC
 		outTorrents.reserve(torrentsJson.size());
 		for (const auto &torrent : torrentsJson)
 		{
+			if (!torrent.is_object())
+			{
+				Utils::Logger::warning("config", "Skipping a non-object torrent entry");
+				continue;
+			}
 			TorrentConfigData data;
 			if (torrent.contains("magnet_uri") && torrent["magnet_uri"].is_string())
 				data.magnetUri = torrent["magnet_uri"];
@@ -393,7 +480,17 @@ Result ConfigManager::loadTorrents(const std::string &path, std::vector<TorrentC
 				data.savePath = torrent["save_path"];
 			if (torrent.contains("torrent_path") && torrent["torrent_path"].is_string())
 				data.torrentFilePath = torrent["torrent_path"];
+			if (torrent.contains("resume_data") && torrent["resume_data"].is_string())
+			{
+				if (!decodeHex(torrent["resume_data"].get<std::string>(), data.resumeData))
+					Utils::Logger::warning("config", "Ignoring invalid or oversized fast-resume data");
+			}
 
+			if (data.savePath.empty() || (data.magnetUri.empty() && data.torrentFilePath.empty() && data.resumeData.empty()))
+			{
+				Utils::Logger::warning("config", "Skipping an incomplete torrent entry");
+				continue;
+			}
 			outTorrents.push_back(std::move(data));
 		}
 		return Result::Success();
@@ -539,6 +636,107 @@ bool ConfigManager::getEnableNATPMP() const
 	return true; // Default to enabled
 }
 
+void ConfigManager::setTorznabUrl(const std::string &url)
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	ensureSettingsStructure();
+	config["settings"]["search"]["torznab_url"] = url;
+}
+
+std::string ConfigManager::getTorznabUrl() const
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	if (config.contains("settings") && config["settings"].contains("search"))
+		return config["settings"]["search"].value("torznab_url", "");
+	return {};
+}
+
+void ConfigManager::setTorznabEnabled(bool enable)
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	ensureSettingsStructure();
+	config["settings"]["search"]["torznab_enabled"] = enable;
+}
+
+bool ConfigManager::getTorznabEnabled() const
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	if (config.contains("settings") && config["settings"].contains("search"))
+		return config["settings"]["search"].value("torznab_enabled", false);
+	return false;
+}
+
+void ConfigManager::setProxyEnabled(bool enable)
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	ensureSettingsStructure();
+	config["settings"]["proxy"]["enabled"] = enable;
+}
+
+bool ConfigManager::getProxyEnabled() const
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	return config.contains("settings") && config["settings"].contains("proxy")
+		? config["settings"]["proxy"].value("enabled", false) : false;
+}
+
+void ConfigManager::setProxyType(const std::string &type)
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	ensureSettingsStructure();
+	config["settings"]["proxy"]["type"] = type == "http" ? "http" : "socks5";
+}
+
+std::string ConfigManager::getProxyType() const
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	return config.contains("settings") && config["settings"].contains("proxy")
+		? config["settings"]["proxy"].value("type", "socks5") : "socks5";
+}
+
+void ConfigManager::setProxyHost(const std::string &host)
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	ensureSettingsStructure();
+	config["settings"]["proxy"]["host"] = host;
+}
+
+std::string ConfigManager::getProxyHost() const
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	return config.contains("settings") && config["settings"].contains("proxy")
+		? config["settings"]["proxy"].value("host", "127.0.0.1") : "127.0.0.1";
+}
+
+void ConfigManager::setProxyPort(int port)
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	ensureSettingsStructure();
+	config["settings"]["proxy"]["port"] = std::clamp(port, 1, 65535);
+}
+
+int ConfigManager::getProxyPort() const
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	if (!config.contains("settings") || !config["settings"].contains("proxy"))
+		return 1080;
+	return std::clamp(config["settings"]["proxy"].value("port", 1080), 1, 65535);
+}
+
+void ConfigManager::setProxyUsername(const std::string &username)
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	ensureSettingsStructure();
+	config["settings"]["proxy"]["username"] = username;
+}
+
+std::string ConfigManager::getProxyUsername() const
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	return config.contains("settings") && config["settings"].contains("proxy")
+		? config["settings"]["proxy"].value("username", "") : "";
+}
+
 int ConfigManager::getConfigVersion() const
 {
 	std::lock_guard<std::mutex> lock(configMutex);
@@ -571,14 +769,8 @@ void ConfigManager::ensureDefaultConfigUnlocked()
 		config["settings"] = json::object();
 	}
 
-	// Add any missing default settings
-	for (auto &[key, value] : defaults["settings"].items())
-	{
-		if (!config["settings"].contains(key))
-		{
-			config["settings"][key] = value;
-		}
-	}
+	// Fill nested defaults without replacing valid user-owned values or unknown keys.
+	applyMissingDefaults(config["settings"], defaults["settings"]);
 }
 
 void ConfigManager::migrateConfig(int fromVersion, int toVersion)
