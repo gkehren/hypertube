@@ -1,0 +1,94 @@
+# Testing and validation
+
+The project uses GoogleTest and CTest. Tests are service-level and deterministic; they should not require a live torrent session, a real user home directory, or an external search provider.
+
+## Test targets
+
+| Target | Scope |
+| --- | --- |
+| `unit_tests` | String formatting, URL encoding, magnet formatting, and ETA helpers. |
+| `config_tests` | Defaults, migration, schema validation, atomic saves, concurrency, and backup recovery. |
+| `search_tests` | Response parsing, malformed data, pagination, duplicate handling, URL construction, and custom providers. |
+
+Run the full suite:
+
+```sh
+ctest --test-dir build --output-on-failure
+```
+
+Run a target directly when diagnosing it:
+
+```sh
+./build/unit_tests
+./build/config_tests
+./build/search_tests
+```
+
+The exact executable location differs for multi-config generators.
+
+## Test design rules
+
+- Use isolated temporary directories for every persistence test.
+- Do not read or overwrite the developer's home directory or repository `config/` during a test.
+- Do not require a network connection for parser and provider tests.
+- Assert observable results and recovered values, not only log messages.
+- Cover both successful and expected failure `Result` paths.
+- Use bounded waits and explicit synchronization for asynchronous tests.
+- Clean up temporary files, including `.tmp` and `.bak` candidates.
+
+## Required regression coverage
+
+Changes to `ConfigManager` should cover:
+
+- missing files and default creation;
+- legacy migration;
+- malformed JSON;
+- schema-invalid primary files with valid backups;
+- missing primary files with valid backups;
+- torrent restoration from the selected recovery candidate;
+- atomic-save backup creation;
+- concurrent updates that always produce valid JSON;
+- worker shutdown and `waitForAsyncOperations()`.
+
+Changes to `SearchEngine` should cover:
+
+- array and object response shapes;
+- missing or malformed fields;
+- empty responses;
+- duplicate entries;
+- pagination tokens and URL encoding;
+- provider registration and selection;
+- cancellation and provider failure behavior.
+
+Changes to UI/service boundaries should verify snapshot consistency, callback lifetime, and that blocking work is not introduced into the render path.
+
+## Sanitizer validation
+
+Use the sanitizer build for memory, lifetime, parser, persistence, callback, and concurrency changes:
+
+```sh
+cmake -S . -B build-asan \
+  -DHYPERTUBE_ENABLE_SANITIZERS=ON \
+  -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-asan -j2
+ctest --test-dir build-asan --output-on-failure
+```
+
+Sanitizer results are meaningful only when the tests finish without suppressed errors. Record toolchain limitations when the sanitizer build cannot be run.
+
+## Manual smoke test
+
+When a change affects the executable or UI, perform the smallest applicable manual check:
+
+1. Start the application from a terminal.
+2. Add a test torrent or magnet link using a disposable save directory.
+3. Verify status, filtering, details, pause/resume, and removal behavior affected by the change.
+4. Exercise the changed error path.
+5. Open Logs and verify that the diagnostic is visible and clearable.
+6. Restart when persistence is involved and verify restoration.
+
+Do not use copyrighted or private user content as test fixtures.
+
+## Review gate
+
+Before handing off a change, run the full CTest suite, `git diff --check`, and the sanitizer suite when relevant. CMake install/package changes additionally require a runtime component install and inspection of the generated files.
