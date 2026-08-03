@@ -1,5 +1,6 @@
 #include "UIManager.hpp"
 #include "Theme.hpp"
+#include "AppPaths.hpp"
 #include "imgui_internal.h"
 #include <filesystem>
 #include <iostream>
@@ -31,11 +32,25 @@ void UIManager::setDefaultSavePath()
 {
 // Set defaultSavePath to downloads directory of the current user
 #ifdef _WIN32
-	this->defaultSavePath = std::string(std::getenv("USERPROFILE")) + "\\Downloads";
-#elif __APPLE__
-	this->defaultSavePath = std::string(std::getenv("HOME")) + "/Downloads";
-#elif __linux__
-	this->defaultSavePath = std::string(std::getenv("HOME")) + "/Downloads";
+	const char *userProfile = std::getenv("USERPROFILE");
+	if (userProfile && std::strlen(userProfile) > 0)
+	{
+		this->defaultSavePath = std::string(userProfile) + "\\Downloads";
+	}
+	else
+	{
+		this->defaultSavePath = std::filesystem::current_path().string();
+	}
+#else
+	const char *home = std::getenv("HOME");
+	if (home && std::strlen(home) > 0)
+	{
+		this->defaultSavePath = std::string(home) + "/Downloads";
+	}
+	else
+	{
+		this->defaultSavePath = std::filesystem::current_path().string();
+	}
 #endif
 }
 
@@ -308,14 +323,14 @@ void UIManager::displayTorrentManagement()
 void UIManager::displayCategories()
 {
 	ImGui::Begin("Categories");
+	if (torrentManager.shouldRefreshCache())
+		torrentManager.refreshStatusCache();
 
 	// Section header
 	HypertubeTheme::drawSectionHeader("Filter Torrents");
 
-	static int selectedCategory = 0;
-
 	// Get torrent counts for each category
-	auto &torrents = torrentManager.getTorrents();
+	auto torrents = torrentManager.getTorrentSnapshot();
 	int allCount = static_cast<int>(torrents.size());
 	int downloadingCount = 0;
 	int seedingCount = 0;
@@ -326,8 +341,10 @@ void UIManager::displayCategories()
 
 	auto statusCache = torrentManager.getStatusCache();
 
-	for (const auto &[hash, handle] : torrents)
+	for (const auto &torrent : torrents)
 	{
+		const auto &hash = torrent.hash;
+		const auto &handle = torrent.handle;
 		if (!handle.is_valid())
 			continue;
 
@@ -373,6 +390,8 @@ void UIManager::displayCategories()
 		selectedCategory = 5;
 	if (HypertubeTheme::drawCategoryItem("Inactive", "", selectedCategory == 6, inactiveCount))
 		selectedCategory = 6;
+
+	torrentTableUI->setCategoryFilter(selectedCategory);
 
 	ImGui::End();
 }
@@ -486,7 +505,7 @@ void UIManager::displayPreferencesDialog()
 			// Save speed limits
 			settingsConfigManager.setDownloadSpeedLimit(tempDownloadSpeedLimit);
 			settingsConfigManager.setUploadSpeedLimit(tempUploadSpeedLimit);
-			settingsConfigManager.save("./config/settings.json");
+			settingsConfigManager.save(Utils::AppPaths::settingsConfigPath().string());
 
 			// Apply to torrent manager
 			applySpeedLimits();
@@ -507,7 +526,7 @@ void UIManager::displayPreferencesDialog()
 
 void UIManager::loadSpeedLimitsFromConfig()
 {
-	Result result = settingsConfigManager.load("./config/settings.json");
+	Result result = settingsConfigManager.load(Utils::AppPaths::settingsConfigPath().string());
 	if (!result)
 	{
 		// Show error popup to user

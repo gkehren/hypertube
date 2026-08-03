@@ -79,6 +79,7 @@ private:
 	int tempUploadSpeedLimit = 0;
 	int tempSelectedTheme = 0;
 	int currentTheme = 0;
+	int selectedCategory = 0;
 
 	TorrentManager &torrentManager;
 	SearchEngine &searchEngine;

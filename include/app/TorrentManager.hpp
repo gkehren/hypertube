@@ -17,6 +17,16 @@
 // Forward declaration
 struct TorrentConfigData;
 
+// A value snapshot used by the UI and persistence layers. The map containing
+// these entries never escapes TorrentManager, so callers cannot race a map
+// mutation while rendering or saving the application state.
+struct ManagedTorrent
+{
+	lt::sha1_hash hash;
+	lt::torrent_handle handle;
+	std::string torrentFilePath;
+};
+
 typedef enum
 {
 	REMOVE_TORRENT,
@@ -32,8 +42,7 @@ public:
 	Result addMagnetTorrent(const std::string &magnetUri, const std::string &savePath = "./downloads");
 	void addTorrentsFromConfig(const std::vector<TorrentConfigData> &torrents);
 	Result removeTorrent(const lt::sha1_hash hash, RemoveTorrentType removeType);
-	const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &getTorrents() const;
-	const std::unordered_map<lt::sha1_hash, std::string> &getTorrentFilePaths() const;
+	std::vector<ManagedTorrent> getTorrentSnapshot() const;
 
 	// Speed limit methods
 	void setDownloadSpeedLimit(int bytesPerSecond); // 0 means unlimited
@@ -48,11 +57,19 @@ public:
 	void setCacheRefreshInterval(int milliseconds);
 	bool shouldRefreshCache() const;
 
+	// Sequential download (streaming) methods
+	void setSequentialDownload(const lt::sha1_hash &hash, bool sequential);
+	bool isSequentialDownload(const lt::sha1_hash &hash) const;
+
+	// Proxy configuration methods
+	void setProxyConfig(const std::string &hostname, int port, const std::string &username = "", const std::string &password = "", int proxyType = 0);
+
 	// Alert polling methods
 	std::vector<lt::alert *> pollAlerts();
 
 private:
 	lt::session session;
+	mutable std::mutex stateMutex;
 	std::unordered_map<lt::sha1_hash, lt::torrent_handle> torrents;
 	std::unordered_map<lt::sha1_hash, std::string> torrentFilePaths;
 

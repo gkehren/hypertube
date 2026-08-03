@@ -33,7 +33,7 @@ public:
 	Result load(const std::string &path, bool fullConfig = true);
 	void save(const std::string &path);
 
-	void saveTorrents(const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &torrents, const std::unordered_map<lt::sha1_hash, std::string> &torrentFilePaths);
+	void saveTorrents(const std::vector<ManagedTorrent> &torrents);
 	Result loadTorrents(const std::string &path, std::vector<TorrentConfigData> &outTorrents);
 
 	// Favorites and search history
@@ -67,9 +67,10 @@ public:
 	// Synchronization for testing
 	void waitForAsyncOperations();
 
-	json &getConfig();
+	json getConfig() const;
 
 private:
+	mutable std::mutex configMutex;
 	json config;
 	static constexpr int CURRENT_CONFIG_VERSION = 1;
 
@@ -91,6 +92,8 @@ private:
 
 	json createDefaultConfig() const;
 	void ensureSettingsStructure();
+	void ensureDefaultConfigUnlocked();
+	void migrateConfigUnlocked(int fromVersion, int toVersion);
 	void applyDefaultConfig();
 	bool validateConfig();
 };

@@ -19,8 +19,22 @@ A lightweight and fast cross-platform BitTorrent client built with C++ and Dear 
 - Automatic torrent state persistence
 - Integrated torrent search using torrents-csv.com API
 - Search history and favorites management
+- Thread-safe torrent snapshots for rendering and persistence
+- Atomic JSON saves with `.bak` recovery files
+- Per-user configuration/data/cache directories with portable mode
+- Local structured diagnostics and an in-app diagnostics view
+- Pluggable search providers with cancellation and bounded HTTP responses
+- Real category filtering (all, downloading, seeding, completed, paused, active, inactive)
 
-### Roadmap (Future Features)
+### Product roadmap
+
+The current branch contains the production foundations and the first UX hardening pass. The remaining product work is intentionally staged:
+
+- Phase 1: service-level torrent commands, typed events/errors, scheduler, watched folders, and broader persistence migrations.
+- Phase 2: onboarding, bulk actions, richer notifications, accessibility, provider configuration, and search caching.
+- Phase 3: proxy/blocklist/tracker tools, streaming polish, profiles, and additional providers.
+
+The following capabilities are already present in the codebase and will receive further UX polish:
 
 **High Priority (Core Experience & Convenience)**
 - **Sequential Download (Streaming):** Prioritize the first pieces of media files to allow playback while downloading.
@@ -61,9 +75,17 @@ A lightweight and fast cross-platform BitTorrent client built with C++ and Dear 
 |-- README.md # Project README file
 |-- CMakeLists.txt # CMake build configuration
 
-## Configuration Files
+## Configuration and data locations
 
-Hypertube uses JSON configuration files stored in the `config/` directory. The configuration system supports versioning for backward compatibility and automatic migration of old configs.
+Hypertube uses versioned JSON files and writes them atomically. A failed write leaves the previous file available as `<file>.bak` and startup tries that backup when the primary file is missing or invalid.
+
+By default, state is stored in the platform user directory:
+
+- Linux: `$XDG_CONFIG_HOME/hypertube` (or `~/.config/hypertube`), with data in `$XDG_DATA_HOME/hypertube` (or `~/.local/share/hypertube`).
+- macOS: `~/Library/Application Support/Hypertube` and `~/Library/Caches/Hypertube`.
+- Windows: `%APPDATA%/Hypertube` and `%LOCALAPPDATA%/Hypertube`.
+
+For a portable binary, set `HYPERTUBE_PORTABLE=1` or create a `portable.mode` marker in the working directory. Configuration then stays under `./config`, data under `./data`, and diagnostics under `./data/hypertube.log`.
 
 ### settings.json
 
@@ -197,6 +219,19 @@ Stores the state of active torrents to restore them when the application restart
 4. **Run Tests:**
    ```sh
    ctest --test-dir build --output-on-failure
+   ```
+
+5. **Build with sanitizers (recommended during development):**
+   ```sh
+   cmake -B build-asan -DHYPERTUBE_ENABLE_SANITIZERS=ON -DCMAKE_BUILD_TYPE=Debug
+   cmake --build build-asan -j2
+   ctest --test-dir build-asan --output-on-failure
+   ```
+
+6. **Create a portable ZIP:**
+   ```sh
+   cmake --install build --prefix dist/hypertube --component runtime
+   (cd dist/hypertube && touch portable.mode)
    ```
 
 ## Usage

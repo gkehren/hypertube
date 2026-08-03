@@ -1,9 +1,76 @@
 #include "ConfigManager.hpp"
 #include "SearchEngine.hpp"
+#include "AppPaths.hpp"
+#include "Logger.hpp"
 #include <fstream>
 #include <iostream>
 #include <cstdlib>
 #include <algorithm>
+#include <filesystem>
+#include <system_error>
+
+namespace
+{
+bool writeJsonAtomically(const std::string &path, const json &data, std::string &errorMessage)
+{
+	const std::filesystem::path target(path);
+	std::error_code error;
+	if (!target.parent_path().empty())
+		std::filesystem::create_directories(target.parent_path(), error);
+	if (error)
+	{
+		errorMessage = "Unable to create configuration directory: " + error.message();
+		return false;
+	}
+
+	const std::filesystem::path temporary = target.string() + ".tmp";
+	{
+		std::ofstream file(temporary, std::ios::trunc);
+		if (!file.is_open())
+		{
+			errorMessage = "Unable to open temporary configuration file";
+			return false;
+		}
+		file << data.dump(4) << '\n';
+		file.flush();
+		if (!file.good())
+		{
+			errorMessage = "Unable to flush temporary configuration file";
+			std::filesystem::remove(temporary, error);
+			return false;
+		}
+	}
+
+	if (std::filesystem::exists(target, error))
+	{
+		const std::filesystem::path backup = target.string() + ".bak";
+		std::filesystem::copy_file(target, backup, std::filesystem::copy_options::overwrite_existing, error);
+		if (error)
+		{
+			errorMessage = "Unable to create configuration backup: " + error.message();
+			std::filesystem::remove(temporary, error);
+			return false;
+		}
+	}
+
+	std::filesystem::rename(temporary, target, error);
+	if (error)
+	{
+		// Windows does not replace an existing file with rename(). The backup
+		// above makes this fallback recoverable while preserving the same API.
+		std::filesystem::remove(target, error);
+		error.clear();
+		std::filesystem::rename(temporary, target, error);
+	}
+	if (error)
+	{
+		errorMessage = "Unable to replace configuration file: " + error.message();
+		std::filesystem::remove(temporary, error);
+		return false;
+	}
+	return true;
+}
+} // namespace
 
 ConfigManager::ConfigManager()
 {
@@ -48,12 +115,13 @@ void ConfigManager::workerLoop()
 			}
 		}
 
-		// Perform I/O outside the lock
-		std::ofstream file(req.path);
-		if (file.is_open())
+		// Perform I/O outside the queue lock. A temporary file and backup keep
+		// the last valid configuration usable after an interruption or crash.
+		std::string errorMessage;
+		if (!writeJsonAtomically(req.path, req.data, errorMessage))
 		{
-			file << req.data.dump(4);
-			// File will be automatically closed by destructor (RAII)
+			std::cerr << "Failed to save configuration '" << req.path << "': " << errorMessage << std::endl;
+			Utils::Logger::error("config", "Failed to save '" + req.path + "': " + errorMessage);
 		}
 
 		activeJobs--;
@@ -63,9 +131,9 @@ void ConfigManager::workerLoop()
 
 void ConfigManager::enqueueSave(const std::string& path, json data)
 {
-	activeJobs++;
 	{
 		std::lock_guard<std::mutex> lock(queueMutex);
+		activeJobs++;
 		saveQueue.push({path, std::move(data)});
 	}
 	queueCv.notify_one();
@@ -91,69 +159,136 @@ json ConfigManager::createDefaultConfig() const
 
 Result ConfigManager::load(const std::string &path, bool fullConfig)
 {
-	std::ifstream file(path);
-	if (!file.is_open())
+	json loadedConfig;
+	const auto defaultConfig = [&]()
 	{
-		// If file doesn't exist, use default config
-		this->config = fullConfig ? createDefaultConfig() : json{{"torrents", json::array()}};
-		return Result::Success();
+		std::lock_guard<std::mutex> lock(configMutex);
+		config = fullConfig ? createDefaultConfig() : json{{"torrents", json::array()}};
+	};
+
+	bool fileFound = false;
+	bool loaded = false;
+	std::string loadError;
+	std::vector<std::filesystem::path> candidates;
+	if (!path.empty())
+	{
+		candidates.emplace_back(path);
+		candidates.emplace_back(std::filesystem::path(path).string() + ".bak");
+	}
+	for (const auto &candidate : candidates)
+	{
+		std::ifstream file(candidate);
+		if (!file.is_open())
+			continue;
+		fileFound = true;
+		try
+		{
+			json candidateConfig;
+			file >> candidateConfig;
+
+			if (fullConfig)
+			{
+				// Validate each candidate before accepting it. A syntactically valid
+				// primary file can still be corrupt at the schema/value level, in
+				// which case the backup must get a chance to recover the state.
+				std::lock_guard<std::mutex> lock(configMutex);
+				json previousConfig = config;
+				config = candidateConfig;
+				try
+				{
+					if (!validateConfig())
+					{
+						config = std::move(previousConfig);
+						loadError = "Invalid configuration in: " + candidate.string();
+						Utils::Logger::warning("config", loadError);
+						continue;
+					}
+				}
+				catch (...)
+				{
+					config = std::move(previousConfig);
+					throw;
+				}
+				config = std::move(previousConfig);
+			}
+
+			loadedConfig = std::move(candidateConfig);
+			loaded = true;
+			if (candidate.extension() == ".bak")
+				Utils::Logger::warning("config", "Loading backup configuration: " + candidate.string());
+			break;
+		}
+		catch (const json::parse_error &e)
+		{
+			loadError = "Failed to parse configuration file: " + std::string(e.what());
+		}
+		catch (const std::exception &e)
+		{
+			loadError = "Error loading configuration: " + std::string(e.what());
+		}
+	}
+
+	if (!loaded)
+	{
+		defaultConfig();
+		if (!fileFound)
+			return Result::Success();
+		Utils::Logger::error("config", loadError + ". Using default values.");
+		return Result::Failure(loadError + ". Using default values.");
 	}
 
 	try
 	{
-		file >> this->config;
-		// File will be automatically closed by destructor (RAII)
+		std::lock_guard<std::mutex> lock(configMutex);
+		config = std::move(loadedConfig);
 
 		if (fullConfig)
 		{
-			// Validate the loaded config
-			if (!validateConfig())
-			{
-				this->config = createDefaultConfig();
-				return Result::Failure("Invalid configuration detected. Using default values.");
-			}
-
 			// Check if config needs migration
-			int currentVersion = getConfigVersion();
+			int currentVersion = config.contains("version") ? config["version"].get<int>() : 0;
 			if (currentVersion < CURRENT_CONFIG_VERSION)
 			{
-				migrateConfig(currentVersion, CURRENT_CONFIG_VERSION);
+				migrateConfigUnlocked(currentVersion, CURRENT_CONFIG_VERSION);
 			}
 			// Ensure all default settings exist
-			ensureDefaultConfig();
+			ensureDefaultConfigUnlocked();
 		}
 
 		return Result::Success();
 	}
-	catch (const json::parse_error &e)
-	{
-		this->config = fullConfig ? createDefaultConfig() : json{{"torrents", json::array()}};
-		return Result::Failure("Failed to parse configuration file: " + std::string(e.what()) + ". Using default values.");
-	}
 	catch (const std::exception &e)
 	{
-		this->config = fullConfig ? createDefaultConfig() : json{{"torrents", json::array()}};
+		defaultConfig();
 		return Result::Failure("Error loading configuration: " + std::string(e.what()) + ". Using default values.");
 	}
 }
 
 void ConfigManager::save(const std::string &path)
 {
-	// Ensure version is always present before saving
-	if (!config.contains("version"))
+	json configSnapshot;
 	{
-		config["version"] = CURRENT_CONFIG_VERSION;
+		std::lock_guard<std::mutex> lock(configMutex);
+
+		// Ensure version is always present before saving
+		if (!config.contains("version"))
+		{
+			config["version"] = CURRENT_CONFIG_VERSION;
+		}
+
+		configSnapshot = config;
 	}
 
 	// Enqueue async save
-	enqueueSave(path, config);
+	enqueueSave(path, std::move(configSnapshot));
 }
 
-void ConfigManager::saveTorrents(const std::unordered_map<lt::sha1_hash, lt::torrent_handle> &torrents, const std::unordered_map<lt::sha1_hash, std::string> &torrentFilePaths)
+void ConfigManager::saveTorrents(const std::vector<ManagedTorrent> &torrents)
 {
 	json torrentsJson;
-	for (const auto &[hash, handle] : torrents)
+	for (const auto &torrent : torrents)
 	{
+		const auto &hash = torrent.hash;
+		const auto &handle = torrent.handle;
 		lt::torrent_status status = handle.status(lt::torrent_handle::query_save_path | lt::torrent_handle::query_name);
 		std::string magnetUri = lt::make_magnet_uri(handle);
 		std::string savePath = status.save_path;
@@ -162,18 +297,18 @@ void ConfigManager::saveTorrents(const std::unordered_map<lt::sha1_hash, lt::tor
 			{"magnet_uri", magnetUri},
 			{"save_path", savePath}};
 
-		auto it = torrentFilePaths.find(hash);
-		if (it != torrentFilePaths.end())
-		{
-			torrentEntry["torrent_path"] = it->second;
-		}
+		if (!torrent.torrentFilePath.empty())
+			torrentEntry["torrent_path"] = torrent.torrentFilePath;
 
 		torrentsJson.push_back(torrentEntry);
 	}
-	this->config["torrents"] = torrentsJson;
-
-	json torrentsFile = {{"torrents", torrentsJson}};
-	enqueueSave("./config/torrents.json", std::move(torrentsFile));
+	json torrentsFile;
+	{
+		std::lock_guard<std::mutex> lock(configMutex);
+		config["torrents"] = torrentsJson;
+		torrentsFile = {{"torrents", config["torrents"]}};
+	}
+	enqueueSave(Utils::AppPaths::torrentsConfigPath().string(), std::move(torrentsFile));
 }
 
 Result ConfigManager::loadTorrents(const std::string &path, std::vector<TorrentConfigData> &outTorrents)
@@ -181,29 +316,60 @@ Result ConfigManager::loadTorrents(const std::string &path, std::vector<TorrentC
 	outTorrents.clear();
 
 	json sourceConfig;
+	bool fileFound = false;
+	bool loadedFromFile = false;
+	std::string loadError;
+	std::vector<std::filesystem::path> candidates;
 	if (!path.empty())
 	{
-		std::ifstream file(path);
-		if (file.is_open())
+		candidates.emplace_back(path);
+		candidates.emplace_back(std::filesystem::path(path).string() + ".bak");
+	}
+
+	for (const auto &candidate : candidates)
+	{
+		std::ifstream file(candidate);
+		if (!file.is_open())
+			continue;
+		fileFound = true;
+		try
 		{
-			try
+			json candidateConfig;
+			file >> candidateConfig;
+			if (!candidateConfig.is_object())
 			{
-				file >> sourceConfig;
+				loadError = "Invalid torrents configuration: root must be an object";
+				continue;
 			}
-			catch (const json::parse_error &e)
+			if (candidateConfig.contains("torrents") && !candidateConfig["torrents"].is_array())
 			{
-				return Result::Failure("Failed to parse torrents configuration: " + std::string(e.what()));
+				loadError = "Invalid torrents configuration: 'torrents' must be an array";
+				continue;
 			}
-			catch (const std::exception &e)
-			{
-				return Result::Failure("Error loading torrents configuration: " + std::string(e.what()));
-			}
+
+			sourceConfig = std::move(candidateConfig);
+			loadedFromFile = true;
+			if (candidate.extension() == ".bak")
+				Utils::Logger::warning("config", "Loading backup torrents configuration: " + candidate.string());
+			break;
+		}
+		catch (const json::parse_error &e)
+		{
+			loadError = "Failed to parse torrents configuration: " + std::string(e.what());
+		}
+		catch (const std::exception &e)
+		{
+			loadError = "Error loading torrents configuration: " + std::string(e.what());
 		}
 	}
 
-	if (sourceConfig.is_null() || sourceConfig.empty())
+	if (!loadedFromFile)
 	{
-		sourceConfig = this->config;
+		if (fileFound)
+			return Result::Failure(loadError.empty() ? "Unable to load torrents configuration" : loadError);
+
+		std::lock_guard<std::mutex> lock(configMutex);
+		sourceConfig = config;
 	}
 
 	if (!sourceConfig.contains("torrents"))
@@ -239,9 +405,10 @@ Result ConfigManager::loadTorrents(const std::string &path, std::vector<TorrentC
 	}
 }
 
-json &ConfigManager::getConfig()
+json ConfigManager::getConfig() const
 {
-	return this->config;
+	std::lock_guard<std::mutex> lock(configMutex);
+	return config;
 }
 
 void ConfigManager::ensureSettingsStructure()
@@ -254,7 +421,7 @@ void ConfigManager::ensureSettingsStructure()
 
 void ConfigManager::setDownloadSpeedLimit(int bytesPerSecond)
 {
-	// Validate: must be non-negative (0 means unlimited)
+	std::lock_guard<std::mutex> lock(configMutex);
 	ensureSettingsStructure();
 	if (!config["settings"].contains("speed_limits"))
 	{
@@ -265,7 +432,7 @@ void ConfigManager::setDownloadSpeedLimit(int bytesPerSecond)
 
 void ConfigManager::setUploadSpeedLimit(int bytesPerSecond)
 {
-	// Validate: must be non-negative (0 means unlimited)
+	std::lock_guard<std::mutex> lock(configMutex);
 	ensureSettingsStructure();
 	if (!config["settings"].contains("speed_limits"))
 	{
@@ -276,6 +443,7 @@ void ConfigManager::setUploadSpeedLimit(int bytesPerSecond)
 
 int ConfigManager::getDownloadSpeedLimit() const
 {
+	std::lock_guard<std::mutex> lock(configMutex);
 	if (config.contains("speed_limits") && config["speed_limits"].contains("download"))
 	{
 		return config["speed_limits"]["download"];
@@ -290,6 +458,7 @@ int ConfigManager::getDownloadSpeedLimit() const
 
 int ConfigManager::getUploadSpeedLimit() const
 {
+	std::lock_guard<std::mutex> lock(configMutex);
 	if (config.contains("speed_limits") && config["speed_limits"].contains("upload"))
 	{
 		return config["speed_limits"]["upload"];
@@ -304,12 +473,14 @@ int ConfigManager::getUploadSpeedLimit() const
 
 void ConfigManager::setDownloadPath(const std::string &path)
 {
+	std::lock_guard<std::mutex> lock(configMutex);
 	ensureSettingsStructure();
 	config["settings"]["download_path"] = path;
 }
 
 std::string ConfigManager::getDownloadPath() const
 {
+	std::lock_guard<std::mutex> lock(configMutex);
 	if (config.contains("settings") && config["settings"].contains("download_path"))
 	{
 		return config["settings"]["download_path"];
@@ -319,12 +490,14 @@ std::string ConfigManager::getDownloadPath() const
 
 void ConfigManager::setEnableDHT(bool enable)
 {
+	std::lock_guard<std::mutex> lock(configMutex);
 	ensureSettingsStructure();
 	config["settings"]["enable_dht"] = enable;
 }
 
 bool ConfigManager::getEnableDHT() const
 {
+	std::lock_guard<std::mutex> lock(configMutex);
 	if (config.contains("settings") && config["settings"].contains("enable_dht"))
 	{
 		return config["settings"]["enable_dht"];
@@ -334,12 +507,14 @@ bool ConfigManager::getEnableDHT() const
 
 void ConfigManager::setEnableUPnP(bool enable)
 {
+	std::lock_guard<std::mutex> lock(configMutex);
 	ensureSettingsStructure();
 	config["settings"]["enable_upnp"] = enable;
 }
 
 bool ConfigManager::getEnableUPnP() const
 {
+	std::lock_guard<std::mutex> lock(configMutex);
 	if (config.contains("settings") && config["settings"].contains("enable_upnp"))
 	{
 		return config["settings"]["enable_upnp"];
@@ -349,12 +524,14 @@ bool ConfigManager::getEnableUPnP() const
 
 void ConfigManager::setEnableNATPMP(bool enable)
 {
+	std::lock_guard<std::mutex> lock(configMutex);
 	ensureSettingsStructure();
 	config["settings"]["enable_natpmp"] = enable;
 }
 
 bool ConfigManager::getEnableNATPMP() const
 {
+	std::lock_guard<std::mutex> lock(configMutex);
 	if (config.contains("settings") && config["settings"].contains("enable_natpmp"))
 	{
 		return config["settings"]["enable_natpmp"];
@@ -364,6 +541,7 @@ bool ConfigManager::getEnableNATPMP() const
 
 int ConfigManager::getConfigVersion() const
 {
+	std::lock_guard<std::mutex> lock(configMutex);
 	if (config.contains("version"))
 	{
 		return config["version"];
@@ -372,6 +550,12 @@ int ConfigManager::getConfigVersion() const
 }
 
 void ConfigManager::ensureDefaultConfig()
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	ensureDefaultConfigUnlocked();
+}
+
+void ConfigManager::ensureDefaultConfigUnlocked()
 {
 	json defaults = createDefaultConfig();
 
@@ -398,6 +582,12 @@ void ConfigManager::ensureDefaultConfig()
 }
 
 void ConfigManager::migrateConfig(int fromVersion, int toVersion)
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	migrateConfigUnlocked(fromVersion, toVersion);
+}
+
+void ConfigManager::migrateConfigUnlocked(int fromVersion, int toVersion)
 {
 	std::cout << "Migrating config from version " << fromVersion << " to " << toVersion << std::endl;
 
@@ -470,13 +660,24 @@ void ConfigManager::saveFavoritesAndHistory(const std::vector<TorrentSearchResul
 			{"completed", fav.completed}};
 		favoritesJson.push_back(favEntry);
 	}
-	config["favorites"] = favoritesJson;
+	json configSnapshot;
+	{
+		std::lock_guard<std::mutex> lock(configMutex);
+		config["favorites"] = std::move(favoritesJson);
 
-	// Save search history
-	config["search_history"] = searchHistory;
+		// Save search history
+		config["search_history"] = searchHistory;
+
+		// Ensure version is always present before saving
+		if (!config.contains("version"))
+		{
+			config["version"] = CURRENT_CONFIG_VERSION;
+		}
+		configSnapshot = config;
+	}
 
 	// Save to file
-	save("./config/settings.json");
+	enqueueSave(Utils::AppPaths::settingsConfigPath().string(), std::move(configSnapshot));
 }
 
 void ConfigManager::loadFavoritesAndHistory(std::vector<TorrentSearchResult> &favorites, std::vector<std::string> &searchHistory)
@@ -484,10 +685,16 @@ void ConfigManager::loadFavoritesAndHistory(std::vector<TorrentSearchResult> &fa
 	favorites.clear();
 	searchHistory.clear();
 
-	// Load favorites
-	if (config.contains("favorites") && config["favorites"].is_array())
+	json configSnapshot;
 	{
-		for (const auto &favJson : config["favorites"])
+		std::lock_guard<std::mutex> lock(configMutex);
+		configSnapshot = config;
+	}
+
+	// Load favorites
+	if (configSnapshot.contains("favorites") && configSnapshot["favorites"].is_array())
+	{
+		for (const auto &favJson : configSnapshot["favorites"])
 		{
 			TorrentSearchResult fav;
 			if (favJson.contains("name"))
@@ -517,9 +724,9 @@ void ConfigManager::loadFavoritesAndHistory(std::vector<TorrentSearchResult> &fa
 	}
 
 	// Load search history
-	if (config.contains("search_history") && config["search_history"].is_array())
+	if (configSnapshot.contains("search_history") && configSnapshot["search_history"].is_array())
 	{
-		for (const auto &historyItem : config["search_history"])
+		for (const auto &historyItem : configSnapshot["search_history"])
 		{
 			if (historyItem.is_string())
 			{
@@ -531,11 +738,13 @@ void ConfigManager::loadFavoritesAndHistory(std::vector<TorrentSearchResult> &fa
 
 void ConfigManager::setTheme(int themeIndex)
 {
+	std::lock_guard<std::mutex> lock(configMutex);
 	config["theme"] = themeIndex;
 }
 
 int ConfigManager::getTheme() const
 {
+	std::lock_guard<std::mutex> lock(configMutex);
 	if (config.contains("theme"))
 	{
 		// Handle both string (legacy) and number formats
@@ -570,6 +779,8 @@ void ConfigManager::waitForAsyncOperations()
 
 void ConfigManager::applyDefaultConfig()
 {
+	std::lock_guard<std::mutex> lock(configMutex);
+
 	// Use platform-appropriate default download path
 	// Note: This is just a fallback default. The actual download path
 	// is typically managed by UIManager::setDefaultSavePath()

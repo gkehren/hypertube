@@ -1,4 +1,6 @@
 #include "App.hpp"
+#include "AppPaths.hpp"
+#include "Logger.hpp"
 #include <stdexcept>
 #include <iostream>
 
@@ -9,6 +11,9 @@ static void glfw_error_callback(int error, const char *description)
 
 App::App() : uiManager(torrentManager, searchEngine, settingsConfigManager)
 {
+	Utils::AppPaths::ensureDirectories();
+	Utils::Logger::initialize(Utils::AppPaths::logFilePath());
+	Utils::Logger::info("app", "Starting Hypertube");
 	glfwSetErrorCallback(glfw_error_callback);
 	if (!glfwInit())
 		throw std::runtime_error("Failed to initialize GLFW");
@@ -27,7 +32,9 @@ App::App() : uiManager(torrentManager, searchEngine, settingsConfigManager)
 	glfwSwapInterval(1); // Enable vsync
 
 	// Load torrents configuration
-	Result configLoadResult = torrentsConfigManager.load("./config/torrents.json", false);
+	const auto torrentsConfigPath = Utils::AppPaths::torrentsConfigPath();
+	const auto settingsConfigPath = Utils::AppPaths::settingsConfigPath();
+	Result configLoadResult = torrentsConfigManager.load(torrentsConfigPath.string(), false);
 	if (!configLoadResult)
 	{
 		std::cerr << "Warning: " << configLoadResult.message << std::endl;
@@ -35,7 +42,7 @@ App::App() : uiManager(torrentManager, searchEngine, settingsConfigManager)
 
 	// Load torrents from config
 	std::vector<TorrentConfigData> torrents;
-	Result torrentsLoadResult = torrentsConfigManager.loadTorrents("./config/torrents.json", torrents);
+	Result torrentsLoadResult = torrentsConfigManager.loadTorrents(torrentsConfigPath.string(), torrents);
 	if (torrentsLoadResult)
 	{
 		torrentManager.addTorrentsFromConfig(torrents);
@@ -46,7 +53,7 @@ App::App() : uiManager(torrentManager, searchEngine, settingsConfigManager)
 	}
 
 	// Load favorites and search history
-	Result settingsLoadResult = settingsConfigManager.load("./config/settings.json");
+	Result settingsLoadResult = settingsConfigManager.load(settingsConfigPath.string());
 	if (!settingsLoadResult)
 	{
 		std::cerr << "Warning: " << settingsLoadResult.message << std::endl;
@@ -56,10 +63,15 @@ App::App() : uiManager(torrentManager, searchEngine, settingsConfigManager)
 
 App::~App()
 {
-	torrentsConfigManager.saveTorrents(torrentManager.getTorrents(), torrentManager.getTorrentFilePaths());
+	torrentsConfigManager.saveTorrents(torrentManager.getTorrentSnapshot());
 
 	// Save favorites and search history
 	searchEngine.saveFavoritesAndHistory(settingsConfigManager);
+
+	// Wait for background save worker threads to finish writing files
+	torrentsConfigManager.waitForAsyncOperations();
+	settingsConfigManager.waitForAsyncOperations();
+	Utils::Logger::info("app", "Shutting down Hypertube");
 
 	glfwDestroyWindow(window);
 	glfwTerminate();

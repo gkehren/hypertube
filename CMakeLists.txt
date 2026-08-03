@@ -7,6 +7,8 @@ project(hypertube CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+option(HYPERTUBE_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+
 # Enable Position Independent Code (PIE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -43,6 +45,11 @@ endif()
 # Add compile definition for Windows to avoid SDK warnings
 if(WIN32)
     add_compile_definitions(_WIN32_WINNT=0x0601 WIN32_LEAN_AND_MEAN NOMINMAX)
+endif()
+
+if(HYPERTUBE_ENABLE_SANITIZERS AND NOT MSVC)
+    add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address,undefined)
 endif()
 
 set(OpenGL_GL_PREFERENCE GLVND)
@@ -220,6 +227,8 @@ set(SOURCES
 
 # Create the utils library
 add_library(hypertube_utils STATIC
+    src/utils/AppPaths.cpp
+    src/utils/Logger.cpp
     src/utils/StringUtils.cpp
     src/utils/SystemUtils.cpp
 )
@@ -245,6 +254,7 @@ target_include_directories(hypertube_config PUBLIC
 
 target_link_libraries(hypertube_config PUBLIC
     LibtorrentRasterbar::torrent-rasterbar
+    hypertube_utils
     nlohmann_json::nlohmann_json
 )
 
@@ -314,6 +324,18 @@ if(WIN32)
 endif()
 
 file(COPY config DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
+# Portable distribution: install the executable and seed configuration into a
+# flat directory that can be zipped for Linux/macOS/Windows packaging jobs.
+include(GNUInstallDirs)
+install(TARGETS hypertube COMPONENT runtime RUNTIME DESTINATION . BUNDLE DESTINATION .)
+install(DIRECTORY config DESTINATION . COMPONENT runtime)
+set(CPACK_GENERATOR "ZIP")
+set(CPACK_PACKAGE_NAME "Hypertube")
+set(CPACK_PACKAGE_VERSION "0.1.0")
+set(CPACK_INSTALL_CMAKE_PROJECTS "${CMAKE_BINARY_DIR};${CMAKE_PROJECT_NAME};runtime;.")
+set(CPACK_MONOLITHIC_INSTALL ON)
+include(CPack)
 
 # Add optimized flags for Release build
 if(MSVC)

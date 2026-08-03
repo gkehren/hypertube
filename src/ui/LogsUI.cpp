@@ -1,6 +1,7 @@
 #include "LogsUI.hpp"
 #include "TorrentManager.hpp"
 #include "SystemUtils.hpp"
+#include "Logger.hpp"
 #include <iomanip>
 #include <sstream>
 #include <ctime>
@@ -13,6 +14,42 @@ LogsUI::LogsUI(TorrentManager &torrentManager)
 void LogsUI::displayLogsWindow()
 {
 	ImGui::Begin("Logs");
+
+	const auto diagnostics = Utils::Logger::recent();
+	if (!diagnostics.empty())
+	{
+		if (ImGui::TreeNode("Application diagnostics"))
+		{
+			const std::size_t first = diagnostics.size() > 20 ? diagnostics.size() - 20 : 0;
+			for (std::size_t i = first; i < diagnostics.size(); ++i)
+			{
+				const auto &record = diagnostics[i];
+				const char *level = "INFO";
+				ImVec4 color = ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
+				switch (record.level)
+				{
+				case Utils::LogLevel::Debug:
+					level = "DEBUG";
+					break;
+				case Utils::LogLevel::Warning:
+					level = "WARN";
+					color = ImVec4(1.0f, 0.8f, 0.4f, 1.0f);
+					break;
+				case Utils::LogLevel::Error:
+					level = "ERROR";
+					color = ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
+					break;
+				case Utils::LogLevel::Info:
+					break;
+				}
+				ImGui::PushStyleColor(ImGuiCol_Text, color);
+				ImGui::TextWrapped("[%s] [%s] %s", level, record.category.c_str(), record.message.c_str());
+				ImGui::PopStyleColor();
+			}
+			ImGui::TreePop();
+		}
+		ImGui::Separator();
+	}
 
 	// Top toolbar with controls
 	if (ImGui::Button("Clear"))
@@ -104,6 +141,7 @@ void LogsUI::updateLogs()
 void LogsUI::clearLogs()
 {
 	logEntries.clear();
+	Utils::Logger::clearRecent();
 }
 
 void LogsUI::setMaxLogEntries(size_t maxEntries)

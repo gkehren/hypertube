@@ -33,6 +33,31 @@ void SearchUI::displayIntegratedSearch()
 	ImGui::SameLine();
 	bool searchClicked = HypertubeTheme::drawStyledButton("Search", ImVec2(140, 32), true);
 
+	const auto providers = searchEngine.getSearchProviders();
+	if (!providers.empty())
+	{
+		ImGui::Spacing();
+		ImGui::Text("Provider:");
+		ImGui::SameLine();
+		const std::string activeProvider = searchEngine.getActiveSearchProvider();
+		if (ImGui::BeginCombo("##search-provider", activeProvider.c_str()))
+		{
+			for (const auto &provider : providers)
+			{
+				const bool selected = provider == activeProvider;
+				if (ImGui::Selectable(provider.c_str(), selected))
+				{
+					Result result = searchEngine.setActiveSearchProvider(provider);
+					if (!result && onShowFailurePopup)
+						onShowFailurePopup(result.message);
+				}
+				if (selected)
+					ImGui::SetItemDefaultFocus();
+			}
+			ImGui::EndCombo();
+		}
+	}
+
 	if (enterPressed || searchClicked)
 	{
 		performSearch(std::string(searchQueryBuffer));
@@ -144,9 +169,14 @@ void SearchUI::displayEnhancedSearchResults()
 			}
 		}
 
-		for (int i = 0; i < (int)searchResults.size(); ++i)
+		ImGuiListClipper clipper;
+		clipper.Begin(static_cast<int>(searchResults.size()));
+		while (clipper.Step())
 		{
-			displayEnhancedSearchResultRow(searchResults[i], i);
+			for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i)
+			{
+				displayEnhancedSearchResultRow(searchResults[i], i);
+			}
 		}
 
 		ImGui::EndTable();
@@ -220,9 +250,14 @@ void SearchUI::displayFavorites()
 			}
 		}
 
-		for (int i = 0; i < (int)favoritesDisplay.size(); ++i)
+		ImGuiListClipper favClipper;
+		favClipper.Begin(static_cast<int>(favoritesDisplay.size()));
+		while (favClipper.Step())
 		{
-			displayFavoriteRow(favoritesDisplay[i], i);
+			for (int i = favClipper.DisplayStart; i < favClipper.DisplayEnd; ++i)
+			{
+				displayFavoriteRow(favoritesDisplay[i], i);
+			}
 		}
 
 		ImGui::EndTable();

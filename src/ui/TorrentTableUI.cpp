@@ -54,27 +54,48 @@ void TorrentTableUI::displayTorrentTableHeader()
 
 void TorrentTableUI::displayTorrentTableBody()
 {
-	auto &torrents = torrentManager.getTorrents();
+	auto torrents = torrentManager.getTorrentSnapshot();
+	// Get status cache snapshot once. It is immutable for the duration of this
+	// frame, so filtering and rendering use a consistent view.
+	auto statusCache = torrentManager.getStatusCache();
 
 	// Update cache
 	m_torrentListCache.clear();
 	m_torrentListCache.reserve(torrents.size());
-	for (const auto &pair : torrents)
+	for (const auto &torrent : torrents)
 	{
-		m_torrentListCache.push_back(&pair);
+		const lt::torrent_status *status = nullptr;
+		if (statusCache)
+		{
+			auto it = statusCache->find(torrent.hash);
+			if (it != statusCache->end())
+				status = &it->second;
+		}
+		if (matchesCategory(torrent, status))
+			m_torrentListCache.push_back(torrent);
+	}
+
+	if (m_torrentListCache.empty())
+	{
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(1);
+		if (categoryFilter == 0)
+			ImGui::TextWrapped("No torrents yet. Use File > Add a torrent or paste a magnet link to get started.");
+		else
+			ImGui::TextWrapped("No torrents match this filter.");
+		return;
 	}
 
 	ImGuiListClipper clipper;
 	clipper.Begin(m_torrentListCache.size());
 
-	// Get status cache snapshot once
-	auto statusCache = torrentManager.getStatusCache();
-
 	while (clipper.Step())
 	{
 		for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
 		{
-			const auto &[info_hash, handle] = *m_torrentListCache[i];
+			const auto &torrent = m_torrentListCache[i];
+			const auto &info_hash = torrent.hash;
+			const auto &handle = torrent.handle;
 
 			const lt::torrent_status* statusPtr = nullptr;
 			if (statusCache)
@@ -89,6 +110,25 @@ void TorrentTableUI::displayTorrentTableBody()
 			displayTorrentTableRow(handle, info_hash, statusPtr);
 		}
 	}
+}
+
+bool TorrentTableUI::matchesCategory(const ManagedTorrent &torrent, const lt::torrent_status *status) const
+{
+	if (categoryFilter == 0 || !status)
+		return categoryFilter == 0;
+	if (categoryFilter == 1)
+		return status->state == lt::torrent_status::downloading || status->state == lt::torrent_status::downloading_metadata;
+	if (categoryFilter == 2)
+		return status->state == lt::torrent_status::seeding;
+	if (categoryFilter == 3)
+		return status->is_finished;
+	if (categoryFilter == 4)
+		return (torrent.handle.flags() & lt::torrent_flags::paused) != lt::torrent_flags_t{};
+	if (categoryFilter == 5)
+		return status->download_payload_rate > 0 || status->upload_payload_rate > 0;
+	if (categoryFilter == 6)
+		return status->download_payload_rate == 0 && status->upload_payload_rate == 0;
+	return true;
 }
 
 void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, const lt::sha1_hash &info_hash, const lt::torrent_status *cachedStatus)
@@ -256,6 +296,15 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 		if (ImGui::MenuItem("Move Down Queue"))
 		{
 			handle.queue_position_down();
+		}
+
+		bool isSequential = (handle.flags() & lt::torrent_flags::sequential_download) != lt::torrent_flags_t{};
+		if (ImGui::MenuItem("Sequential Download (Streaming)", nullptr, isSequential))
+		{
+			if (isSequential)
+				handle.unset_flags(lt::torrent_flags::sequential_download);
+			else
+				handle.set_flags(lt::torrent_flags::sequential_download);
 		}
 
 		if (ImGui::BeginMenu("Remove"))

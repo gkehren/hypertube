@@ -235,3 +235,23 @@ TEST_F(SearchEngineTest, BuildSearchUrlEncodesNextToken) {
     EXPECT_NE(url.find("after=123%26attacker%3Dparameter"), std::string::npos);
     EXPECT_EQ(url.find("&attacker=parameter"), std::string::npos);
 }
+
+TEST_F(SearchEngineTest, CustomProviderCanBeSelected) {
+    ASSERT_TRUE(engine.registerSearchProvider(
+        "local-fixture",
+        [](const SearchQuery &query, SearchResponse &response, const std::function<bool()> &cancelled) {
+            if (cancelled()) {
+                return Result::Failure("cancelled");
+            }
+            response.torrents.emplace_back(
+                query.query, "magnet:?xt=urn:btih:fixture", "fixture", 123, 4, 1, "", "Test");
+            return Result::Success();
+        }));
+    ASSERT_TRUE(engine.setActiveSearchProvider("local-fixture"));
+
+    SearchResponse response;
+    ASSERT_TRUE(engine.searchTorrents(SearchQuery("fixture"), response));
+    ASSERT_EQ(response.torrents.size(), 1);
+    EXPECT_EQ(response.torrents.front().name, "fixture");
+    EXPECT_EQ(engine.getActiveSearchProvider(), "local-fixture");
+}

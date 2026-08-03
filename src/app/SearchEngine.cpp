@@ -1,6 +1,7 @@
 #include "SearchEngine.hpp"
 #include "ConfigManager.hpp"
 #include "utils/StringUtils.hpp"
+#include "Logger.hpp"
 #include <curl/curl.h>
 #include <nlohmann/json.hpp>
 #include <iostream>
@@ -13,10 +14,15 @@
 
 using json = nlohmann::json;
 
-// Callback function for cURL to write data
+// Callback function for cURL to write data with max size protection (10MB limit)
 static size_t WriteCallback(void *contents, size_t size, size_t nmemb, std::string *s)
 {
 	size_t newLength = size * nmemb;
+	static constexpr size_t MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10 MB
+	if (s->size() + newLength > MAX_RESPONSE_SIZE)
+	{
+		return 0; // Abort download if exceeding max size
+	}
 	try
 	{
 		s->append((char *)contents, newLength);
@@ -47,87 +53,146 @@ SearchEngine::SearchEngine()
 	  searching(false),
 	  cancelRequested(false)
 {
-	// Initialize cURL globally
-	curl_global_init(CURL_GLOBAL_DEFAULT);
 }
 
 SearchEngine::~SearchEngine()
 {
 	// Cancel any ongoing search and wait for thread to finish
 	cancelCurrentSearch();
-	if (searchThread.joinable())
+	std::thread threadToJoin;
 	{
-		searchThread.join();
+		std::lock_guard<std::mutex> lock(threadMutex);
+		threadToJoin = std::move(searchThread);
 	}
-	curl_global_cleanup();
+	if (threadToJoin.joinable())
+	{
+		threadToJoin.join();
+	}
 }
 
 Result SearchEngine::searchTorrents(const SearchQuery &query, std::vector<TorrentSearchResult> &results)
 {
-	if (searching)
+	if (!tryStartSearch())
 	{
 		return Result::Failure("Search already in progress");
 	}
 
-	searching = true;
 	results.clear();
 
-	std::string url = buildSearchUrl(query);
-	std::cout << "Searching with URL: " << url << std::endl;
-	std::string response;
-
-	Result httpResult = makeHttpRequest(url, response);
-	searching = false;
+	SearchResponse response;
+	Result httpResult = performSearch(query, response);
+	finishSearch();
 
 	if (!httpResult)
 	{
 		return httpResult;
 	}
 
-	Result parseResult = parseSearchResponse(response, results);
-	if (parseResult)
+	if (httpResult)
 	{
 		addToSearchHistory(query.query);
 	}
-
-	return parseResult;
+	results = std::move(response.torrents);
+	return httpResult;
 }
 
 Result SearchEngine::searchTorrents(const SearchQuery &query, SearchResponse &response)
 {
-	if (searching)
+	if (!tryStartSearch())
 	{
 		return Result::Failure("Search already in progress");
 	}
 
-	searching = true;
 	response.torrents.clear();
 	response.nextToken.clear();
 	response.hasMore = false;
 
-	std::string url = buildSearchUrl(query);
-	std::cout << "Searching with URL: " << url << std::endl;
-	std::string httpResponse;
+	Result httpResult = performSearch(query, response);
+	finishSearch();
 
-	Result httpResult = makeHttpRequest(url, httpResponse);
-	searching = false;
-
-	if (!httpResult)
-	{
-		return httpResult;
-	}
-
-	Result parseResult = parseSearchResponse(httpResponse, response);
-	if (parseResult)
-	{
+	if (httpResult)
 		addToSearchHistory(query.query);
-	}
+	return httpResult;
+}
 
-	return parseResult;
+Result SearchEngine::registerSearchProvider(const std::string &id, SearchProvider provider)
+{
+	if (id.empty() || !provider)
+		return Result::Failure("Search provider id and callback are required");
+	std::lock_guard<std::mutex> lock(providersMutex);
+	providers[id] = std::move(provider);
+	return Result::Success();
+}
+
+Result SearchEngine::setActiveSearchProvider(const std::string &id)
+{
+	std::lock_guard<std::mutex> lock(providersMutex);
+	if (id != "torrents-csv" && providers.find(id) == providers.end())
+		return Result::Failure("Unknown search provider: " + id);
+	activeProvider = id;
+	return Result::Success();
+}
+
+std::string SearchEngine::getActiveSearchProvider() const
+{
+	std::lock_guard<std::mutex> lock(providersMutex);
+	return activeProvider;
+}
+
+std::vector<std::string> SearchEngine::getSearchProviders() const
+{
+	std::lock_guard<std::mutex> lock(providersMutex);
+	std::vector<std::string> result{"torrents-csv"};
+	for (const auto &[id, provider] : providers)
+		result.push_back(id);
+	return result;
+}
+
+Result SearchEngine::performSearch(const SearchQuery &query, SearchResponse &response)
+{
+	try
+	{
+		SearchProvider provider;
+		{
+			std::lock_guard<std::mutex> lock(providersMutex);
+			auto it = providers.find(activeProvider);
+			if (it != providers.end())
+				provider = it->second;
+		}
+
+		if (provider)
+			return provider(query, response, [this] { return cancelRequested.load(); });
+
+		std::string httpResponse;
+		Result httpResult = makeHttpRequest(buildSearchUrl(query), httpResponse);
+		if (!httpResult)
+			return httpResult;
+		if (cancelRequested.load())
+			return Result::Failure("Search cancelled by user");
+		return parseSearchResponse(httpResponse, response);
+	}
+	catch (const std::exception &e)
+	{
+		Utils::Logger::error("search", "Search provider failed: " + std::string(e.what()));
+		return Result::Failure("Search failed: " + std::string(e.what()));
+	}
+	catch (...)
+	{
+		Utils::Logger::error("search", "Search provider failed with an unknown exception");
+		return Result::Failure("Search failed with an unknown error");
+	}
 }
 
 Result SearchEngine::makeHttpRequest(const std::string &url, std::string &response)
 {
+	int timeout = 30;
+	int retries = 3;
+	{
+		std::lock_guard<std::mutex> lock(settingsMutex);
+		timeout = timeoutSeconds;
+		retries = maxRetries;
+	}
+	retries = std::max(retries, 1);
 	CURL *curl = curl_easy_init();
 	if (!curl)
 	{
@@ -138,7 +203,8 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
-	curl_easy_setopt(curl, CURLOPT_TIMEOUT, (long)timeoutSeconds);
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout));
+	curl_easy_setopt(curl, CURLOPT_MAXFILESIZE, 10L * 1024L * 1024L); // 10 MB limit
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, "Hypertube/1.0");
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
@@ -150,7 +216,7 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
 
 	// Perform the request
-	for (int attempt = 0; attempt < maxRetries; ++attempt)
+	for (int attempt = 0; attempt < retries; ++attempt)
 	{
 		res = curl_easy_perform(curl);
 
@@ -179,7 +245,7 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 		}
 
 		// If not the last attempt, wait a bit before retrying
-		if (attempt < maxRetries - 1)
+		if (attempt < retries - 1)
 		{
 			std::this_thread::sleep_for(std::chrono::milliseconds(1000 * (attempt + 1)));
 		}
@@ -192,7 +258,12 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 
 std::string SearchEngine::buildSearchUrl(const SearchQuery &query) const
 {
-	std::string url = apiUrl + "?q=" + Utils::urlEncode(query.query);
+	std::string configuredApiUrl;
+	{
+		std::lock_guard<std::mutex> lock(settingsMutex);
+		configuredApiUrl = apiUrl;
+	}
+	std::string url = configuredApiUrl + "?q=" + Utils::urlEncode(query.query);
 
 	// Add size parameter only if explicitly set and not default
 	if (query.maxResults > 0 && query.maxResults != 50)
@@ -213,7 +284,6 @@ Result SearchEngine::parseSearchResponse(const std::string &response, std::vecto
 {
 	try
 	{
-		std::cout << "Raw API response: " << response.substr(0, 500) << "..." << std::endl;
 		json j = json::parse(response);
 
 		// Handle different possible response formats
@@ -341,7 +411,7 @@ Result SearchEngine::parseSearchResponse(const std::string &response, std::vecto
 			results.push_back(result);
 		}
 
-		std::cout << "Parsed " << results.size() << " search results" << std::endl;
+		Utils::Logger::debug("search", "Parsed " + std::to_string(results.size()) + " search results");
 		return Result::Success();
 	}
 	catch (const json::exception &e)
@@ -358,7 +428,6 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 {
 	try
 	{
-		std::cout << "Raw API response: " << response.substr(0, 500) << "..." << std::endl;
 		json j = json::parse(response);
 
 		// Handle different possible response formats
@@ -515,11 +584,9 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 			searchResponse.torrents.push_back(result);
 		}
 
-		std::cout << "Parsed " << searchResponse.torrents.size() << " search results" << std::endl;
+		Utils::Logger::debug("search", "Parsed " + std::to_string(searchResponse.torrents.size()) + " search results");
 		if (searchResponse.hasMore)
-		{
-			std::cout << "More results available with next token: " << searchResponse.nextToken << std::endl;
-		}
+			Utils::Logger::debug("search", "More results available with next token");
 		return Result::Success();
 	}
 	catch (const json::exception &e)
@@ -534,6 +601,9 @@ Result SearchEngine::parseSearchResponse(const std::string &response, SearchResp
 
 void SearchEngine::addToSearchHistory(const std::string &query)
 {
+	if (query.empty())
+		return;
+	std::lock_guard<std::mutex> lock(historyMutex);
 	// Remove if already exists to move to front
 	auto it = std::find(searchHistory.begin(), searchHistory.end(), query);
 	if (it != searchHistory.end())
@@ -550,13 +620,15 @@ void SearchEngine::addToSearchHistory(const std::string &query)
 	}
 }
 
-const std::vector<std::string> &SearchEngine::getSearchHistory() const
+std::vector<std::string> SearchEngine::getSearchHistory() const
 {
+	std::lock_guard<std::mutex> lock(historyMutex);
 	return searchHistory;
 }
 
 void SearchEngine::clearSearchHistory()
 {
+	std::lock_guard<std::mutex> lock(historyMutex);
 	searchHistory.clear();
 }
 
@@ -593,8 +665,9 @@ void SearchEngine::removeFromFavorites(const std::string &infoHash)
 	}
 }
 
-const std::vector<TorrentSearchResult> &SearchEngine::getFavorites() const
+std::vector<TorrentSearchResult> SearchEngine::getFavorites() const
 {
+	std::lock_guard<std::mutex> lock(favoritesMutex);
 	return favorites;
 }
 
@@ -606,14 +679,24 @@ bool SearchEngine::isFavorite(const std::string &infoHash) const
 
 void SearchEngine::saveFavoritesAndHistory(ConfigManager &configManager)
 {
-	std::lock_guard<std::mutex> lock(favoritesMutex);
-	configManager.saveFavoritesAndHistory(favorites, searchHistory);
+	std::vector<TorrentSearchResult> favoritesSnapshot;
+	std::vector<std::string> historySnapshot;
+	{
+		std::scoped_lock lock(favoritesMutex, historyMutex);
+		favoritesSnapshot = favorites;
+		historySnapshot = searchHistory;
+	}
+	configManager.saveFavoritesAndHistory(favoritesSnapshot, historySnapshot);
 }
 
 void SearchEngine::loadFavoritesAndHistory(ConfigManager &configManager)
 {
-	std::lock_guard<std::mutex> lock(favoritesMutex);
-	configManager.loadFavoritesAndHistory(favorites, searchHistory);
+	std::vector<TorrentSearchResult> favoritesSnapshot;
+	std::vector<std::string> historySnapshot;
+	configManager.loadFavoritesAndHistory(favoritesSnapshot, historySnapshot);
+	std::scoped_lock lock(favoritesMutex, historyMutex);
+	favorites = std::move(favoritesSnapshot);
+	searchHistory = std::move(historySnapshot);
 
 	favoriteHashes.clear();
 	for (const auto &fav : favorites)
@@ -625,17 +708,20 @@ void SearchEngine::loadFavoritesAndHistory(ConfigManager &configManager)
 
 void SearchEngine::setApiUrl(const std::string &url)
 {
+	std::lock_guard<std::mutex> lock(settingsMutex);
 	apiUrl = url;
 }
 
 void SearchEngine::setTimeout(int seconds)
 {
-	timeoutSeconds = seconds;
+	std::lock_guard<std::mutex> lock(settingsMutex);
+	timeoutSeconds = std::max(seconds, 1);
 }
 
 void SearchEngine::setMaxRetries(int retries)
 {
-	maxRetries = retries;
+	std::lock_guard<std::mutex> lock(settingsMutex);
+	maxRetries = std::max(retries, 1);
 }
 
 bool SearchEngine::isSearching() const
@@ -645,7 +731,23 @@ bool SearchEngine::isSearching() const
 
 void SearchEngine::cancelCurrentSearch()
 {
-	cancelRequested = true;
+	if (searching.load())
+		cancelRequested = true;
+}
+
+bool SearchEngine::tryStartSearch()
+{
+	std::lock_guard<std::mutex> lock(searchMutex);
+	if (searching.load())
+		return false;
+	searching = true;
+	cancelRequested = false;
+	return true;
+}
+
+void SearchEngine::finishSearch()
+{
+	searching = false;
 }
 
 // Async search implementation with threading
@@ -653,65 +755,78 @@ void SearchEngine::searchTorrentsAsync(const SearchQuery &query, std::function<v
 {
 	// If already searching, ignore this request
 	if (searching.load())
-	{
 		return;
-	}
 
 	// Join previous thread if it exists
-	if (searchThread.joinable())
+	std::thread previousThread;
 	{
-		searchThread.join();
+		std::lock_guard<std::mutex> lock(threadMutex);
+		previousThread = std::move(searchThread);
+	}
+	if (previousThread.joinable())
+	{
+		previousThread.join();
 	}
 
 	// Reset cancellation flag
-	cancelRequested = false;
+	if (!tryStartSearch())
+		return;
 
 	// Launch search in separate thread
-	searchThread = std::thread([this, query, callback]()
-							   {
-		searching = true;
+	std::thread worker([this, query, callback]()
+	{
 		SearchResponse response;
-		response.torrents.clear();
-		response.nextToken.clear();
-		response.hasMore = false;
-
 		Result result = Result::Failure("Unknown error");
 
-		// Check cancellation before starting
-		if (cancelRequested.load())
+		try
 		{
-			result = Result::Failure("Search cancelled");
-		}
-		else
-		{
-			// Perform the search directly (bypass the searching flag check)
-			std::string url = buildSearchUrl(query);
-			std::cout << "Searching with URL: " << url << std::endl;
-			std::string httpResponse;
-
-			Result httpResult = makeHttpRequest(url, httpResponse);
-
-			// Check cancellation after HTTP request
 			if (cancelRequested.load())
 			{
 				result = Result::Failure("Search cancelled");
 			}
-			else if (httpResult)
-			{
-				result = parseSearchResponse(httpResponse, response);
-				if (result)
-				{
-					addToSearchHistory(query.query);
-				}
-			}
 			else
 			{
-				result = httpResult;
+				Result httpResult = performSearch(query, response);
+				if (cancelRequested.load())
+					result = Result::Failure("Search cancelled");
+				else
+				{
+					result = httpResult;
+					if (result)
+						addToSearchHistory(query.query);
+				}
 			}
 		}
+		catch (const std::exception &e)
+		{
+			result = Result::Failure("Search failed: " + std::string(e.what()));
+			Utils::Logger::error("search", result.message);
+		}
+		catch (...)
+		{
+			result = Result::Failure("Search failed with an unknown error");
+			Utils::Logger::error("search", result.message);
+		}
 
-		searching = false;
-
-		// Always call the callback to reset UI state, even if cancelled
-		callback(result, response); });
+		finishSearch();
+		if (callback)
+		{
+			try
+			{
+				callback(result, response);
+			}
+			catch (const std::exception &e)
+			{
+				Utils::Logger::error("search", "Search callback failed: " + std::string(e.what()));
+			}
+			catch (...)
+			{
+				Utils::Logger::error("search", "Search callback failed with an unknown exception");
+			}
+		}
+	});
+	{
+		std::lock_guard<std::mutex> lock(threadMutex);
+		searchThread = std::move(worker);
+	}
 }

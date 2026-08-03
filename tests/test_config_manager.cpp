@@ -2,6 +2,8 @@
 #include <fstream>
 #include <filesystem>
 #include <random>
+#include <thread>
+#include <atomic>
 #include "../include/app/ConfigManager.hpp"
 
 namespace fs = std::filesystem;
@@ -185,7 +187,38 @@ TEST_F(ConfigManagerTest, LoadInvalidConfigValues)
 
     // Check if it fell back to defaults
     EXPECT_EQ(manager.getDownloadSpeedLimit(), 0);
-    EXPECT_EQ(manager.getUploadSpeedLimit(), 0);
+	EXPECT_EQ(manager.getUploadSpeedLimit(), 0);
+}
+
+TEST_F(ConfigManagerTest, RecoversFromBackupAfterPrimaryValidationFailure)
+{
+	ConfigManager manager;
+	const std::string configPath = (testDir / "schema_recovery.json").string();
+
+	// The primary file is valid JSON but contains an invalid setting value.
+	{
+		std::ofstream file(configPath);
+		file << R"({
+            "version": 1,
+            "settings": {
+                "speed_limits": {"download": -1}
+            }
+        })";
+	}
+	{
+		std::ofstream file(configPath + ".bak");
+		file << R"({
+            "version": 1,
+            "settings": {
+                "speed_limits": {"download": 2048},
+                "download_path": "/recovered"
+            }
+        })";
+	}
+
+	ASSERT_TRUE(manager.load(configPath, true));
+	EXPECT_EQ(manager.getDownloadSpeedLimit(), 2048);
+	EXPECT_EQ(manager.getDownloadPath(), "/recovered");
 }
 
 TEST_F(ConfigManagerTest, LoadEmptyFile)
@@ -222,5 +255,96 @@ TEST_F(ConfigManagerTest, LoadTorrentsInvalidJson)
     std::vector<TorrentConfigData> torrents;
     Result res = manager.loadTorrents(configPath, torrents);
     EXPECT_FALSE(res.success);
-    EXPECT_TRUE(torrents.empty());
+	EXPECT_TRUE(torrents.empty());
+}
+
+TEST_F(ConfigManagerTest, RecoversTorrentsFromBackupAfterPrimaryParseFailure)
+{
+	ConfigManager manager;
+	const std::string configPath = (testDir / "torrents_recovery.json").string();
+
+	{
+		std::ofstream file(configPath);
+		file << R"({"torrents": [)";
+	}
+	{
+		std::ofstream file(configPath + ".bak");
+		file << R"({
+            "torrents": [{
+                "magnet_uri": "magnet:?xt=urn:btih:0123456789012345678901234567890123456789",
+                "save_path": "/downloads/recovered"
+            }]
+        })";
+	}
+
+	// This mirrors App startup: load() recovers the backup first, then the
+	// torrent list is loaded through the same path.
+	ASSERT_TRUE(manager.load(configPath, false));
+	std::vector<TorrentConfigData> torrents;
+	ASSERT_TRUE(manager.loadTorrents(configPath, torrents));
+	ASSERT_EQ(torrents.size(), 1u);
+	EXPECT_EQ(torrents[0].savePath, "/downloads/recovered");
+}
+
+TEST_F(ConfigManagerTest, AtomicSaveCreatesBackup)
+{
+	ConfigManager manager;
+	const std::string configPath = (testDir / "atomic.json").string();
+
+	manager.setDownloadPath("/first");
+	manager.save(configPath);
+	manager.waitForAsyncOperations();
+	manager.setDownloadPath("/second");
+	manager.save(configPath);
+	manager.waitForAsyncOperations();
+
+	ASSERT_TRUE(fs::exists(configPath));
+	ASSERT_TRUE(fs::exists(configPath + ".bak"));
+	json current;
+	json backup;
+	std::ifstream(configPath) >> current;
+	std::ifstream(configPath + ".bak") >> backup;
+	EXPECT_EQ(current["settings"]["download_path"], "/second");
+	EXPECT_EQ(backup["settings"]["download_path"], "/first");
+}
+
+TEST_F(ConfigManagerTest, RecoversFromBackupWhenPrimaryIsMissing)
+{
+	ConfigManager manager;
+	const std::string configPath = (testDir / "recoverable.json").string();
+	manager.setDownloadPath("/stable");
+	manager.save(configPath);
+	manager.waitForAsyncOperations();
+	manager.setDownloadPath("/new");
+	manager.save(configPath);
+	manager.waitForAsyncOperations();
+	fs::remove(configPath);
+
+	ConfigManager recovered;
+	ASSERT_TRUE(recovered.load(configPath));
+	EXPECT_EQ(recovered.getDownloadPath(), "/stable");
+}
+
+TEST_F(ConfigManagerTest, ConcurrentUpdatesRemainValidJson)
+{
+	ConfigManager manager;
+	const std::string configPath = (testDir / "concurrent.json").string();
+	std::atomic<bool> writerDone{false};
+	std::thread writer([&]
+						{
+							for (int i = 0; i < 50; ++i)
+							{
+								manager.setDownloadPath("/downloads/" + std::to_string(i));
+								manager.save(configPath);
+							}
+							writerDone = true;
+						});
+		while (!writerDone.load())
+			std::this_thread::yield();
+		writer.join();
+	manager.waitForAsyncOperations();
+
+	json saved;
+	EXPECT_NO_THROW(std::ifstream(configPath) >> saved);
+	EXPECT_TRUE(saved.contains("settings"));
 }

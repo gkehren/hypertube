@@ -8,6 +8,7 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <unordered_map>
 #include <unordered_set>
 
 struct TorrentSearchResult
@@ -15,14 +16,14 @@ struct TorrentSearchResult
 	std::string name;
 	std::string magnetUri;
 	std::string infoHash;
-	size_t sizeBytes;
-	int seeders;
-	int leechers;
+	size_t sizeBytes = 0;
+	int seeders = 0;
+	int leechers = 0;
 	std::string dateUploaded;
 	std::string category;
-	int64_t createdUnix;
-	int64_t scrapedDate;
-	int completed;
+	int64_t createdUnix = 0;
+	int64_t scrapedDate = 0;
+	int completed = 0;
 
 	TorrentSearchResult() = default;
 	TorrentSearchResult(const std::string &name, const std::string &magnetUri,
@@ -58,24 +59,29 @@ class SearchEngine
 {
 public:
 	friend class SearchEngineTest;
+	using SearchProvider = std::function<Result(const SearchQuery &, SearchResponse &, const std::function<bool()> &)>;
 	SearchEngine();
 	~SearchEngine();
 
 	// Core search functionality
 	Result searchTorrents(const SearchQuery &query, std::vector<TorrentSearchResult> &results);
 	Result searchTorrents(const SearchQuery &query, SearchResponse &response);
+	Result registerSearchProvider(const std::string &id, SearchProvider provider);
+	Result setActiveSearchProvider(const std::string &id);
+	std::string getActiveSearchProvider() const;
+	std::vector<std::string> getSearchProviders() const;
 
 	// Async search with proper threading
 	void searchTorrentsAsync(const SearchQuery &query, std::function<void(Result, SearchResponse)> callback);
 
 	// Search history and favorites
 	void addToSearchHistory(const std::string &query);
-	const std::vector<std::string> &getSearchHistory() const;
+	std::vector<std::string> getSearchHistory() const;
 	void clearSearchHistory();
 
 	void addToFavorites(const TorrentSearchResult &result);
 	void removeFromFavorites(const std::string &infoHash);
-	const std::vector<TorrentSearchResult> &getFavorites() const;
+	std::vector<TorrentSearchResult> getFavorites() const;
 	uint64_t getFavoritesRevision() const { return favoritesRevision; }
 	bool isFavorite(const std::string &infoHash) const;
 
@@ -101,19 +107,28 @@ private:
 	std::atomic<bool> cancelRequested;
 
 	std::mutex searchMutex;
+	std::mutex threadMutex;
 	std::thread searchThread;
 
 	std::vector<std::string> searchHistory;
 	std::vector<TorrentSearchResult> favorites;
 	std::atomic<uint64_t> favoritesRevision{0};
+	mutable std::mutex historyMutex;
 	std::unordered_set<std::string> favoriteHashes;
 	mutable std::mutex favoritesMutex;
+	mutable std::mutex settingsMutex;
+	mutable std::mutex providersMutex;
+	std::unordered_map<std::string, SearchProvider> providers;
+	std::string activeProvider = "torrents-csv";
 
 	// HTTP client methods
 	Result makeHttpRequest(const std::string &url, std::string &response);
 	std::string buildSearchUrl(const SearchQuery &query) const;
 	Result parseSearchResponse(const std::string &response, std::vector<TorrentSearchResult> &results);
 	Result parseSearchResponse(const std::string &response, SearchResponse &searchResponse);
+	Result performSearch(const SearchQuery &query, SearchResponse &response);
+	bool tryStartSearch();
+	void finishSearch();
 
 	// Utility methods
 };

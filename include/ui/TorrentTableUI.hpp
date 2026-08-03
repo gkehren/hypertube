@@ -38,6 +38,7 @@ public:
 
 	// Callback setup for actions that need to be handled by parent
 	void setRemoveTorrentCallback(std::function<void(const lt::sha1_hash &, RemoveTorrentType)> callback);
+	void setCategoryFilter(int filter) { categoryFilter = filter; }
 
 private:
 	TorrentManager &torrentManager;
@@ -47,5 +48,8 @@ private:
 	std::function<void(const lt::sha1_hash &, RemoveTorrentType)> onRemoveTorrent;
 
 	// Cache for ImGuiListClipper
-	std::vector<const std::pair<const lt::sha1_hash, lt::torrent_handle> *> m_torrentListCache;
+	std::vector<ManagedTorrent> m_torrentListCache;
+	int categoryFilter = 0;
+
+	bool matchesCategory(const ManagedTorrent &torrent, const lt::torrent_status *status) const;
 };
