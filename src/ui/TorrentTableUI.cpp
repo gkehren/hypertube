@@ -256,7 +256,7 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 			const auto info = handle.torrent_file();
 			const auto status = handle.status(lt::torrent_handle::query_save_path);
 			if (info && info->files().num_files() == 1)
-				Utils::SystemUtils::openFilePreview((std::filesystem::path(status.save_path) / info->files().file_path(lt::file_index_t(0))).string());
+				Utils::SystemUtils::openFilePreview((std::filesystem::path(status.save_path) / std::string(info->files().file_path(lt::file_index_t(0)))).string());
 			else
 				Utils::SystemUtils::openFileExplorer(status.save_path);
 		}
@@ -318,7 +318,7 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 				std::int64_t largest = -1;
 				for (const auto index : info->files().file_range())
 				{
-					const std::string path = info->files().file_path(index);
+					const std::string path = std::string(info->files().file_path(index));
 					if (Utils::SystemUtils::isPreviewableFile(path) && info->files().file_size(index) > largest)
 					{
 						selected = index;
@@ -330,7 +330,7 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 					handle.set_flags(lt::torrent_flags::sequential_download);
 					handle.file_priority(selected, lt::top_priority);
 					const auto status = handle.status(lt::torrent_handle::query_save_path);
-					Utils::SystemUtils::openFilePreview((std::filesystem::path(status.save_path) / info->files().file_path(selected)).string());
+					Utils::SystemUtils::openFilePreview((std::filesystem::path(status.save_path) / std::string(info->files().file_path(selected))).string());
 				}
 			}
 		}

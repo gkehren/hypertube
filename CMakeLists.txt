@@ -17,6 +17,7 @@ if(APPLE)
     list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew" "/usr/local")
     include_directories(SYSTEM "/opt/homebrew/include" "/usr/local/include")
     link_directories("/opt/homebrew/lib" "/usr/local/lib")
+    add_compile_definitions(GL_SILENCE_DEPRECATION)
 endif()
 
 # Security Hardening Flags

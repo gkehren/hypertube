@@ -135,7 +135,7 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 
 			// Column 0: File Name
 			ImGui::TableSetColumnIndex(0);
-			std::string fileName = file_storage.file_name(index).to_string();
+			std::string fileName = std::string(file_storage.file_name(index));
 			ImGui::Text("%s", fileName.c_str());
 
 			// Column 1: Size
@@ -203,8 +203,7 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 			if (canPreview)
 			{
 				// Construct full file path
-				auto file_path_sv = file_storage.file_path(index);
-				std::string relativePath(file_path_sv.data(), file_path_sv.size());
+				std::string relativePath = std::string(file_storage.file_path(index));
 				std::filesystem::path fullPath = std::filesystem::path(savePath) / relativePath;
 
 				std::string button_id = "Preview##" + std::to_string(i);
