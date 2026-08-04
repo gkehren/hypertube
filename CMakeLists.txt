@@ -89,9 +89,8 @@ if(TARGET glfw3::glfw AND NOT TARGET glfw)
     add_library(glfw ALIAS glfw3::glfw)
 endif()
 
-# 3. ImGui dependency (vcpkg / system or FetchContent fallback)
-find_package(imgui CONFIG QUIET)
-if(NOT imgui_FOUND AND NOT TARGET imgui AND NOT TARGET imgui::imgui)
+# 3. ImGui dependency (FetchContent for docking branch and backends)
+if(NOT TARGET imgui AND NOT TARGET imgui::imgui)
     FetchContent_Declare(
         imgui
         GIT_REPOSITORY https://github.com/ocornut/imgui.git

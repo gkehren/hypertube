@@ -53,7 +53,7 @@ brew install cmake glfw libtorrent-rasterbar curl nlohmann-json
 Windows with vcpkg:
 
 ```cmd
-vcpkg install glfw3 imgui libtorrent curl nlohmann-json
+vcpkg install glfw3 libtorrent curl nlohmann-json
 ```
 
 Configure Windows with the vcpkg toolchain:
