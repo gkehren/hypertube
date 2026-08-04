@@ -245,7 +245,7 @@ target_link_libraries(hypertube_utils PUBLIC
 if(WIN32)
     target_link_libraries(hypertube_utils PUBLIC Advapi32)
 elseif(APPLE)
-    target_link_libraries(hypertube_utils PUBLIC "-framework Security")
+    target_link_libraries(hypertube_utils PUBLIC "-framework Security" "-framework CoreFoundation")
 endif()
 
 # Create the config library for testing
