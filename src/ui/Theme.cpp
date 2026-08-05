@@ -395,6 +395,7 @@ namespace HypertubeTheme
 		// In production, you'd load a custom font here like:
 		// io.Fonts->AddFontFromFileTTF("path/to/font.ttf", fontSize);
 		ImFontConfig fontConfig;
+		fontConfig.SizePixels = fontSize;
 		fontConfig.OversampleH = 3;
 		fontConfig.OversampleV = 2;
 		fontConfig.PixelSnapH = true;

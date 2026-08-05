@@ -12,18 +12,15 @@
 #include <filesystem>
 #include <cstdint>
 
-TorrentTableUI::TorrentTableUI(TorrentManager &torrentManager)
-	: torrentManager(torrentManager)
+TorrentTableUI::TorrentTableUI(TorrentManager &torrentManager, Utils::SystemUtils::SystemOpener &systemOpener)
+	: torrentManager(torrentManager), systemOpener(systemOpener)
 {
 }
 
 void TorrentTableUI::displayTorrentTable()
 {
-	// Refresh cache if needed before rendering
-	if (torrentManager.shouldRefreshCache())
-	{
-		torrentManager.refreshStatusCache();
-	}
+	// Schedule refresh work without blocking the render thread.
+	torrentManager.requestStatusRefresh();
 
 	ImGuiTableFlags tableFlags = ImGuiTableFlags_RowBg |
 								 ImGuiTableFlags_Resizable |
@@ -125,7 +122,7 @@ bool TorrentTableUI::matchesCategory(const ManagedTorrent &torrent, const lt::to
 	if (categoryFilter == 3)
 		return status->is_finished;
 	if (categoryFilter == 4)
-		return (torrent.handle.flags() & lt::torrent_flags::paused) != lt::torrent_flags_t{};
+		return (status->flags & lt::torrent_flags::paused) != lt::torrent_flags_t{};
 	if (categoryFilter == 5)
 		return status->download_payload_rate > 0 || status->upload_payload_rate > 0;
 	if (categoryFilter == 6)
@@ -135,17 +132,9 @@ bool TorrentTableUI::matchesCategory(const ManagedTorrent &torrent, const lt::to
 
 void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, const lt::info_hash_t &info_hash, const lt::torrent_status *cachedStatus)
 {
-	const lt::torrent_status *statusPtr = cachedStatus;
-	std::optional<lt::torrent_status> liveStatus;
-
-	if (!statusPtr)
-	{
-		// Fallback to live query if cache miss (shouldn't happen normally)
-		liveStatus.emplace(handle.status());
-		statusPtr = &(*liveStatus);
-	}
-
-	const lt::torrent_status &status = *statusPtr;
+	if (!cachedStatus)
+		return;
+	const lt::torrent_status &status = *cachedStatus;
 
 	ImGui::PushID(&handle);
 	ImGui::TableNextRow(ImGuiTableRowFlags_None, 28.0f); // Fixed row height for consistency
@@ -154,7 +143,7 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 	bool isSelected = (selectedTorrent == handle);
 
 	// Get status string for coloring
-	const char *statusStr = Utils::torrentStateToString(status.state, handle.flags());
+	const char *statusStr = Utils::torrentStateToString(status.state, status.flags);
 	ImVec4 statusColor = HypertubeTheme::getStatusColor(statusStr);
 	const auto &palette = HypertubeTheme::getCurrentPalette();
 
@@ -165,7 +154,10 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 
 	// Column 0: Queue position
 	ImGui::AlignTextToFramePadding();
-	ImGui::Text("%d", static_cast<int>(status.queue_position) + 1);
+	if (status.queue_position < 0)
+		ImGui::TextUnformatted("-");
+	else
+		ImGui::Text("%d", static_cast<int>(status.queue_position) + 1);
 
 	// Column 1: Name - Use selectable for row selection
 	ImGui::TableSetColumnIndex(1);
@@ -251,19 +243,25 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 {
 	if (ImGui::BeginPopupContextItem("##context", ImGuiPopupFlags_MouseButtonRight))
 	{
+		const auto contextStatus = handle.status(lt::torrent_handle::query_name);
+		auto report = [this](const Result &result)
+		{
+			if (!result && onResult)
+				onResult(result);
+		};
 		if (ImGui::MenuItem("Open"))
 		{
 			const auto info = handle.torrent_file();
 			const auto status = handle.status(lt::torrent_handle::query_save_path);
 			if (info && info->files().num_files() == 1)
-				Utils::SystemUtils::openFilePreview((std::filesystem::path(status.save_path) / std::string(info->files().file_path(lt::file_index_t(0)))).string());
+				report(systemOpener.enqueuePreview((std::filesystem::path(status.save_path) / std::string(info->files().file_path(lt::file_index_t(0)))).string()));
 			else
-				Utils::SystemUtils::openFileExplorer(status.save_path);
+				report(systemOpener.enqueueExplorer(status.save_path));
 		}
 
 		if (ImGui::MenuItem("Open Containing Folder"))
 		{
-			Utils::SystemUtils::openFileExplorer(handle.status().save_path);
+			report(systemOpener.enqueueExplorer(handle.status(lt::torrent_handle::query_save_path).save_path));
 		}
 
 		if (ImGui::MenuItem("Copy Magnet URI"))
@@ -271,42 +269,37 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 			ImGui::SetClipboardText(lt::make_magnet_uri(handle).c_str());
 		}
 
-		if (ImGui::MenuItem("Force Start"))
+		const auto flags = handle.flags();
+		const bool paused = (flags & lt::torrent_flags::paused) != lt::torrent_flags_t{};
+		const bool forceStarted = !paused && (flags & lt::torrent_flags::auto_managed) == lt::torrent_flags_t{};
+		auto execute = [this, &info_hash](TorrentCommand command)
 		{
-			handle.force_recheck();
-			handle.resume();
-		}
+			const Result result = torrentManager.executeCommand(info_hash, command);
+			if (onResult)
+				onResult(result);
+		};
 
-		if (ImGui::MenuItem("Start"))
-		{
-			handle.resume();
-		}
-
-		if (ImGui::MenuItem("Pause"))
-		{
-			if (handle.flags() & lt::torrent_flags::paused)
-				handle.resume();
-			else
-				handle.pause();
-		}
+		if (ImGui::MenuItem(paused ? "Resume" : "Pause"))
+			execute(paused ? TorrentCommand::Resume : TorrentCommand::Pause);
+		if (ImGui::MenuItem("Force Start", nullptr, forceStarted, !forceStarted))
+			execute(TorrentCommand::ForceStart);
+		if (ImGui::MenuItem("Force Recheck"))
+			execute(TorrentCommand::ForceRecheck);
 
 		if (ImGui::MenuItem("Move Up Queue"))
 		{
-			handle.queue_position_up();
+			execute(TorrentCommand::MoveQueueUp);
 		}
 
 		if (ImGui::MenuItem("Move Down Queue"))
 		{
-			handle.queue_position_down();
+			execute(TorrentCommand::MoveQueueDown);
 		}
 
 		bool isSequential = (handle.flags() & lt::torrent_flags::sequential_download) != lt::torrent_flags_t{};
 		if (ImGui::MenuItem("Sequential Download (Streaming)", nullptr, isSequential))
 		{
-			if (isSequential)
-				handle.unset_flags(lt::torrent_flags::sequential_download);
-			else
-				handle.set_flags(lt::torrent_flags::sequential_download);
+			execute(isSequential ? TorrentCommand::DisableSequential : TorrentCommand::EnableSequential);
 		}
 
 		if (ImGui::MenuItem("Open Largest Media File"))
@@ -330,7 +323,7 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 					handle.set_flags(lt::torrent_flags::sequential_download);
 					handle.file_priority(selected, lt::top_priority);
 					const auto status = handle.status(lt::torrent_handle::query_save_path);
-					Utils::SystemUtils::openFilePreview((std::filesystem::path(status.save_path) / std::string(info->files().file_path(selected))).string());
+					report(systemOpener.enqueuePreview((std::filesystem::path(status.save_path) / std::string(info->files().file_path(selected))).string()));
 				}
 			}
 		}
@@ -340,29 +333,29 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 			if (ImGui::MenuItem("Remove"))
 			{
 				if (onRemoveTorrent)
-					onRemoveTorrent(info_hash, REMOVE_TORRENT);
+					onRemoveTorrent(info_hash, contextStatus.name, TorrentRemovalMode::KeepAllFiles);
 			}
 			if (ImGui::MenuItem("Remove with Data"))
 			{
 				if (onRemoveTorrent)
-					onRemoveTorrent(info_hash, REMOVE_TORRENT_DATA);
+					onRemoveTorrent(info_hash, contextStatus.name, TorrentRemovalMode::DeleteData);
 			}
 			if (ImGui::MenuItem("Remove with .torrent"))
 			{
 				if (onRemoveTorrent)
-					onRemoveTorrent(info_hash, REMOVE_TORRENT_FILES);
+					onRemoveTorrent(info_hash, contextStatus.name, TorrentRemovalMode::DeleteSourceTorrent);
 			}
 			if (ImGui::MenuItem("Remove with Data & .torrent"))
 			{
 				if (onRemoveTorrent)
-					onRemoveTorrent(info_hash, REMOVE_TORRENT_FILES_AND_DATA);
+					onRemoveTorrent(info_hash, contextStatus.name, TorrentRemovalMode::DeleteDataAndSourceTorrent);
 			}
 			ImGui::EndMenu();
 		}
 
 		if (ImGui::MenuItem("Update Tracker"))
 		{
-			handle.force_reannounce();
+			execute(TorrentCommand::ForceReannounce);
 		}
 
 		if (ImGui::MenuItem("Properties"))
@@ -375,7 +368,12 @@ void TorrentTableUI::displayTorrentContextMenu(const lt::torrent_handle &handle,
 	}
 }
 
-void TorrentTableUI::setRemoveTorrentCallback(std::function<void(const lt::info_hash_t &, RemoveTorrentType)> callback)
+void TorrentTableUI::setRemoveTorrentCallback(std::function<void(const lt::info_hash_t &, const std::string &, TorrentRemovalMode)> callback)
 {
 	onRemoveTorrent = callback;
+}
+
+void TorrentTableUI::setResultCallback(std::function<void(const Result &)> callback)
+{
+	onResult = std::move(callback);
 }

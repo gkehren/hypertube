@@ -2,6 +2,7 @@
 #include "Theme.hpp"
 #include "AppPaths.hpp"
 #include "CredentialStore.hpp"
+#include "Logger.hpp"
 #include "imgui_internal.h"
 #include <algorithm>
 #include <filesystem>
@@ -10,6 +11,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <chrono>
 
 UIManager::UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine, ConfigManager &settingsConfigManager)
 	: torrentManager(torrentManager), searchEngine(searchEngine), settingsConfigManager(settingsConfigManager)
@@ -20,9 +22,10 @@ UIManager::UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine,
 	std::snprintf(tempTorznabApiKey.data(), tempTorznabApiKey.size(), "%s", initialApiKey.c_str());
 	const std::optional<std::string> proxyPassword = Utils::CredentialStore::load("proxy_password");
 	std::snprintf(tempProxyPassword.data(), tempProxyPassword.size(), "%s", proxyPassword.value_or("").c_str());
+	systemOpener = std::make_unique<Utils::SystemUtils::SystemOpener>();
 	// Initialize UI components
-	torrentTableUI = std::make_unique<TorrentTableUI>(torrentManager);
-	torrentDetailsUI = std::make_unique<TorrentDetailsUI>(torrentManager);
+	torrentTableUI = std::make_unique<TorrentTableUI>(torrentManager, *systemOpener);
+	torrentDetailsUI = std::make_unique<TorrentDetailsUI>(torrentManager, *systemOpener);
 	searchUI = std::make_unique<SearchUI>(searchEngine);
 	modalDialogs = std::make_unique<ModalDialogs>(torrentManager);
 	logsUI = std::make_unique<LogsUI>(torrentManager);
@@ -31,11 +34,25 @@ UIManager::UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine,
 	setupUICallbacks();
 }
 
+UIManager::~UIManager()
+{
+	// A preference save can still be queued when the user closes the window.
+	// Resolve it before the ConfigManager is destroyed so credentials cannot
+	// remain changed when the durable candidate was rejected.
+	if (!pendingPreferencesSave)
+		return;
+	const Result saveResult = pendingPreferencesSave->get();
+	pendingPreferencesSave.reset();
+	if (saveResult)
+		settingsConfigManager.commitPreferences(pendingPreferences);
+	else
+		restorePreferenceCredentials();
+}
+
 void UIManager::init(GLFWwindow *window)
 {
 	initImGui(window);
 	setDefaultSavePath();
-	loadSpeedLimitsFromConfig();
 	applySpeedLimits();
 }
 
@@ -88,11 +105,12 @@ void UIManager::initImGui(GLFWwindow *window)
 	io_ref.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 	io_ref.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	io_ref.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-	io_ref.IniFilename = nullptr;
+	imguiIniPath = (Utils::AppPaths::configDirectory() / "imgui.ini").string();
+	io_ref.IniFilename = imguiIniPath.c_str();
+	HypertubeTheme::configureFonts(io_ref, 15.0f);
 	this->io = io_ref;
 
-	// Load and apply saved theme
-	loadSpeedLimitsFromConfig();
+	// Settings were loaded once by App before the UI is initialized.
 	currentTheme = settingsConfigManager.getTheme();
 	HypertubeTheme::applyTheme(static_cast<HypertubeTheme::ThemeType>(currentTheme));
 
@@ -111,18 +129,23 @@ void UIManager::initImGui(GLFWwindow *window)
 void UIManager::setupUICallbacks()
 {
 	// Setup torrent table callbacks
-	torrentTableUI->setRemoveTorrentCallback([this](const lt::info_hash_t &hash, RemoveTorrentType removeType)
-											 { torrentsToRemove.emplace_back(hash, removeType); });
+	torrentTableUI->setRemoveTorrentCallback([this](const lt::info_hash_t &hash, const std::string &name, TorrentRemovalMode removeMode)
+											 { torrentsToRemove.emplace_back(hash, name, removeMode); });
+	torrentTableUI->setResultCallback([this](const Result &result)
+										  {
+		if (!result)
+			showFailurePopupWithMessage(result.message);
+	});
+	torrentDetailsUI->setResultCallback([this](const Result &result)
+	{
+		if (!result)
+			showFailurePopupWithMessage(result.message);
+	});
 
 	// Setup search UI callbacks
 	searchUI->setSearchResultSelectedCallback([this](const TorrentSearchResult &result)
 											  {
-		modalDialogs->setSelectedSearchResult(result);
-		// Open save path modal
-		IGFD::FileDialogConfig config;
-		config.path = defaultSavePath;
-		config.flags = ImGuiFileDialogFlags_Modal | ImGuiFileDialogFlags_ShowDevicesButton | ImGuiFileDialogFlags_DontShowHiddenFiles;
-		ImGuiFileDialog::Instance()->OpenDialog("ChooseSavePath", "Choose Save Path", nullptr, config); });
+		modalDialogs->beginSearchResult(result); });
 
 	searchUI->setShowFailurePopupCallback([this](const std::string &message)
 										  { showFailurePopupWithMessage(message); });
@@ -148,7 +171,7 @@ void UIManager::handleTorrentRemoval()
 {
 	for (const auto &removalInfo : torrentsToRemove)
 	{
-		Result result = torrentManager.removeTorrent(removalInfo.hash, removalInfo.removeType);
+		Result result = torrentManager.removeTorrent(removalInfo.hash, removalInfo.removeMode);
 		if (!result)
 		{
 			showFailurePopupWithMessage(result.message);
@@ -159,6 +182,11 @@ void UIManager::handleTorrentRemoval()
 
 void UIManager::renderFrame(GLFWwindow *window, const ImVec4 &clear_color)
 {
+	for (const auto &result : systemOpener->drainResults())
+	{
+		if (!result.result)
+			showFailurePopupWithMessage(result.result.message);
+	}
 	// Start the ImGui frame
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
@@ -192,10 +220,12 @@ void UIManager::renderFrame(GLFWwindow *window, const ImVec4 &clear_color)
 	// Reset popup triggers
 	showMagnetTorrentPopup = false;
 	showTorrentPopup = false;
+	handleKeyboardShortcuts();
 
 	displayMenuBar();
 
 	displayCategories();
+	searchUI->update();
 	displayTorrentManagement();
 
 	// Use the new TorrentDetailsUI component
@@ -238,6 +268,19 @@ void UIManager::renderFrame(GLFWwindow *window, const ImVec4 &clear_color)
 	}
 }
 
+void UIManager::handleKeyboardShortcuts()
+{
+	const ImGuiIO &frameIo = ImGui::GetIO();
+	if (frameIo.WantTextInput)
+		return;
+	if (frameIo.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O, false))
+		showTorrentPopup = true;
+	if (frameIo.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_U, false))
+		showMagnetTorrentPopup = true;
+	if (frameIo.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_P, false))
+		showPreferencesDialog = true;
+}
+
 void UIManager::setupDocking(ImGuiID dockspace_id)
 {
 	ImGui::DockBuilderRemoveNode(dockspace_id);
@@ -271,8 +314,7 @@ void UIManager::handleModals()
 	modalDialogs->handleAddMagnetTorrentModal(showMagnetTorrentPopup);
 	modalDialogs->handleRemoveTorrentModal(torrentsToRemove);
 
-	auto torrentToAdd = modalDialogs->getTorrentToAdd();
-	modalDialogs->handleAskSavePathModal(torrentToAdd, searchUI->getSelectedSearchResult(), defaultSavePath, "");
+	modalDialogs->handleAskSavePathModal(defaultSavePath, "");
 }
 
 void UIManager::displayMenuBar()
@@ -347,8 +389,7 @@ void UIManager::displayTorrentManagement()
 void UIManager::displayCategories()
 {
 	ImGui::Begin("Categories");
-	if (torrentManager.shouldRefreshCache())
-		torrentManager.refreshStatusCache();
+	torrentManager.requestStatusRefresh();
 
 	// Section header
 	HypertubeTheme::drawSectionHeader("Filter Torrents");
@@ -468,10 +509,22 @@ void UIManager::displayPreferencesDialog()
 
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(560, 700), ImGuiCond_Appearing);
+	const ImVec2 workSize = ImGui::GetMainViewport()->WorkSize;
+	ImGui::SetNextWindowSize(ImVec2(std::min(620.0f, workSize.x * 0.92f), std::min(760.0f, workSize.y * 0.92f)), ImGuiCond_Appearing);
 
-	if (ImGui::BeginPopupModal("Preferences", nullptr, ImGuiWindowFlags_NoResize))
+	if (ImGui::BeginPopupModal("Preferences", nullptr))
 	{
+		if (pendingPreferencesSave)
+		{
+			finishPreferencesSave();
+			if (pendingPreferencesSave)
+			{
+				ImGui::TextDisabled("Saving preferences...");
+				ImGui::EndPopup();
+				return;
+			}
+		}
+		ImGui::BeginChild("PreferencesContent", ImVec2(0, -55), false);
 		// Theme Section
 		HypertubeTheme::drawSectionHeader("Appearance");
 
@@ -558,10 +611,8 @@ void UIManager::displayPreferencesDialog()
 		ImGui::InputText("Password", tempProxyPassword.data(), tempProxyPassword.size(), ImGuiInputTextFlags_Password);
 		HypertubeTheme::drawTooltip("The password is stored in the operating-system credential store");
 
-		ImGui::Spacing();
-		ImGui::Spacing();
+		ImGui::EndChild();
 		ImGui::Separator();
-		ImGui::Spacing();
 		ImGui::Spacing();
 
 		// Centered buttons
@@ -574,8 +625,8 @@ void UIManager::displayPreferencesDialog()
 		if (HypertubeTheme::drawStyledButton("Apply", ImVec2(buttonWidth, 35), true))
 		{
 			const std::string proxyType = tempProxyType == 1 ? "http" : "socks5";
-			Result proxyValidation = searchEngine.setProxyConfig(tempProxyEnabled, proxyType,
-				tempProxyHost.data(), tempProxyPort, tempProxyUsername.data(), tempProxyPassword.data());
+			Result proxyValidation = SearchEngine::validateProxyConfig(tempProxyEnabled, proxyType,
+				tempProxyHost.data(), tempProxyPort);
 			if (!proxyValidation)
 			{
 				showFailurePopupWithMessage(proxyValidation.message);
@@ -584,7 +635,21 @@ void UIManager::displayPreferencesDialog()
 			}
 			if (tempTorznabEnabled)
 			{
-				Result credentialResult = tempTorznabApiKey[0] == '\0'
+				Result providerValidation = SearchEngine::validateTorznabConfig(tempTorznabUrl.data());
+				if (!providerValidation)
+				{
+					showFailurePopupWithMessage(providerValidation.message);
+					ImGui::EndPopup();
+					return;
+				}
+			}
+			previousPreferences = settingsConfigManager.getPreferencesSettings();
+			previousTorznabCredential = Utils::CredentialStore::load("torznab_api_key");
+			previousProxyCredential = Utils::CredentialStore::load("proxy_password");
+			torznabCredentialChanged = false;
+			proxyCredentialChanged = false;
+			{
+				Result credentialResult = !tempTorznabEnabled || tempTorznabApiKey[0] == '\0'
 					? Utils::CredentialStore::erase("torznab_api_key")
 					: Utils::CredentialStore::store("torznab_api_key", tempTorznabApiKey.data());
 				if (!credentialResult)
@@ -593,57 +658,38 @@ void UIManager::displayPreferencesDialog()
 					ImGui::EndPopup();
 					return;
 				}
+				torznabCredentialChanged = true;
 			}
-			if (tempProxyEnabled)
 			{
-				Result credentialResult = tempProxyPassword[0] == '\0'
+				Result credentialResult = !tempProxyEnabled || tempProxyPassword[0] == '\0'
 					? Utils::CredentialStore::erase("proxy_password")
 					: Utils::CredentialStore::store("proxy_password", tempProxyPassword.data());
 				if (!credentialResult)
 				{
+					restorePreferenceCredentials();
 					showFailurePopupWithMessage(credentialResult.message);
 					ImGui::EndPopup();
 					return;
 				}
+				proxyCredentialChanged = true;
 			}
-			// Save theme
-			currentTheme = tempSelectedTheme;
-			settingsConfigManager.setTheme(currentTheme);
-
-			// Save speed limits
-			settingsConfigManager.setDownloadSpeedLimit(tempDownloadSpeedLimit);
-			settingsConfigManager.setUploadSpeedLimit(tempUploadSpeedLimit);
-			defaultSavePath = tempDownloadPath.data();
-			settingsConfigManager.setDownloadPath(defaultSavePath);
-			settingsConfigManager.setEnableDHT(tempEnableDht);
-			settingsConfigManager.setEnableUPnP(tempEnableUpnp);
-			settingsConfigManager.setEnableNATPMP(tempEnableNatPmp);
-			settingsConfigManager.setTorznabEnabled(tempTorznabEnabled);
-			settingsConfigManager.setTorznabUrl(tempTorznabUrl.data());
-			settingsConfigManager.setProxyEnabled(tempProxyEnabled);
-			settingsConfigManager.setProxyType(proxyType);
-			settingsConfigManager.setProxyHost(tempProxyHost.data());
-			settingsConfigManager.setProxyPort(tempProxyPort);
-			settingsConfigManager.setProxyUsername(tempProxyUsername.data());
-			settingsConfigManager.save(Utils::AppPaths::settingsConfigPath().string());
-
-			// Apply to torrent manager
-			applySpeedLimits();
-			torrentManager.configureDiscovery(tempEnableDht, tempEnableUpnp, tempEnableNatPmp);
-			torrentManager.setProxyConfig(tempProxyHost.data(), tempProxyPort,
-				tempProxyUsername.data(), tempProxyPassword.data(), tempProxyEnabled ? tempProxyType + 1 : 0);
-			if (tempTorznabEnabled)
-			{
-				Result provider = searchEngine.configureTorznabProvider(tempTorznabUrl.data(), tempTorznabApiKey.data());
-				if (provider)
-					searchEngine.setActiveSearchProvider("torznab");
-				else
-					showFailurePopupWithMessage(provider.message);
-			}
-			else
-				searchEngine.setActiveSearchProvider("torrents-csv");
-
-			ImGui::CloseCurrentPopup();
+			pendingPreferences = {
+				tempDownloadSpeedLimit,
+				tempUploadSpeedLimit,
+				tempSelectedTheme,
+				tempDownloadPath.data(),
+				tempEnableDht,
+				tempEnableUpnp,
+				tempEnableNatPmp,
+				tempTorznabEnabled,
+				tempTorznabUrl.data(),
+				tempProxyEnabled,
+				proxyType,
+				tempProxyHost.data(),
+				tempProxyPort,
+				tempProxyUsername.data()};
+			pendingPreferencesSave = settingsConfigManager.savePreferencesCandidate(
+				Utils::AppPaths::settingsConfigPath().string(), pendingPreferences);
 		}
 		ImGui::SetItemDefaultFocus();
 		ImGui::SameLine(0, spacing);
@@ -657,14 +703,97 @@ void UIManager::displayPreferencesDialog()
 	}
 }
 
-void UIManager::loadSpeedLimitsFromConfig()
+Result UIManager::restorePreferenceCredentials()
 {
-	Result result = settingsConfigManager.load(Utils::AppPaths::settingsConfigPath().string());
-	if (!result)
+	Result firstFailure = Result::Success();
+	if (torznabCredentialChanged)
 	{
-		// Show error popup to user
-		showFailurePopupWithMessage("Configuration Error: " + result.message);
+		Result result = previousTorznabCredential
+			? Utils::CredentialStore::store("torznab_api_key", *previousTorznabCredential)
+			: Utils::CredentialStore::erase("torznab_api_key");
+		if (!result)
+		{
+			Utils::Logger::error("config", "Unable to restore Torznab credential: " + result.message);
+			firstFailure = Result::Failure("Unable to restore Torznab credential: " + result.message, ResultCode::Partial);
+		}
 	}
+	if (proxyCredentialChanged)
+	{
+		Result result = previousProxyCredential
+			? Utils::CredentialStore::store("proxy_password", *previousProxyCredential)
+			: Utils::CredentialStore::erase("proxy_password");
+		if (!result)
+		{
+			Utils::Logger::error("config", "Unable to restore proxy credential: " + result.message);
+			if (firstFailure)
+				firstFailure = Result::Failure("Unable to restore proxy credential: " + result.message, ResultCode::Partial);
+		}
+	}
+	torznabCredentialChanged = false;
+	proxyCredentialChanged = false;
+	return firstFailure;
+}
+
+Result UIManager::applyPreferencesRuntime(const PreferencesSettings &settings)
+{
+	currentTheme = settings.theme;
+	HypertubeTheme::applyTheme(static_cast<HypertubeTheme::ThemeType>(currentTheme));
+	defaultSavePath = settings.downloadPath;
+	torrentManager.setDownloadSpeedLimit(settings.downloadSpeedLimit);
+	torrentManager.setUploadSpeedLimit(settings.uploadSpeedLimit);
+	torrentManager.configureDiscovery(settings.enableDht, settings.enableUpnp, settings.enableNatPmp);
+	const std::string password = Utils::CredentialStore::load("proxy_password").value_or("");
+	torrentManager.setProxyConfig(settings.proxyHost, settings.proxyPort, settings.proxyUsername, password,
+		settings.proxyEnabled ? (settings.proxyType == "http" ? 2 : 1) : 0);
+	Result proxyResult = searchEngine.setProxyConfig(settings.proxyEnabled, settings.proxyType,
+		settings.proxyHost, settings.proxyPort, settings.proxyUsername, password);
+	if (!proxyResult)
+		return proxyResult;
+	if (settings.torznabEnabled)
+	{
+		const std::string apiKey = Utils::CredentialStore::load("torznab_api_key").value_or("");
+		Result provider = searchEngine.configureTorznabProvider(settings.torznabUrl, apiKey);
+		if (!provider)
+			return provider;
+		searchEngine.setActiveSearchProvider("torznab");
+	}
+	else
+		searchEngine.setActiveSearchProvider("torrents-csv");
+	return Result::Success();
+}
+
+void UIManager::finishPreferencesSave()
+{
+	if (!pendingPreferencesSave || pendingPreferencesSave->wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+		return;
+	const Result saveResult = pendingPreferencesSave->get();
+	pendingPreferencesSave.reset();
+	if (!saveResult)
+	{
+		const Result restore = restorePreferenceCredentials();
+		showFailurePopupWithMessage(restore ? "Preferences were not saved: " + saveResult.message
+			: "Preferences were not saved and credentials could not be fully restored: " + restore.message);
+		return;
+	}
+
+	Result commitResult = settingsConfigManager.commitPreferences(pendingPreferences);
+	Result runtimeResult = commitResult ? applyPreferencesRuntime(pendingPreferences) : commitResult;
+	if (!runtimeResult)
+	{
+		const Result credentialRestore = restorePreferenceCredentials();
+		settingsConfigManager.commitPreferences(previousPreferences);
+		const Result restoreRuntime = applyPreferencesRuntime(previousPreferences);
+		settingsConfigManager.savePreferencesCandidate(Utils::AppPaths::settingsConfigPath().string(), previousPreferences);
+		if (!restoreRuntime || !credentialRestore)
+			showFailurePopupWithMessage("Preferences failed and runtime restoration was incomplete: " + runtimeResult.message);
+		else
+			showFailurePopupWithMessage("Preferences were rolled back: " + runtimeResult.message);
+		return;
+	}
+
+	torznabCredentialChanged = false;
+	proxyCredentialChanged = false;
+	ImGui::CloseCurrentPopup();
 }
 
 void UIManager::applySpeedLimits()

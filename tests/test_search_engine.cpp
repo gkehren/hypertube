@@ -428,3 +428,13 @@ TEST_F(SearchEngineTest, ValidatesProxyConfiguration) {
 	EXPECT_TRUE(engine.setProxyConfig(true, "socks5", "127.0.0.1", 1080, "user", "secret"));
 	EXPECT_TRUE(engine.setProxyConfig(false, "socks5", "", 1080));
 }
+
+TEST_F(SearchEngineTest, ValidatesPreferencesWithoutMutatingRuntimeState) {
+	EXPECT_FALSE(SearchEngine::validateTorznabConfig("localhost:9117/api").success);
+	EXPECT_FALSE(SearchEngine::validateTorznabConfig("https://").success);
+	EXPECT_TRUE(SearchEngine::validateTorznabConfig("https://localhost:9117/api/v2.0/indexers/all/results/torznab").success);
+
+	EXPECT_FALSE(SearchEngine::validateProxyConfig(true, "socks5", "", 1080).success);
+	EXPECT_FALSE(SearchEngine::validateProxyConfig(true, "http", "localhost", 70000).success);
+	EXPECT_TRUE(SearchEngine::validateProxyConfig(false, "socks5", "", 1080).success);
+}

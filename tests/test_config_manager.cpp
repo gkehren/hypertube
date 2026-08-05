@@ -84,6 +84,49 @@ TEST_F(ConfigManagerTest, SaveAndLoadConfig)
 	EXPECT_TRUE(manager2.getEnableNATPMP());
 }
 
+TEST_F(ConfigManagerTest, PreferencesCandidateCommitsOnlyAfterDurableSave)
+{
+	ConfigManager manager;
+	const std::string configPath = (testDir / "transactional-settings.json").string();
+	manager.load(configPath);
+	PreferencesSettings candidate = manager.getPreferencesSettings();
+	candidate.downloadSpeedLimit = 123456;
+	candidate.downloadPath = "/transactional/path";
+	candidate.enableDht = false;
+
+	SaveHandle save = manager.savePreferencesCandidate(configPath, candidate);
+	ASSERT_EQ(save.get().code, ResultCode::None);
+	EXPECT_EQ(manager.getDownloadSpeedLimit(), 0);
+	EXPECT_NE(manager.getDownloadPath(), "/transactional/path");
+	ASSERT_TRUE(manager.commitPreferences(candidate));
+	EXPECT_EQ(manager.getDownloadSpeedLimit(), 123456);
+	EXPECT_EQ(manager.getDownloadPath(), "/transactional/path");
+
+	ConfigManager restored;
+	ASSERT_TRUE(restored.load(configPath));
+	EXPECT_EQ(restored.getDownloadSpeedLimit(), 123456);
+	EXPECT_FALSE(restored.getEnableDHT());
+}
+
+TEST_F(ConfigManagerTest, PreferencesCandidatePreservesUnknownData)
+{
+	const std::string configPath = (testDir / "transactional-unknown.json").string();
+	{
+		std::ofstream file(configPath);
+		file << R"({"version":1,"custom":42,"settings":{"custom_setting":"keep"}})";
+	}
+	ConfigManager manager;
+	ASSERT_TRUE(manager.load(configPath));
+	PreferencesSettings candidate = manager.getPreferencesSettings();
+	candidate.proxyPort = 9999;
+	ASSERT_TRUE(manager.savePreferencesCandidate(configPath, candidate).get());
+	ConfigManager restored;
+	ASSERT_TRUE(restored.load(configPath));
+	EXPECT_EQ(restored.getConfig()["custom"], 42);
+	EXPECT_EQ(restored.getConfig()["settings"]["custom_setting"], "keep");
+	EXPECT_EQ(restored.getProxyPort(), 9999);
+}
+
 TEST_F(ConfigManagerTest, PersistsSearchAndProxySettingsWithoutSecrets)
 {
 	ConfigManager manager;

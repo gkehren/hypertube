@@ -9,6 +9,7 @@
 #include <condition_variable>
 #include <queue>
 #include <atomic>
+#include <future>
 #include "TorrentManager.hpp"
 #include "Result.hpp"
 
@@ -25,6 +26,26 @@ struct TorrentConfigData
 	std::vector<char> resumeData;
 };
 
+struct PreferencesSettings
+{
+	int downloadSpeedLimit = 0;
+	int uploadSpeedLimit = 0;
+	int theme = 0;
+	std::string downloadPath;
+	bool enableDht = true;
+	bool enableUpnp = true;
+	bool enableNatPmp = true;
+	bool torznabEnabled = false;
+	std::string torznabUrl;
+	bool proxyEnabled = false;
+	std::string proxyType = "socks5";
+	std::string proxyHost;
+	int proxyPort = 1080;
+	std::string proxyUsername;
+};
+
+using SaveHandle = std::shared_future<Result>;
+
 class ConfigManager
 {
 public:
@@ -33,6 +54,9 @@ public:
 
 	Result load(const std::string &path, bool fullConfig = true);
 	void save(const std::string &path);
+	SaveHandle savePreferencesCandidate(const std::string &path, const PreferencesSettings &settings);
+	Result commitPreferences(const PreferencesSettings &settings);
+	PreferencesSettings getPreferencesSettings() const;
 
 	void saveTorrents(const std::vector<ManagedTorrent> &torrents);
 	Result loadTorrents(const std::string &path, std::vector<TorrentConfigData> &outTorrents);
@@ -93,6 +117,7 @@ private:
 	struct SaveRequest {
 		std::string path;
 		json data;
+		std::shared_ptr<std::promise<Result>> completion;
 	};
 
 	std::thread saveThread;
@@ -103,7 +128,7 @@ private:
 	std::atomic<int> activeJobs{0};
 
 	void workerLoop();
-	void enqueueSave(const std::string& path, json data);
+	SaveHandle enqueueSave(const std::string& path, json data);
 
 	json createDefaultConfig() const;
 	void ensureSettingsStructure();

@@ -16,40 +16,6 @@ void LogsUI::displayLogsWindow()
 	ImGui::Begin("Logs");
 
 	const auto diagnostics = Utils::Logger::recent();
-	if (!diagnostics.empty())
-	{
-		if (ImGui::TreeNode("Application diagnostics"))
-		{
-			const std::size_t first = diagnostics.size() > 20 ? diagnostics.size() - 20 : 0;
-			for (std::size_t i = first; i < diagnostics.size(); ++i)
-			{
-				const auto &record = diagnostics[i];
-				const char *level = "INFO";
-				ImVec4 color = ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
-				switch (record.level)
-				{
-				case Utils::LogLevel::Debug:
-					level = "DEBUG";
-					break;
-				case Utils::LogLevel::Warning:
-					level = "WARN";
-					color = ImVec4(1.0f, 0.8f, 0.4f, 1.0f);
-					break;
-				case Utils::LogLevel::Error:
-					level = "ERROR";
-					color = ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
-					break;
-				case Utils::LogLevel::Info:
-					break;
-				}
-				ImGui::PushStyleColor(ImGuiCol_Text, color);
-				ImGui::TextWrapped("[%s] [%s] %s", level, record.category.c_str(), record.message.c_str());
-				ImGui::PopStyleColor();
-			}
-			ImGui::TreePop();
-		}
-		ImGui::Separator();
-	}
 
 	// Top toolbar with controls
 	if (ImGui::Button("Clear"))
@@ -64,53 +30,50 @@ void LogsUI::displayLogsWindow()
 	ImGui::SameLine();
 	
 	// Filter checkboxes
-	ImGui::Checkbox("Tracker", &showTrackerErrors);
+	ImGui::Checkbox("Debug", &showDebug);
 	ImGui::SameLine();
-	ImGui::Checkbox("Storage", &showStorageErrors);
+	ImGui::Checkbox("Info", &showInfo);
 	ImGui::SameLine();
-	ImGui::Checkbox("Stats", &showConnectionStats);
+	ImGui::Checkbox("Warnings", &showWarnings);
 	ImGui::SameLine();
-	ImGui::Checkbox("General", &showGeneralAlerts);
+	ImGui::Checkbox("Errors", &showErrors);
 
 	ImGui::Separator();
 
 	// Display logs in a scrollable region
 	ImGui::BeginChild("LogScrolling", ImVec2(0, -30), false, ImGuiWindowFlags_HorizontalScrollbar);
 
-	// Update filtered cache
-	m_filteredEntries.clear();
-	m_filteredEntries.reserve(logEntries.size());
-	for (const auto &entry : logEntries)
+	const bool wasAtBottom = ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f;
+	const std::size_t first = diagnostics.size() > maxLogEntries ? diagnostics.size() - maxLogEntries : 0;
+	for (std::size_t i = first; i < diagnostics.size(); ++i)
 	{
-		// Apply filters
-		if ((entry.category == "Tracker" && !showTrackerErrors) ||
-			(entry.category == "Storage" && !showStorageErrors) ||
-			(entry.category == "Stats" && !showConnectionStats) ||
-			(entry.category == "General" && !showGeneralAlerts))
-		{
+		const auto &record = diagnostics[i];
+		if ((record.level == Utils::LogLevel::Debug && !showDebug) ||
+			(record.level == Utils::LogLevel::Info && !showInfo) ||
+			(record.level == Utils::LogLevel::Warning && !showWarnings) ||
+			(record.level == Utils::LogLevel::Error && !showErrors))
 			continue;
-		}
-		m_filteredEntries.push_back(&entry);
-	}
-
-	ImGuiListClipper clipper;
-	clipper.Begin(static_cast<int>(m_filteredEntries.size()));
-
-	while (clipper.Step())
-	{
-		for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
+		const char *level = "INFO";
+		ImVec4 color(0.8f, 0.8f, 0.8f, 1.0f);
+		if (record.level == Utils::LogLevel::Debug)
+			level = "DEBUG";
+		else if (record.level == Utils::LogLevel::Warning)
 		{
-			const auto &entry = *m_filteredEntries[i];
-
-			// Display timestamp, category, and message
-			std::string timestamp = formatTimestamp(entry.timestamp);
-			ImGui::PushStyleColor(ImGuiCol_Text, entry.color);
-			ImGui::TextWrapped("[%s] [%s] %s", timestamp.c_str(), entry.category.c_str(), entry.message.c_str());
-			ImGui::PopStyleColor();
+			level = "WARN";
+			color = ImVec4(1.0f, 0.8f, 0.4f, 1.0f);
 		}
+		else if (record.level == Utils::LogLevel::Error)
+		{
+			level = "ERROR";
+			color = ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
+		}
+		const std::string timestamp = formatTimestamp(record.timestamp);
+		ImGui::PushStyleColor(ImGuiCol_Text, color);
+		ImGui::TextUnformatted(("[" + timestamp + "] [" + level + "] [" + record.category + "] " + record.message).c_str());
+		ImGui::PopStyleColor();
 	}
 
-	if (autoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+	if (autoScroll && wasAtBottom)
 	{
 		ImGui::SetScrollHereY(1.0f);
 	}
@@ -119,7 +82,7 @@ void LogsUI::displayLogsWindow()
 
 	// Footer with log count
 	ImGui::Separator();
-	ImGui::Text("Total entries: %zu / %zu", logEntries.size(), maxLogEntries);
+	ImGui::Text("Recent entries: %zu / %zu", diagnostics.size(), maxLogEntries);
 
 	ImGui::End();
 }
@@ -140,7 +103,6 @@ void LogsUI::updateLogs()
 
 void LogsUI::clearLogs()
 {
-	logEntries.clear();
 	Utils::Logger::clearRecent();
 }
 
@@ -149,15 +111,9 @@ void LogsUI::setMaxLogEntries(size_t maxEntries)
 	maxLogEntries = maxEntries;
 }
 
-void LogsUI::addLogEntry(const std::string &category, const std::string &message, const ImVec4 &color)
+void LogsUI::addLogEntry(const std::string &category, const std::string &message, Utils::LogLevel level)
 {
-	logEntries.emplace_back(category, message, color);
-	
-	// Remove oldest entries if we exceed the max
-	while (logEntries.size() > maxLogEntries)
-	{
-		logEntries.pop_front();
-	}
+	Utils::Logger::log(level, category, message);
 }
 
 std::string LogsUI::formatTimestamp(const std::chrono::system_clock::time_point &time) const
@@ -192,27 +148,27 @@ void LogsUI::processAlert(lt::alert *alert)
 	{
 		std::stringstream ss;
 		ss << "Tracker error for '" << te->torrent_name() << "': " << te->error_message();
-		addLogEntry("Tracker", ss.str(), ImVec4(1.0f, 0.4f, 0.4f, 1.0f)); // Red
+		addLogEntry("tracker", ss.str(), Utils::LogLevel::Error);
 	}
 	// Process tracker warnings
 	else if (auto *tw = lt::alert_cast<lt::tracker_warning_alert>(alert))
 	{
 		std::stringstream ss;
 		ss << "Tracker warning for '" << tw->torrent_name() << "': " << tw->warning_message();
-		addLogEntry("Tracker", ss.str(), ImVec4(1.0f, 0.8f, 0.4f, 1.0f)); // Yellow
+		addLogEntry("tracker", ss.str(), Utils::LogLevel::Warning);
 	}
 	// Process storage errors
 	else if (auto *fe = lt::alert_cast<lt::file_error_alert>(alert))
 	{
 		std::stringstream ss;
 		ss << "File error for '" << fe->torrent_name() << "': " << fe->error.message();
-		addLogEntry("Storage", ss.str(), ImVec4(1.0f, 0.4f, 0.4f, 1.0f)); // Red
+		addLogEntry("storage", ss.str(), Utils::LogLevel::Error);
 	}
 	else if (auto *smf = lt::alert_cast<lt::storage_moved_failed_alert>(alert))
 	{
 		std::stringstream ss;
 		ss << "Storage move failed for '" << smf->torrent_name() << "': " << smf->error.message();
-		addLogEntry("Storage", ss.str(), ImVec4(1.0f, 0.4f, 0.4f, 1.0f)); // Red
+		addLogEntry("storage", ss.str(), Utils::LogLevel::Error);
 	}
 	// Process session stats
 	else if (auto *stats = lt::alert_cast<lt::session_stats_alert>(alert))
@@ -221,7 +177,7 @@ void LogsUI::processAlert(lt::alert *alert)
 		const auto &values = stats->counters();
 		std::stringstream msg;
 		msg << "Session stats updated";
-		addLogEntry("Stats", msg.str(), ImVec4(0.6f, 0.8f, 1.0f, 1.0f)); // Light blue
+		addLogEntry("torrent", msg.str(), Utils::LogLevel::Debug);
 	}
 	// Process torrent added
 	else if (auto *ta = lt::alert_cast<lt::add_torrent_alert>(alert))
@@ -230,13 +186,13 @@ void LogsUI::processAlert(lt::alert *alert)
 		{
 			std::stringstream ss;
 			ss << "Failed to add torrent: " << ta->error.message();
-			addLogEntry("General", ss.str(), ImVec4(1.0f, 0.4f, 0.4f, 1.0f)); // Red
+			addLogEntry("torrent", ss.str(), Utils::LogLevel::Error);
 		}
 		else
 		{
 			std::stringstream ss;
 			ss << "Torrent added: " << ta->torrent_name();
-			addLogEntry("General", ss.str(), ImVec4(0.6f, 1.0f, 0.6f, 1.0f)); // Green
+			addLogEntry("torrent", ss.str());
 		}
 	}
 	// Process torrent finished
@@ -244,26 +200,26 @@ void LogsUI::processAlert(lt::alert *alert)
 	{
 		std::stringstream ss;
 		ss << "Torrent finished: " << tf->torrent_name();
-		addLogEntry("General", ss.str(), ImVec4(0.6f, 1.0f, 0.6f, 1.0f)); // Green
+		addLogEntry("torrent", ss.str());
 	}
 	// Process metadata received (for magnet links)
 	else if (auto *mr = lt::alert_cast<lt::metadata_received_alert>(alert))
 	{
 		std::stringstream ss;
 		ss << "Metadata received for: " << mr->torrent_name();
-		addLogEntry("General", ss.str(), ImVec4(0.8f, 0.8f, 1.0f, 1.0f)); // Light purple
+		addLogEntry("torrent", ss.str());
 	}
 	// Process peer errors
 	else if (auto *pe = lt::alert_cast<lt::peer_error_alert>(alert))
 	{
 		std::stringstream ss;
 		ss << "Peer error for '" << pe->torrent_name() << "': " << pe->error.message();
-		addLogEntry("General", ss.str(), ImVec4(1.0f, 0.6f, 0.4f, 1.0f)); // Orange
+		addLogEntry("peer", ss.str(), Utils::LogLevel::Warning);
 	}
 	// Process DHT events
 	else if (auto *dht_bootstrap = lt::alert_cast<lt::dht_bootstrap_alert>(alert))
 	{
-		addLogEntry("General", "DHT bootstrap complete", ImVec4(0.8f, 0.8f, 1.0f, 1.0f));
+		addLogEntry("torrent", "DHT bootstrap complete");
 	}
 	// Catch other alerts as general
 	else
@@ -272,11 +228,11 @@ void LogsUI::processAlert(lt::alert *alert)
 		std::string msg = alert->message();
 		if (!msg.empty() && msg.find("error") != std::string::npos)
 		{
-			addLogEntry("General", msg, ImVec4(1.0f, 0.6f, 0.4f, 1.0f)); // Orange
+			addLogEntry("torrent", msg, Utils::LogLevel::Warning);
 		}
 		else if (!msg.empty())
 		{
-			addLogEntry("General", msg, ImVec4(0.8f, 0.8f, 0.8f, 1.0f)); // Gray
+			addLogEntry("torrent", msg, Utils::LogLevel::Debug);
 		}
 	}
 }

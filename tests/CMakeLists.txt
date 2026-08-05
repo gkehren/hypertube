@@ -11,6 +11,14 @@ enable_testing()
 
 add_executable(unit_tests
     test_string_utils.cpp
+	test_torrent_add_flow.cpp
+	test_system_utils.cpp
+)
+
+target_include_directories(unit_tests PRIVATE
+	"${CMAKE_SOURCE_DIR}/include"
+	"${CMAKE_SOURCE_DIR}/include/app"
+	"${CMAKE_SOURCE_DIR}/include/ui"
 )
 
 add_executable(config_tests

@@ -16,6 +16,7 @@ enum class ResultCode
 	Parse,
 	Storage,
 	Unavailable,
+	Partial,
 	Internal
 };
 

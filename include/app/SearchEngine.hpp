@@ -81,6 +81,7 @@ public:
 	std::string getActiveSearchProvider() const;
 	std::vector<std::string> getSearchProviders() const;
 	Result configureTorznabProvider(const std::string &url, const std::string &apiKey = "");
+	static Result validateTorznabConfig(const std::string &url);
 	void clearSearchCache();
 
 	// Async searches publish owned completions for the UI thread to consume.
@@ -109,6 +110,7 @@ public:
 	void setMaxRetries(int retries);
 	Result setProxyConfig(bool enabled, const std::string &type, const std::string &host,
 		int port, const std::string &username = "", const std::string &password = "");
+	static Result validateProxyConfig(bool enabled, const std::string &type, const std::string &host, int port);
 
 	// Status
 	bool isSearching() const;

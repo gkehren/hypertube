@@ -30,8 +30,7 @@ void ModalDialogs::handleAddTorrentModal(bool &showTorrentPopup, const std::stri
 			std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
 			if (!filePath.empty())
 			{
-				torrentToAdd.first = false; // Not a magnet link
-				torrentToAdd.second = filePath;
+				addFlow.beginFile(filePath);
 			}
 		}
 		ImGuiFileDialog::Instance()->Close();
@@ -69,8 +68,7 @@ void ModalDialogs::handleAddMagnetTorrentModal(bool &showMagnetTorrentPopup)
 
 		if (HypertubeTheme::drawStyledButton("Add", ImVec2(buttonWidth, 35), true))
 		{
-			torrentToAdd.first = true; // Is a magnet link
-			torrentToAdd.second = std::string(magnetLinkBuffer);
+			addFlow.beginMagnet(std::string(magnetLinkBuffer));
 			memset(magnetLinkBuffer, 0, sizeof(magnetLinkBuffer));
 			ImGui::CloseCurrentPopup();
 		}
@@ -78,6 +76,8 @@ void ModalDialogs::handleAddMagnetTorrentModal(bool &showMagnetTorrentPopup)
 		ImGui::SameLine(0, spacing);
 		if (HypertubeTheme::drawStyledButton("Cancel", ImVec2(buttonWidth, 35), false))
 		{
+			memset(magnetLinkBuffer, 0, sizeof(magnetLinkBuffer));
+			addFlow.cancel();
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
@@ -88,29 +88,28 @@ void ModalDialogs::handleRemoveTorrentModal(const std::vector<TorrentRemovalInfo
 {
 	if (torrentsToRemove.size() > 0)
 	{
+		pendingRemovals = torrentsToRemove;
 		ImGui::OpenPopup("Remove Torrent");
 	}
 	removeTorrentModal();
 }
 
-void ModalDialogs::handleAskSavePathModal(const std::pair<bool, std::string> &torrentToAdd,
-										  const TorrentSearchResult &selectedSearchResult,
-										  const std::string &defaultSavePath,
-										  const std::string &currentSavePath)
+void ModalDialogs::handleAskSavePathModal(const std::string &defaultSavePath, const std::string &currentSavePath)
 {
-	if (!torrentToAdd.second.empty())
+	if (addFlow.needsDestinationDialog())
 	{
 		IGFD::FileDialogConfig config;
 		config.path = currentSavePath.empty() ? defaultSavePath : currentSavePath;
 		config.flags = ImGuiFileDialogFlags_Modal | ImGuiFileDialogFlags_ShowDevicesButton | ImGuiFileDialogFlags_DontShowHiddenFiles;
 		ImGuiFileDialog::Instance()->OpenDialog("ChooseSavePath", "Choose a directory to save the torrent", nullptr, config);
+		addFlow.markDestinationDialogOpened();
 	}
 	askSavePathModal();
 }
 
 void ModalDialogs::askSavePathModal()
 {
-	if (torrentToAdd.second.empty() && selectedSearchResult.infoHash.empty())
+	if (!addFlow.hasPendingRequest())
 		return;
 
 	if (ImGuiFileDialog::Instance()->Display("ChooseSavePath", ImGuiWindowFlags_NoCollapse, ImVec2(800, 600)))
@@ -120,27 +119,10 @@ void ModalDialogs::askSavePathModal()
 			savePath = ImGuiFileDialog::Instance()->GetCurrentPath();
 			if (!savePath.empty())
 			{
-				Result result(true);
-
-				// Handle search result
-				if (!selectedSearchResult.infoHash.empty())
-				{
-					result = torrentManager.addMagnetTorrent(selectedSearchResult.magnetUri, savePath);
-					selectedSearchResult = TorrentSearchResult(); // Clear selection
-				}
-				// Handle regular torrent addition
-				else if (!torrentToAdd.second.empty())
-				{
-					if (torrentToAdd.first)
-					{
-						result = torrentManager.addMagnetTorrent(torrentToAdd.second, savePath);
-					}
-					else
-					{
-						result = torrentManager.addTorrent(torrentToAdd.second, savePath);
-					}
-					torrentToAdd.second.clear();
-				}
+				const auto request = addFlow.take();
+				Result result = request && request->source == TorrentAddSource::TorrentFile
+					? torrentManager.addTorrent(request->value, savePath)
+					: torrentManager.addMagnetTorrent(request ? request->value : std::string{}, savePath);
 
 				if (!result)
 				{
@@ -150,7 +132,10 @@ void ModalDialogs::askSavePathModal()
 					}
 				}
 			}
-			ImGuiFileDialog::Instance()->Close();
+		}
+		else
+		{
+			addFlow.cancel();
 		}
 		ImGuiFileDialog::Instance()->Close();
 	}
@@ -191,7 +176,7 @@ void ModalDialogs::removeTorrentModal()
 {
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(420, 150), ImGuiCond_Appearing);
+	ImGui::SetNextWindowSize(ImVec2(480, 220), ImGuiCond_Appearing);
 
 	if (ImGui::BeginPopupModal("Remove Torrent", nullptr, ImGuiWindowFlags_NoResize))
 	{
@@ -199,8 +184,13 @@ void ModalDialogs::removeTorrentModal()
 
 		ImGui::Spacing();
 		ImGui::PushStyleColor(ImGuiCol_Text, palette.warning);
-		ImGui::TextWrapped("Are you sure you want to remove the selected torrent?");
+		const auto &removal = pendingRemovals.front();
+		const bool deleteData = removal.removeMode == TorrentRemovalMode::DeleteData || removal.removeMode == TorrentRemovalMode::DeleteDataAndSourceTorrent;
+		const bool deleteSource = removal.removeMode == TorrentRemovalMode::DeleteSourceTorrent || removal.removeMode == TorrentRemovalMode::DeleteDataAndSourceTorrent;
+		ImGui::TextWrapped("Remove '%s'?", removal.name.empty() ? "selected torrent" : removal.name.c_str());
 		ImGui::PopStyleColor();
+		ImGui::TextWrapped("Downloaded data: %s", deleteData ? "delete" : "keep");
+		ImGui::TextWrapped("Source .torrent file: %s", deleteSource ? "delete" : "keep");
 		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::Spacing();
@@ -221,6 +211,7 @@ void ModalDialogs::removeTorrentModal()
 			{
 				onRemoveCompleted();
 			}
+			pendingRemovals.clear();
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::PopStyleColor(3);
@@ -233,6 +224,7 @@ void ModalDialogs::removeTorrentModal()
 			{
 				onRemoveCancelled();
 			}
+			pendingRemovals.clear();
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();

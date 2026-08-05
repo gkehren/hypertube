@@ -16,9 +16,6 @@ SearchUI::SearchUI(SearchEngine &searchEngine)
 
 void SearchUI::displayIntegratedSearch()
 {
-	// Process any pending results from async search
-	processPendingResults();
-
 	// Search input section with styled header
 	HypertubeTheme::drawSectionHeader("Torrent Search");
 
@@ -112,6 +109,14 @@ void SearchUI::displayIntegratedSearch()
 		ImGui::ProgressBar(-1.0f * (float)ImGui::GetTime(), ImVec2(200.0f, 4.0f), "");
 		ImGui::PopStyleColor();
 	}
+	else if (state == State::Empty || state == State::Cancelled || state == State::Failed)
+	{
+		ImGui::Spacing();
+		const ImVec4 color = state == State::Failed
+			? HypertubeTheme::getCurrentPalette().error
+			: HypertubeTheme::getCurrentPalette().textSecondary;
+		ImGui::TextColored(color, "%s", stateMessage.c_str());
+	}
 
 	ImGui::Spacing();
 	ImGui::Separator();
@@ -163,9 +168,12 @@ void SearchUI::displayEnhancedSearchResults()
 		// Handle sorting
 		if (ImGuiTableSortSpecs *sort_specs = ImGui::TableGetSortSpecs())
 		{
+			if (resultsChanged)
+				sort_specs->SpecsDirty = true;
 			if (sort_specs->SpecsDirty)
 			{
 				sortTorrentResults(searchResults, sort_specs);
+				resultsChanged = false;
 			}
 		}
 
@@ -561,6 +569,8 @@ void SearchUI::performSearch(const std::string &query)
 		return;
 	}
 	isSearching = true;
+	state = State::Loading;
+	stateMessage.clear();
 	loadingMore = false;
 	activeRequestId = requestId;
 	searchResults.clear();
@@ -612,6 +622,7 @@ void SearchUI::loadMoreResults()
 			return;
 		}
 		isSearching = true;
+		state = State::Loading;
 		loadingMore = true;
 		activeRequestId = requestId;
 	}
@@ -685,11 +696,18 @@ void SearchUI::processPendingResults()
 			const std::string &errorMsg = completion->result.message;
 
 			// Cancellation is an expected terminal state, not an application error.
-			if (completion->result.code != ResultCode::Cancelled)
+			if (completion->result.code == ResultCode::Cancelled)
 			{
+				state = State::Cancelled;
+				stateMessage = "Search cancelled.";
+			}
+			else
+			{
+				state = State::Failed;
+				stateMessage = "Search failed: " + errorMsg;
 				if (onShowFailurePopup)
 				{
-					onShowFailurePopup("Search failed: " + errorMsg);
+					onShowFailurePopup(stateMessage);
 				}
 			}
 		}
@@ -698,18 +716,40 @@ void SearchUI::processPendingResults()
 			// Check if this is a "load more" request by seeing if we already have results
 			if (loadingMore)
 			{
-				searchResults.insert(searchResults.end(),
-										 completion->response.torrents.begin(),
-										 completion->response.torrents.end());
+				mergeUniqueResults(std::move(completion->response.torrents));
 			}
 			else
-				searchResults = std::move(completion->response.torrents);
+			{
+				searchResults.clear();
+				mergeUniqueResults(std::move(completion->response.torrents));
+			}
 
 			nextToken = completion->response.nextToken;
 			hasMoreResults = completion->response.hasMore;
+			state = searchResults.empty() ? State::Empty : State::Results;
+			stateMessage = searchResults.empty() ? "No results found for this query." : std::string{};
 		}
 		loadingMore = false;
 	}
+}
+
+void SearchUI::update()
+{
+	processPendingResults();
+}
+
+void SearchUI::mergeUniqueResults(std::vector<TorrentSearchResult> results)
+{
+	for (auto &result : results)
+	{
+		const auto duplicate = std::find_if(searchResults.begin(), searchResults.end(), [&result](const TorrentSearchResult &existing)
+		{
+			return !result.infoHash.empty() && existing.infoHash == result.infoHash;
+		});
+		if (duplicate == searchResults.end())
+			searchResults.push_back(std::move(result));
+	}
+	resultsChanged = true;
 }
 
 bool SearchUI::isInFavorites(const std::string &infoHash) const

@@ -1,6 +1,8 @@
 #include "TorrentManager.hpp"
 #include "ConfigManager.hpp"
 #include "Logger.hpp"
+#include "StringUtils.hpp"
+#include "SystemUtils.hpp"
 #include <iostream>
 #include <algorithm>
 #include <filesystem>
@@ -43,6 +45,11 @@ Result validateAddPaths(const std::string &savePath, const std::string *torrentP
 	if (error || !std::filesystem::is_directory(destination, error))
 		return Result::Failure("Download path cannot be created or accessed: " + savePath, ResultCode::Storage);
 	return Result::Success();
+}
+
+std::size_t detailSectionIndex(TorrentDetailSection section)
+{
+	return static_cast<std::size_t>(section);
 }
 }
 
@@ -169,7 +176,7 @@ void TorrentManager::addTorrentsFromConfig(const std::vector<TorrentConfigData> 
 	}
 }
 
-Result TorrentManager::removeTorrent(const lt::info_hash_t &hash, RemoveTorrentType removeType)
+Result TorrentManager::removeTorrent(const lt::info_hash_t &hash, TorrentRemovalMode removeMode)
 {
 	std::lock_guard<std::mutex> operationLock(operationMutex);
 	lt::torrent_handle handle;
@@ -187,7 +194,8 @@ Result TorrentManager::removeTorrent(const lt::info_hash_t &hash, RemoveTorrentT
 
 	if (handle.is_valid())
 	{
-		if (removeType == REMOVE_TORRENT_FILES || removeType == REMOVE_TORRENT_FILES_AND_DATA)
+		std::string sourceRemovalError;
+		if (removeMode == TorrentRemovalMode::DeleteSourceTorrent || removeMode == TorrentRemovalMode::DeleteDataAndSourceTorrent)
 		{
 			if (!torrentFilePath.empty())
 			{
@@ -195,19 +203,19 @@ Result TorrentManager::removeTorrent(const lt::info_hash_t &hash, RemoveTorrentT
 				{
 					if (std::filesystem::exists(torrentFilePath))
 					{
-						std::filesystem::remove(torrentFilePath);
-						std::cout << "Deleted .torrent file: " << torrentFilePath << std::endl;
+						if (!std::filesystem::remove(torrentFilePath))
+							sourceRemovalError = "the source .torrent file could not be removed";
 					}
 				}
 				catch (const std::exception &e)
 				{
-					std::cerr << "Failed to delete .torrent file: " << e.what() << std::endl;
-					Utils::Logger::warning("torrent", "Failed to delete .torrent file: " + std::string(e.what()));
+					sourceRemovalError = "the source .torrent file could not be removed: " + std::string(e.what());
+					Utils::Logger::warning("torrent", sourceRemovalError);
 				}
 			}
 		}
 
-		if (removeType == REMOVE_TORRENT_DATA || removeType == REMOVE_TORRENT_FILES_AND_DATA)
+		if (removeMode == TorrentRemovalMode::DeleteData || removeMode == TorrentRemovalMode::DeleteDataAndSourceTorrent)
 			session.remove_torrent(handle, lt::session::delete_files);
 		else
 			session.remove_torrent(handle);
@@ -220,9 +228,68 @@ Result TorrentManager::removeTorrent(const lt::info_hash_t &hash, RemoveTorrentT
 		invalidateStatusCache(cacheMutex, statusCache);
 		Utils::Logger::info("torrent", "Removed torrent " + hashForLog(hash));
 
+		if (!sourceRemovalError.empty())
+			return Result::Failure("Torrent removed, but " + sourceRemovalError, ResultCode::Partial);
 		return Result::Success();
 	}
 	return Result::Failure("Torrent handle is invalid");
+}
+
+Result TorrentManager::executeCommand(const lt::info_hash_t &hash, TorrentCommand command)
+{
+	std::lock_guard<std::mutex> operationLock(operationMutex);
+	lt::torrent_handle handle;
+	{
+		std::lock_guard<std::mutex> lock(stateMutex);
+		const auto it = torrents.find(hash);
+		if (it == torrents.end())
+			return Result::Failure("Torrent not found", ResultCode::NotFound);
+		handle = it->second;
+	}
+	if (!handle.is_valid())
+		return Result::Failure("Torrent handle is invalid", ResultCode::Unavailable);
+
+	try
+	{
+		switch (command)
+		{
+		case TorrentCommand::Pause:
+			handle.set_flags(lt::torrent_flags::paused);
+			break;
+		case TorrentCommand::Resume:
+			handle.set_flags(lt::torrent_flags::auto_managed);
+			handle.unset_flags(lt::torrent_flags::paused);
+			break;
+		case TorrentCommand::ForceStart:
+			handle.unset_flags(lt::torrent_flags::auto_managed | lt::torrent_flags::paused);
+			break;
+		case TorrentCommand::ForceRecheck:
+			handle.force_recheck();
+			break;
+		case TorrentCommand::MoveQueueUp:
+			handle.queue_position_up();
+			break;
+		case TorrentCommand::MoveQueueDown:
+			handle.queue_position_down();
+			break;
+		case TorrentCommand::ForceReannounce:
+			handle.force_reannounce();
+			break;
+		case TorrentCommand::EnableSequential:
+			handle.set_flags(lt::torrent_flags::sequential_download);
+			break;
+		case TorrentCommand::DisableSequential:
+			handle.unset_flags(lt::torrent_flags::sequential_download);
+			break;
+		}
+		invalidateStatusCache(cacheMutex, statusCache);
+		return Result::Success();
+	}
+	catch (const std::exception &e)
+	{
+		Utils::Logger::error("torrent", "Torrent command failed: " + std::string(e.what()));
+		return Result::Failure("Torrent command failed: " + std::string(e.what()));
+	}
 }
 
 std::vector<ManagedTorrent> TorrentManager::getTorrentSnapshot() const
@@ -358,7 +425,14 @@ void TorrentManager::refreshStatusCache()
 	{
 		if (torrent.handle.is_valid())
 		{
-			(*newCache)[torrent.hash] = torrent.handle.status();
+			try
+			{
+				(*newCache)[torrent.hash] = torrent.handle.status();
+			}
+			catch (const std::exception &e)
+			{
+				Utils::Logger::warning("torrent", "Status refresh skipped a torrent: " + std::string(e.what()));
+			}
 		}
 	}
 
@@ -370,6 +444,27 @@ void TorrentManager::refreshStatusCache()
 	{
 		std::lock_guard<std::mutex> lock(cacheMutex);
 		lastCacheRefresh = std::chrono::steady_clock::now();
+	}
+}
+
+void TorrentManager::requestStatusRefresh()
+{
+	if (!shouldRefreshCache() || statusRefreshPending.exchange(true))
+		return;
+	statusWorkerCv.notify_one();
+}
+
+void TorrentManager::statusWorkerLoop()
+{
+	while (!stopStatusWorker.load())
+	{
+		std::unique_lock<std::mutex> lock(statusWorkerMutex);
+		statusWorkerCv.wait(lock, [this]() { return stopStatusWorker.load() || statusRefreshPending.load(); });
+		if (stopStatusWorker.load())
+			break;
+		statusRefreshPending = false;
+		lock.unlock();
+		refreshStatusCache();
 	}
 }
 
@@ -385,6 +480,187 @@ bool TorrentManager::shouldRefreshCache() const
 	auto now = std::chrono::steady_clock::now();
 	auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastCacheRefresh);
 	return elapsed.count() >= cacheRefreshIntervalMs;
+}
+
+void TorrentManager::requestDetailsRefresh(const lt::info_hash_t &hash, TorrentDetailSection section)
+{
+	const std::size_t index = detailSectionIndex(section);
+	{
+		std::lock_guard<std::mutex> lock(detailMutex);
+		const auto last = detailLastRefresh[index].find(hash);
+		const auto interval = section == TorrentDetailSection::Files
+			? std::chrono::milliseconds(500)
+			: section == TorrentDetailSection::Peers ? std::chrono::seconds(1) : std::chrono::seconds(5);
+		if (last != detailLastRefresh[index].end() && std::chrono::steady_clock::now() - last->second < interval)
+			return;
+		if (pendingDetailRequests[index].insert(hash).second)
+			detailRequests.push_back({hash, section});
+	}
+	detailCv.notify_one();
+}
+
+std::shared_ptr<const TorrentDetailsSnapshot> TorrentManager::getDetailsSnapshot(const lt::info_hash_t &hash, TorrentDetailSection section) const
+{
+	const std::size_t index = detailSectionIndex(section);
+	std::lock_guard<std::mutex> lock(detailMutex);
+	const auto it = detailCache[index].find(hash);
+	return it == detailCache[index].end() ? nullptr : it->second;
+}
+
+Result TorrentManager::setFilePriority(const lt::info_hash_t &hash, int fileIndex, int priority)
+{
+	if (fileIndex < 0 || priority < 0 || priority > 7)
+		return Result::Failure("Invalid file priority", ResultCode::InvalidInput);
+	std::lock_guard<std::mutex> operationLock(operationMutex);
+	lt::torrent_handle handle;
+	{
+		std::lock_guard<std::mutex> lock(stateMutex);
+		const auto it = torrents.find(hash);
+		if (it == torrents.end())
+			return Result::Failure("Torrent not found", ResultCode::NotFound);
+		handle = it->second;
+	}
+	if (!handle.is_valid())
+		return Result::Failure("Torrent handle is invalid", ResultCode::Unavailable);
+	try
+	{
+		handle.file_priority(lt::file_index_t(fileIndex), static_cast<lt::download_priority_t>(priority));
+		requestDetailsRefresh(hash, TorrentDetailSection::Files);
+		return Result::Success();
+	}
+	catch (const std::exception &e)
+	{
+		return Result::Failure("Unable to set file priority: " + std::string(e.what()));
+	}
+}
+
+std::shared_ptr<const TorrentDetailsSnapshot> TorrentManager::collectDetails(const DetailRequest &request)
+{
+	auto snapshot = std::make_shared<TorrentDetailsSnapshot>();
+	snapshot->section = request.section;
+	// Torrent operations use operationMutex before stateMutex. Keep the same
+	// order here so a detail refresh cannot deadlock a concurrent command or
+	// removal operation.
+	std::lock_guard<std::mutex> operationLock(operationMutex);
+	lt::torrent_handle handle;
+	{
+		std::lock_guard<std::mutex> lock(stateMutex);
+		const auto it = torrents.find(request.hash);
+		if (it == torrents.end())
+		{
+			snapshot->state = TorrentDetailState::Unavailable;
+			snapshot->message = "Torrent is no longer available";
+			return snapshot;
+		}
+		handle = it->second;
+	}
+	if (!handle.is_valid())
+	{
+		snapshot->state = TorrentDetailState::Unavailable;
+		snapshot->message = "Torrent handle is no longer valid";
+		return snapshot;
+	}
+
+	try
+	{
+		if (request.section == TorrentDetailSection::Files)
+		{
+			auto torrentFile = handle.torrent_file();
+			if (!torrentFile)
+			{
+				snapshot->state = TorrentDetailState::Unavailable;
+				snapshot->message = "Metadata not available yet";
+				return snapshot;
+			}
+			snapshot->savePath = handle.status().save_path;
+			const auto storage = torrentFile->files();
+			std::vector<std::int64_t> progress;
+			handle.file_progress(progress);
+			constexpr int maxFiles = 10000;
+			const int totalFiles = storage.num_files();
+			const int count = std::min(totalFiles, maxFiles);
+			snapshot->truncated = totalFiles > maxFiles;
+			snapshot->files.reserve(count);
+			for (int i = 0; i < count; ++i)
+			{
+				const lt::file_index_t index(i);
+				TorrentFileSnapshot file;
+				file.index = i;
+				file.name = std::string(storage.file_name(index));
+				file.relativePath = std::string(storage.file_path(index));
+				file.size = storage.file_size(index);
+				file.downloaded = i < static_cast<int>(progress.size()) ? progress[static_cast<std::size_t>(i)] : 0;
+				file.priority = static_cast<int>(handle.file_priority(index));
+				snapshot->files.push_back(std::move(file));
+			}
+		}
+		else if (request.section == TorrentDetailSection::Peers)
+		{
+			std::vector<lt::peer_info> peers;
+			handle.get_peer_info(peers);
+			constexpr std::size_t maxPeers = 2000;
+			if (peers.size() > maxPeers)
+			{
+				peers.resize(maxPeers);
+				snapshot->truncated = true;
+			}
+			snapshot->peers.reserve(peers.size());
+			for (const auto &peer : peers)
+			{
+				TorrentPeerSnapshot item;
+				item.address = peer.ip.address().to_string();
+				item.client = peer.client.substr(0, 128);
+				char flags[32]{};
+				Utils::getPeerFlags(peer, flags, sizeof(flags));
+				item.flags = flags;
+				item.downloadSpeed = peer.payload_down_speed;
+				item.uploadSpeed = peer.payload_up_speed;
+				snapshot->peers.push_back(std::move(item));
+			}
+		}
+		else
+		{
+			const auto trackers = handle.trackers();
+			constexpr std::size_t maxTrackers = 2000;
+			const std::size_t count = std::min(trackers.size(), maxTrackers);
+			snapshot->truncated = trackers.size() > maxTrackers;
+			snapshot->trackers.reserve(count);
+			for (std::size_t i = 0; i < count; ++i)
+				snapshot->trackers.push_back({trackers[i].url, trackers[i].verified});
+		}
+		snapshot->state = TorrentDetailState::Ready;
+		return snapshot;
+	}
+	catch (const std::exception &e)
+	{
+		snapshot->state = TorrentDetailState::Failed;
+		snapshot->message = e.what();
+		Utils::Logger::warning("torrent", "Detail snapshot failed: " + std::string(e.what()));
+		return snapshot;
+	}
+}
+
+void TorrentManager::detailWorkerLoop()
+{
+	while (true)
+	{
+		DetailRequest request;
+		{
+			std::unique_lock<std::mutex> lock(detailMutex);
+			detailCv.wait(lock, [this] { return stopDetailWorker.load() || !detailRequests.empty(); });
+			if (detailRequests.empty() && stopDetailWorker.load())
+				return;
+			request = detailRequests.front();
+			detailRequests.pop_front();
+			pendingDetailRequests[detailSectionIndex(request.section)].erase(request.hash);
+		}
+		const auto snapshot = collectDetails(request);
+		{
+			std::lock_guard<std::mutex> lock(detailMutex);
+			detailCache[detailSectionIndex(request.section)][request.hash] = snapshot;
+			detailLastRefresh[detailSectionIndex(request.section)][request.hash] = std::chrono::steady_clock::now();
+		}
+	}
 }
 
 // Polls alerts from the libtorrent session. Returns a vector of alert pointers.
@@ -445,4 +721,20 @@ void TorrentManager::setProxyConfig(const std::string &hostname, int port, const
 		libtorrentProxyType = username.empty() ? lt::settings_pack::http : lt::settings_pack::http_pw;
 	settings.set_int(lt::settings_pack::proxy_type, libtorrentProxyType);
 	session.apply_settings(settings);
+}
+TorrentManager::TorrentManager()
+	: statusWorker(&TorrentManager::statusWorkerLoop, this), detailWorker(&TorrentManager::detailWorkerLoop, this)
+{
+}
+
+TorrentManager::~TorrentManager()
+{
+	stopDetailWorker = true;
+	detailCv.notify_all();
+	if (detailWorker.joinable())
+		detailWorker.join();
+	stopStatusWorker = true;
+	statusWorkerCv.notify_all();
+	if (statusWorker.joinable())
+		statusWorker.join();
 }

@@ -6,10 +6,20 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <utility>
 #include "TorrentManager.hpp"
 #include "SearchEngine.hpp"
+#include "TorrentAddFlow.hpp"
 
-struct TorrentRemovalInfo;
+struct TorrentRemovalInfo
+{
+	lt::info_hash_t hash;
+	std::string name;
+	TorrentRemovalMode removeMode;
+
+	TorrentRemovalInfo(const lt::info_hash_t &hash, std::string name, TorrentRemovalMode removeMode)
+		: hash(hash), name(std::move(name)), removeMode(removeMode) {}
+};
 
 class ModalDialogs
 {
@@ -21,10 +31,7 @@ public:
 	void handleAddTorrentModal(bool &showTorrentPopup, const std::string &defaultSavePath);
 	void handleAddMagnetTorrentModal(bool &showMagnetTorrentPopup);
 	void handleRemoveTorrentModal(const std::vector<TorrentRemovalInfo> &torrentsToRemove);
-	void handleAskSavePathModal(const std::pair<bool, std::string> &torrentToAdd,
-								const TorrentSearchResult &selectedSearchResult,
-								const std::string &defaultSavePath,
-								const std::string &savePath);
+	void handleAskSavePathModal(const std::string &defaultSavePath, const std::string &savePath);
 
 	// Individual modal methods
 	void askSavePathModal();
@@ -32,8 +39,7 @@ public:
 	void removeTorrentModal();
 
 	// State management
-	std::pair<bool, std::string> getTorrentToAdd() const { return torrentToAdd; }
-	void clearTorrentToAdd() { torrentToAdd = std::make_pair(false, ""); }
+	void beginSearchResult(const TorrentSearchResult &result) { addFlow.beginSearchResult(result); }
 
 	char *getMagnetLinkBuffer() { return magnetLinkBuffer; }
 	const char *getMagnetLinkBuffer() const { return magnetLinkBuffer; }
@@ -46,17 +52,16 @@ public:
 
 	// Access for external state
 	void setSavePath(const std::string &path) { savePath = path; }
-	void setSelectedSearchResult(const TorrentSearchResult &result) { selectedSearchResult = result; }
-	void clearSelectedSearchResult() { selectedSearchResult = TorrentSearchResult(); }
+	void cancelPendingAdd() { addFlow.cancel(); }
 
 private:
 	TorrentManager &torrentManager;
 
 	// Modal state
 	char magnetLinkBuffer[4096] = {0};
-	std::pair<bool, std::string> torrentToAdd;
+	TorrentAddFlow addFlow;
 	std::string savePath;
-	TorrentSearchResult selectedSearchResult;
+	std::vector<TorrentRemovalInfo> pendingRemovals;
 
 	// Callbacks
 	std::function<void(const std::string &)> onShowFailurePopup;

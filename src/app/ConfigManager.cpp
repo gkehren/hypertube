@@ -125,6 +125,31 @@ bool writeJsonAtomically(const std::string &path, const json &data, std::string 
 	}
 	return true;
 }
+
+void applyPreferencesToJson(json &config, const PreferencesSettings &settings)
+{
+	if (!config.is_object())
+		config = json::object();
+	if (!config.contains("version"))
+		config["version"] = 1;
+	config["theme"] = settings.theme;
+	if (!config.contains("settings") || !config["settings"].is_object())
+		config["settings"] = json::object();
+	auto &target = config["settings"];
+	target["speed_limits"]["download"] = std::max(settings.downloadSpeedLimit, 0);
+	target["speed_limits"]["upload"] = std::max(settings.uploadSpeedLimit, 0);
+	target["download_path"] = settings.downloadPath;
+	target["enable_dht"] = settings.enableDht;
+	target["enable_upnp"] = settings.enableUpnp;
+	target["enable_natpmp"] = settings.enableNatPmp;
+	target["search"]["torznab_enabled"] = settings.torznabEnabled;
+	target["search"]["torznab_url"] = settings.torznabUrl;
+	target["proxy"]["enabled"] = settings.proxyEnabled;
+	target["proxy"]["type"] = settings.proxyType == "http" ? "http" : "socks5";
+	target["proxy"]["host"] = settings.proxyHost;
+	target["proxy"]["port"] = std::clamp(settings.proxyPort, 1, 65535);
+	target["proxy"]["username"] = settings.proxyUsername;
+}
 } // namespace
 
 ConfigManager::ConfigManager()
@@ -173,25 +198,32 @@ void ConfigManager::workerLoop()
 		// Perform I/O outside the queue lock. A temporary file and backup keep
 		// the last valid configuration usable after an interruption or crash.
 		std::string errorMessage;
+		Result result = Result::Success();
 		if (!writeJsonAtomically(req.path, req.data, errorMessage))
 		{
 			std::cerr << "Failed to save configuration '" << req.path << "': " << errorMessage << std::endl;
 			Utils::Logger::error("config", "Failed to save '" + req.path + "': " + errorMessage);
+			result = Result::Failure(errorMessage, ResultCode::Storage, true);
 		}
+		if (req.completion)
+			req.completion->set_value(result);
 
 		activeJobs--;
 		queueCv.notify_all();
 	}
 }
 
-void ConfigManager::enqueueSave(const std::string& path, json data)
+SaveHandle ConfigManager::enqueueSave(const std::string& path, json data)
 {
+	auto completion = std::make_shared<std::promise<Result>>();
+	SaveHandle handle = completion->get_future().share();
 	{
 		std::lock_guard<std::mutex> lock(queueMutex);
 		activeJobs++;
-		saveQueue.push({path, std::move(data)});
+		saveQueue.push({path, std::move(data), completion});
 	}
 	queueCv.notify_one();
+	return handle;
 }
 
 json ConfigManager::createDefaultConfig() const
@@ -346,6 +378,51 @@ void ConfigManager::save(const std::string &path)
 
 	// Enqueue async save
 	enqueueSave(path, std::move(configSnapshot));
+}
+
+PreferencesSettings ConfigManager::getPreferencesSettings() const
+{
+	PreferencesSettings settings;
+	std::lock_guard<std::mutex> lock(configMutex);
+	const json empty = json::object();
+	const json &root = config.contains("settings") && config["settings"].is_object() ? config["settings"] : empty;
+	const json &speed = root.contains("speed_limits") && root["speed_limits"].is_object() ? root["speed_limits"] : empty;
+	const json &search = root.contains("search") && root["search"].is_object() ? root["search"] : empty;
+	const json &proxy = root.contains("proxy") && root["proxy"].is_object() ? root["proxy"] : empty;
+	settings.downloadSpeedLimit = std::max(speed.value("download", 0), 0);
+	settings.uploadSpeedLimit = std::max(speed.value("upload", 0), 0);
+	if (config.contains("theme") && config["theme"].is_number_integer())
+		settings.theme = config["theme"].get<int>();
+	settings.downloadPath = root.value("download_path", "~/Downloads");
+	settings.enableDht = root.value("enable_dht", true);
+	settings.enableUpnp = root.value("enable_upnp", true);
+	settings.enableNatPmp = root.value("enable_natpmp", true);
+	settings.torznabEnabled = search.value("torznab_enabled", false);
+	settings.torznabUrl = search.value("torznab_url", "");
+	settings.proxyEnabled = proxy.value("enabled", false);
+	settings.proxyType = proxy.value("type", "socks5");
+	settings.proxyHost = proxy.value("host", "127.0.0.1");
+	settings.proxyPort = std::clamp(proxy.value("port", 1080), 1, 65535);
+	settings.proxyUsername = proxy.value("username", "");
+	return settings;
+}
+
+SaveHandle ConfigManager::savePreferencesCandidate(const std::string &path, const PreferencesSettings &settings)
+{
+	json candidate;
+	{
+		std::lock_guard<std::mutex> lock(configMutex);
+		candidate = config;
+	}
+	applyPreferencesToJson(candidate, settings);
+	return enqueueSave(path, std::move(candidate));
+}
+
+Result ConfigManager::commitPreferences(const PreferencesSettings &settings)
+{
+	std::lock_guard<std::mutex> lock(configMutex);
+	applyPreferencesToJson(config, settings);
+	return Result::Success();
 }
 
 void ConfigManager::saveTorrents(const std::vector<ManagedTorrent> &torrents)

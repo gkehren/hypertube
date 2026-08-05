@@ -11,6 +11,7 @@
 #include <functional>
 #include <string>
 #include <array>
+#include <optional>
 #include "TorrentManager.hpp"
 #include "SearchEngine.hpp"
 #include "Result.hpp"
@@ -30,20 +31,11 @@ struct MenuBarItem
 	std::function<void(UIManager *)> action;
 };
 
-struct TorrentRemovalInfo
-{
-	lt::info_hash_t hash;
-	RemoveTorrentType removeType;
-
-	TorrentRemovalInfo(const lt::info_hash_t &hash, RemoveTorrentType removeType)
-		: hash(hash), removeType(removeType) {}
-};
-
 class UIManager
 {
 public:
 	UIManager(TorrentManager &torrentManager, SearchEngine &searchEngine, ConfigManager &settingsConfigManager);
-	~UIManager() = default;
+	~UIManager();
 
 	void init(GLFWwindow *window);
 	void initImGui(GLFWwindow *window);
@@ -57,10 +49,12 @@ private:
 	ImGuiIO io;
 	bool exitRequested = false;
 	std::string defaultSavePath;
+	std::string imguiIniPath;
 
 	// UI Component instances
 	std::unique_ptr<TorrentTableUI> torrentTableUI;
 	std::unique_ptr<TorrentDetailsUI> torrentDetailsUI;
+	std::unique_ptr<Utils::SystemUtils::SystemOpener> systemOpener;
 	std::unique_ptr<SearchUI> searchUI;
 	std::unique_ptr<ModalDialogs> modalDialogs;
 	std::unique_ptr<LogsUI> logsUI;
@@ -94,6 +88,13 @@ private:
 	std::array<char, 512> tempProxyPassword{};
 	int currentTheme = 0;
 	int selectedCategory = 0;
+	std::optional<SaveHandle> pendingPreferencesSave;
+	PreferencesSettings pendingPreferences;
+	PreferencesSettings previousPreferences;
+	std::optional<std::string> previousTorznabCredential;
+	std::optional<std::string> previousProxyCredential;
+	bool torznabCredentialChanged = false;
+	bool proxyCredentialChanged = false;
 
 	TorrentManager &torrentManager;
 	SearchEngine &searchEngine;
@@ -111,6 +112,9 @@ private:
 	void showFailurePopupWithMessage(const std::string &message);
 	void handleTorrentRemoval();
 	void displayPreferencesDialog();
-	void loadSpeedLimitsFromConfig();
 	void applySpeedLimits();
+	void handleKeyboardShortcuts();
+	void finishPreferencesSave();
+	Result restorePreferenceCredentials();
+	Result applyPreferencesRuntime(const PreferencesSettings &settings);
 };

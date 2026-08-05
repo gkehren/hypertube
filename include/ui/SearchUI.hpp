@@ -11,6 +11,7 @@
 class SearchUI
 {
 public:
+	enum class State { Idle, Loading, Results, Empty, Cancelled, Failed };
 	SearchUI(SearchEngine &searchEngine);
 	~SearchUI() = default;
 
@@ -18,6 +19,7 @@ public:
 	void displayIntegratedSearch();
 	void displayEnhancedSearchResults();
 	void displayFavorites();
+	void update();
 
 	// Search result display methods
 	void displayEnhancedSearchResultRow(const TorrentSearchResult &result, int index);
@@ -59,6 +61,9 @@ private:
 
 	uint64_t activeRequestId = 0;
 	bool loadingMore = false;
+	State state = State::Idle;
+	std::string stateMessage;
+	bool resultsChanged = false;
 
 	// Callbacks
 	std::function<void(const TorrentSearchResult &)> onSearchResultSelected;
@@ -66,5 +71,6 @@ private:
 
 	// Internal methods
 	void processPendingResults();
+	void mergeUniqueResults(std::vector<TorrentSearchResult> results);
 	bool isInFavorites(const std::string &infoHash) const;
 };

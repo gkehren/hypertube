@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <thread>
 
 namespace
 {
@@ -52,7 +53,7 @@ TEST_F(TorrentManagerTest, RejectsDuplicateWithoutLeavingOrphanedTorrent)
 	ASSERT_EQ(manager.getTorrentSnapshot().size(), 1u);
 
 	const auto hash = manager.getTorrentSnapshot().front().hash;
-	ASSERT_TRUE(manager.removeTorrent(hash, REMOVE_TORRENT));
+	ASSERT_TRUE(manager.removeTorrent(hash, TorrentRemovalMode::KeepAllFiles));
 	EXPECT_TRUE(manager.addTorrent(torrentPath.string(), downloadPath.string()));
 }
 
@@ -106,4 +107,27 @@ TEST_F(TorrentManagerTest, FastResumeSnapshotCanRestoreTorrent)
 	TorrentManager restored;
 	restored.addTorrentsFromConfig({persisted});
 	ASSERT_EQ(restored.getTorrentSnapshot().size(), 1u);
+}
+
+TEST_F(TorrentManagerTest, CollectsFileDetailsOffTheCallingThread)
+{
+	TorrentManager manager;
+	const auto torrentPath = writeTorrentFile();
+	const auto downloadPath = testDirectory / "downloads";
+	ASSERT_TRUE(manager.addTorrent(torrentPath.string(), downloadPath.string()));
+	const auto hash = manager.getTorrentSnapshot().front().hash;
+	manager.requestDetailsRefresh(hash, TorrentDetailSection::Files);
+
+	std::shared_ptr<const TorrentDetailsSnapshot> details;
+	for (int attempt = 0; attempt < 100 && !details; ++attempt)
+	{
+		details = manager.getDetailsSnapshot(hash, TorrentDetailSection::Files);
+		if (!details)
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+	ASSERT_TRUE(details);
+	EXPECT_EQ(details->state, TorrentDetailState::Ready);
+	ASSERT_EQ(details->files.size(), 1u);
+	EXPECT_EQ(details->files.front().name, "fixture");
+	EXPECT_EQ(details->files.front().size, 1);
 }

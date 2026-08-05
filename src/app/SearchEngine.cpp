@@ -275,8 +275,9 @@ std::vector<std::string> SearchEngine::getSearchProviders() const
 
 Result SearchEngine::configureTorznabProvider(const std::string &url, const std::string &apiKey)
 {
-	if (url.rfind("http://", 0) != 0 && url.rfind("https://", 0) != 0)
-		return Result::Failure("Torznab URL must use http:// or https://", ResultCode::InvalidInput);
+	Result validation = validateTorznabConfig(url);
+	if (!validation)
+		return validation;
 	std::string endpoint = url;
 	while (!endpoint.empty() && endpoint.back() == '/')
 		endpoint.pop_back();
@@ -298,6 +299,15 @@ Result SearchEngine::configureTorznabProvider(const std::string &url, const std:
 			return request;
 		return parseTorznabResponse(body, response);
 	});
+}
+
+Result SearchEngine::validateTorznabConfig(const std::string &url)
+{
+	if (url.rfind("http://", 0) != 0 && url.rfind("https://", 0) != 0)
+		return Result::Failure("Torznab URL must use http:// or https://", ResultCode::InvalidInput);
+	if (url.size() <= url.find("://") + 3)
+		return Result::Failure("Torznab URL must include a host", ResultCode::InvalidInput);
+	return Result::Success();
 }
 
 void SearchEngine::clearSearchCache()
@@ -989,12 +999,9 @@ void SearchEngine::setMaxRetries(int retries)
 Result SearchEngine::setProxyConfig(bool enabled, const std::string &type, const std::string &host,
 	int port, const std::string &username, const std::string &password)
 {
-	if (enabled && host.empty())
-		return Result::Failure("Proxy host cannot be empty", ResultCode::InvalidInput);
-	if (enabled && (port < 1 || port > 65535))
-		return Result::Failure("Proxy port must be between 1 and 65535", ResultCode::InvalidInput);
-	if (type != "socks5" && type != "http")
-		return Result::Failure("Proxy type must be socks5 or http", ResultCode::InvalidInput);
+	Result validation = validateProxyConfig(enabled, type, host, port);
+	if (!validation)
+		return validation;
 	{
 		std::lock_guard<std::mutex> lock(settingsMutex);
 		proxyEnabled = enabled;
@@ -1005,6 +1012,17 @@ Result SearchEngine::setProxyConfig(bool enabled, const std::string &type, const
 		proxyPassword = password;
 	}
 	clearSearchCache();
+	return Result::Success();
+}
+
+Result SearchEngine::validateProxyConfig(bool enabled, const std::string &type, const std::string &host, int port)
+{
+	if (enabled && host.empty())
+		return Result::Failure("Proxy host cannot be empty", ResultCode::InvalidInput);
+	if (enabled && (port < 1 || port > 65535))
+		return Result::Failure("Proxy port must be between 1 and 65535", ResultCode::InvalidInput);
+	if (type != "socks5" && type != "http")
+		return Result::Failure("Proxy type must be socks5 or http", ResultCode::InvalidInput);
 	return Result::Success();
 }
 

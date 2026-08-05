@@ -7,9 +7,10 @@
 #include <iomanip>
 #include <sstream>
 #include <filesystem>
+#include <algorithm>
 
-TorrentDetailsUI::TorrentDetailsUI(TorrentManager &torrentManager)
-	: torrentManager(torrentManager)
+TorrentDetailsUI::TorrentDetailsUI(TorrentManager &torrentManager, Utils::SystemUtils::SystemOpener &systemOpener)
+	: torrentManager(torrentManager), systemOpener(systemOpener)
 {
 }
 
@@ -21,17 +22,13 @@ void TorrentDetailsUI::displayTorrentDetails(const lt::torrent_handle &selectedT
 	{
 		// Try to get cached status
 		std::optional<lt::torrent_status> cachedStatus = torrentManager.getCachedStatus(selectedTorrent.info_hashes());
-		lt::torrent_status status;
-
-		if (cachedStatus)
+		if (!cachedStatus)
 		{
-			status = *cachedStatus;
+			ImGui::TextDisabled("Loading torrent details...");
+			ImGui::End();
+			return;
 		}
-		else
-		{
-			// Fallback to live query
-			status = selectedTorrent.status();
-		}
+		const lt::torrent_status &status = *cachedStatus;
 
 		// Display torrent name as header
 		ImGui::PushStyleColor(ImGuiCol_Text, HypertubeTheme::getCurrentPalette().primary);
@@ -45,25 +42,25 @@ void TorrentDetailsUI::displayTorrentDetails(const lt::torrent_handle &selectedT
 		{
 			if (ImGui::BeginTabItem("General"))
 			{
-				displayTorrentDetails_General(status, selectedTorrent);
+				displayTorrentDetails_General(status);
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Files"))
 			{
-				displayTorrentDetails_Files(selectedTorrent);
+				displayTorrentDetails_Files(selectedTorrent.info_hashes());
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Peers"))
 			{
-				displayTorrentDetails_Peers(selectedTorrent);
+				displayTorrentDetails_Peers(selectedTorrent.info_hashes());
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Trackers"))
 			{
-				displayTorrentDetails_Trackers(selectedTorrent);
+				displayTorrentDetails_Trackers(selectedTorrent.info_hashes());
 				ImGui::EndTabItem();
 			}
 
@@ -90,32 +87,27 @@ void TorrentDetailsUI::displayTorrentDetails(const lt::torrent_handle &selectedT
 	ImGui::End();
 }
 
-void TorrentDetailsUI::displayTorrentDetails_General(const lt::torrent_status &status, const lt::torrent_handle &handle)
+void TorrentDetailsUI::displayTorrentDetails_General(const lt::torrent_status &status)
 {
-	displayTorrentDetailsContent(status, handle);
+	displayTorrentDetailsContent(status);
 }
 
-void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &selectedTorrent)
+void TorrentDetailsUI::displayTorrentDetails_Files(const lt::info_hash_t &hash)
 {
-	if (!selectedTorrent.is_valid())
-		return;
-
-	auto torrentFile = selectedTorrent.torrent_file();
-	if (!torrentFile)
+	torrentManager.requestDetailsRefresh(hash, TorrentDetailSection::Files);
+	const auto snapshot = torrentManager.getDetailsSnapshot(hash, TorrentDetailSection::Files);
+	if (!snapshot || snapshot->state == TorrentDetailState::Loading)
 	{
-		ImGui::PushStyleColor(ImGuiCol_Text, HypertubeTheme::getCurrentPalette().textSecondary);
-		ImGui::Text("Metadata not available yet.");
-		ImGui::PopStyleColor();
+		ImGui::TextDisabled("Loading file details...");
 		return;
 	}
-
-	auto file_storage = torrentFile->files();
-	std::vector<std::int64_t> file_progress;
-	selectedTorrent.file_progress(file_progress);
-
-	// Get torrent status for save path
-	auto status = selectedTorrent.status();
-	std::string savePath = status.save_path;
+	if (snapshot->state != TorrentDetailState::Ready)
+	{
+		ImGui::TextDisabled("%s", snapshot->message.empty() ? "File metadata is not available." : snapshot->message.c_str());
+		return;
+	}
+	if (snapshot->truncated)
+		ImGui::TextDisabled("Some files are not shown because the torrent contains too many entries.");
 
 	if (ImGui::BeginTable("Files", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable))
 	{
@@ -128,25 +120,25 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 
 		const auto &palette = HypertubeTheme::getCurrentPalette();
 
-		for (int i = 0; i < file_storage.num_files(); ++i)
+		for (const auto &file : snapshot->files)
 		{
-			lt::file_index_t index(i);
 			ImGui::TableNextRow();
 
 			// Column 0: File Name
 			ImGui::TableSetColumnIndex(0);
-			std::string fileName = std::string(file_storage.file_name(index));
+			const std::string &fileName = file.name;
 			ImGui::Text("%s", fileName.c_str());
 
 			// Column 1: Size
 			ImGui::TableSetColumnIndex(1);
-			ImGui::Text("%s", formatBytes(file_storage.file_size(index), false).c_str());
+			ImGui::Text("%s", formatBytes(file.size, false).c_str());
 
 			// Column 2: Progress
 			ImGui::TableSetColumnIndex(2);
 			float progress = 0.0f;
-			if (file_storage.file_size(index) > 0)
-				progress = static_cast<float>(file_progress[i]) / file_storage.file_size(index);
+			if (file.size > 0)
+				progress = static_cast<float>(file.downloaded) / static_cast<float>(file.size);
+			progress = std::clamp(progress, 0.0f, 1.0f);
 
 			// Color code based on completion
 			ImVec4 progressColor;
@@ -165,33 +157,34 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 
 			// Column 3: Priority
 			ImGui::TableSetColumnIndex(3);
-			lt::download_priority_t current_priority = selectedTorrent.file_priority(index);
 			int priority_index;
-			if (current_priority == lt::dont_download)
+			if (file.priority == static_cast<int>(lt::dont_download))
 				priority_index = 0;
-			else if (current_priority == lt::low_priority)
+			else if (file.priority == static_cast<int>(lt::low_priority))
 				priority_index = 1;
-			else if (current_priority >= lt::top_priority)
+			else if (file.priority >= static_cast<int>(lt::top_priority))
 				priority_index = 3;
 			else
 				priority_index = 2; // default_priority
 
 			const char* priority_items[] = { "Don't Download", "Low", "Normal", "High" };
 			ImGui::SetNextItemWidth(120.0f);
-			std::string combo_id = "##priority" + std::to_string(i);
+			std::string combo_id = "##priority" + std::to_string(file.index);
 			if (ImGui::Combo(combo_id.c_str(), &priority_index, priority_items, IM_ARRAYSIZE(priority_items)))
 			{
 				// Set the new priority
-				lt::download_priority_t new_priority;
+				int new_priority;
 				switch (priority_index)
 				{
-					case 0: new_priority = lt::dont_download; break;
-					case 1: new_priority = lt::low_priority; break;
-					case 2: new_priority = lt::default_priority; break;
-					case 3: new_priority = lt::top_priority; break;
-					default: new_priority = lt::default_priority; break;
+					case 0: new_priority = static_cast<int>(lt::dont_download); break;
+					case 1: new_priority = static_cast<int>(lt::low_priority); break;
+					case 2: new_priority = static_cast<int>(lt::default_priority); break;
+					case 3: new_priority = static_cast<int>(lt::top_priority); break;
+					default: new_priority = static_cast<int>(lt::default_priority); break;
 				}
-				selectedTorrent.file_priority(index, new_priority);
+				const Result result = torrentManager.setFilePriority(hash, file.index, new_priority);
+				if (!result && onResult)
+					onResult(result);
 			}
 
 			// Column 4: Preview button
@@ -203,13 +196,10 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 			if (canPreview)
 			{
 				// Construct full file path
-				std::string relativePath = std::string(file_storage.file_path(index));
-				std::filesystem::path fullPath = std::filesystem::path(savePath) / relativePath;
+				std::filesystem::path fullPath = std::filesystem::path(snapshot->savePath) / file.relativePath;
 
-				std::string button_id = "Preview##" + std::to_string(i);
+				std::string button_id = "Preview##" + std::to_string(file.index);
 
-				// Check if file exists and has some progress
-				bool fileExists = std::filesystem::exists(fullPath);
 				bool hasProgress = progress > 0.0f;
 
 				if (!hasProgress)
@@ -220,20 +210,21 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 				if (ImGui::Button(button_id.c_str()))
 				{
 					// Enable sequential download if not already enabled
-					auto flags = selectedTorrent.flags();
-					if (!(flags & lt::torrent_flags::sequential_download))
-					{
-						selectedTorrent.set_flags(lt::torrent_flags::sequential_download);
-					}
-
 					// Increase priority of this file to ensure faster download
-					if (current_priority < lt::top_priority)
+					const Result sequentialResult = torrentManager.executeCommand(hash, TorrentCommand::EnableSequential);
+					if (!sequentialResult && onResult)
+						onResult(sequentialResult);
+					if (file.priority < static_cast<int>(lt::top_priority))
 					{
-						selectedTorrent.file_priority(index, lt::top_priority);
+						const Result priorityResult = torrentManager.setFilePriority(hash, file.index, static_cast<int>(lt::top_priority));
+						if (!priorityResult && onResult)
+							onResult(priorityResult);
 					}
 
 					// Open the file for preview
-					Utils::SystemUtils::openFilePreview(fullPath.string());
+					const Result openResult = systemOpener.enqueuePreview(fullPath.string());
+					if (!openResult && onResult)
+						onResult(openResult);
 				}
 
 				if (!hasProgress)
@@ -244,18 +235,11 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 						ImGui::SetTooltip("File download not started yet");
 					}
 				}
-				else if (!fileExists)
-				{
-					if (ImGui::IsItemHovered())
-					{
-						ImGui::SetTooltip("Preview will open with default application\n(File may still be downloading)");
-					}
-				}
 				else
 				{
 					if (ImGui::IsItemHovered())
 					{
-						ImGui::SetTooltip("Preview with default application");
+						ImGui::SetTooltip("Preview with default application (file may still be downloading)");
 					}
 				}
 			}
@@ -265,18 +249,27 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::torrent_handle &sel
 	}
 }
 
-void TorrentDetailsUI::displayTorrentDetails_Peers(const lt::torrent_handle &selectedTorrent)
+void TorrentDetailsUI::displayTorrentDetails_Peers(const lt::info_hash_t &hash)
 {
-	if (!selectedTorrent.is_valid())
+	torrentManager.requestDetailsRefresh(hash, TorrentDetailSection::Peers);
+	const auto snapshot = torrentManager.getDetailsSnapshot(hash, TorrentDetailSection::Peers);
+	if (!snapshot || snapshot->state == TorrentDetailState::Loading)
+	{
+		ImGui::TextDisabled("Loading peer details...");
 		return;
-
-	std::vector<lt::peer_info> peers;
-	selectedTorrent.get_peer_info(peers);
+	}
+	if (snapshot->state != TorrentDetailState::Ready)
+	{
+		ImGui::TextDisabled("%s", snapshot->message.empty() ? "Peer information is not available." : snapshot->message.c_str());
+		return;
+	}
+	if (snapshot->truncated)
+		ImGui::TextDisabled("Peer list truncated at 2000 entries.");
 
 	const auto &palette = HypertubeTheme::getCurrentPalette();
 
 	// Show peer count
-	ImGui::TextColored(palette.textSecondary, "Connected Peers: %d", (int)peers.size());
+	ImGui::TextColored(palette.textSecondary, "Connected Peers: %d", (int)snapshot->peers.size());
 	ImGui::Spacing();
 
 	ImGuiTableFlags tableFlags = ImGuiTableFlags_RowBg |
@@ -293,12 +286,12 @@ void TorrentDetailsUI::displayTorrentDetails_Peers(const lt::torrent_handle &sel
 		ImGui::TableSetupColumn("Up Speed", ImGuiTableColumnFlags_WidthFixed, 90.0f);
 		ImGui::TableHeadersRow();
 
-		for (const auto &peer : peers)
+		for (const auto &peer : snapshot->peers)
 		{
 			ImGui::TableNextRow();
 
 			ImGui::TableSetColumnIndex(0);
-			ImGui::Text("%s", peer.ip.address().to_string().c_str());
+			ImGui::Text("%s", peer.address.c_str());
 
 			ImGui::TableSetColumnIndex(1);
 			// Safely display peer client by limiting length and handling non-printable chars
@@ -318,38 +311,46 @@ void TorrentDetailsUI::displayTorrentDetails_Peers(const lt::torrent_handle &sel
 			ImGui::Text("%s", client.c_str());
 
 			ImGui::TableSetColumnIndex(2);
-			char flagsBuf[32];
-			Utils::getPeerFlags(peer, flagsBuf, sizeof(flagsBuf));
-			ImGui::Text("%s", flagsBuf);
+			ImGui::Text("%s", peer.flags.c_str());
 
 			ImGui::TableSetColumnIndex(3);
-			if (peer.payload_down_speed > 0)
-				ImGui::TextColored(palette.success, "%s", formatBytes(peer.payload_down_speed, true).c_str());
+			if (peer.downloadSpeed > 0)
+				ImGui::TextColored(palette.success, "%s", formatBytes(peer.downloadSpeed, true).c_str());
 			else
-				ImGui::Text("%s", formatBytes(peer.payload_down_speed, true).c_str());
+				ImGui::Text("%s", formatBytes(peer.downloadSpeed, true).c_str());
 
 			ImGui::TableSetColumnIndex(4);
-			if (peer.payload_up_speed > 0)
-				ImGui::TextColored(palette.info, "%s", formatBytes(peer.payload_up_speed, true).c_str());
+			if (peer.uploadSpeed > 0)
+				ImGui::TextColored(palette.info, "%s", formatBytes(peer.uploadSpeed, true).c_str());
 			else
-				ImGui::Text("%s", formatBytes(peer.payload_up_speed, true).c_str());
+				ImGui::Text("%s", formatBytes(peer.uploadSpeed, true).c_str());
 		}
 
 		ImGui::EndTable();
 	}
 }
 
-void TorrentDetailsUI::displayTorrentDetails_Trackers(const lt::torrent_handle &selectedTorrent)
+void TorrentDetailsUI::displayTorrentDetails_Trackers(const lt::info_hash_t &hash)
 {
-	if (!selectedTorrent.is_valid())
+	torrentManager.requestDetailsRefresh(hash, TorrentDetailSection::Trackers);
+	const auto snapshot = torrentManager.getDetailsSnapshot(hash, TorrentDetailSection::Trackers);
+	if (!snapshot || snapshot->state == TorrentDetailState::Loading)
+	{
+		ImGui::TextDisabled("Loading tracker details...");
 		return;
-
-	auto trackers = selectedTorrent.trackers();
+	}
+	if (snapshot->state != TorrentDetailState::Ready)
+	{
+		ImGui::TextDisabled("%s", snapshot->message.empty() ? "Tracker information is not available." : snapshot->message.c_str());
+		return;
+	}
+	if (snapshot->truncated)
+		ImGui::TextDisabled("Some trackers are not shown because the list is too large.");
 
 	const auto &palette = HypertubeTheme::getCurrentPalette();
 
 	// Show tracker count
-	ImGui::TextColored(palette.textSecondary, "Trackers: %d", (int)trackers.size());
+	ImGui::TextColored(palette.textSecondary, "Trackers: %d", (int)snapshot->trackers.size());
 	ImGui::Spacing();
 
 	ImGuiTableFlags tableFlags = ImGuiTableFlags_RowBg |
@@ -363,7 +364,7 @@ void TorrentDetailsUI::displayTorrentDetails_Trackers(const lt::torrent_handle &
 		ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 100.0f);
 		ImGui::TableHeadersRow();
 
-		for (const auto &tracker : trackers)
+		for (const auto &tracker : snapshot->trackers)
 		{
 			ImGui::TableNextRow();
 
@@ -381,7 +382,7 @@ void TorrentDetailsUI::displayTorrentDetails_Trackers(const lt::torrent_handle &
 	}
 }
 
-void TorrentDetailsUI::displayTorrentDetailsContent(const lt::torrent_status &status, const lt::torrent_handle &handle)
+void TorrentDetailsUI::displayTorrentDetailsContent(const lt::torrent_status &status)
 {
 	const auto &palette = HypertubeTheme::getCurrentPalette();
 
@@ -415,7 +416,7 @@ void TorrentDetailsUI::displayTorrentDetailsContent(const lt::torrent_status &st
 		ImGui::TableSetColumnIndex(0);
 		ImGui::TextColored(palette.textSecondary, "Status:");
 		ImGui::TableSetColumnIndex(1);
-		const char *statusStr = Utils::torrentStateToString(status.state, handle.flags());
+		const char *statusStr = Utils::torrentStateToString(status.state, status.flags);
 		ImVec4 statusColor = HypertubeTheme::getStatusColor(statusStr);
 		ImGui::TextColored(statusColor, "%s", statusStr);
 

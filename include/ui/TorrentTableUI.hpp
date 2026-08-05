@@ -7,6 +7,7 @@
 #include <string>
 #include <functional>
 #include "TorrentManager.hpp"
+#include "SystemUtils.hpp"
 
 struct TorrentRemovalInfo;
 
@@ -20,7 +21,7 @@ struct MenuItem
 class TorrentTableUI
 {
 public:
-	TorrentTableUI(TorrentManager &torrentManager);
+	TorrentTableUI(TorrentManager &torrentManager, Utils::SystemUtils::SystemOpener &systemOpener);
 	~TorrentTableUI() = default;
 
 	// Main table display methods
@@ -37,15 +38,18 @@ public:
 	void setSelectedTorrent(const lt::torrent_handle &handle) { selectedTorrent = handle; }
 
 	// Callback setup for actions that need to be handled by parent
-	void setRemoveTorrentCallback(std::function<void(const lt::info_hash_t &, RemoveTorrentType)> callback);
+	void setRemoveTorrentCallback(std::function<void(const lt::info_hash_t &, const std::string &, TorrentRemovalMode)> callback);
+	void setResultCallback(std::function<void(const Result &)> callback);
 	void setCategoryFilter(int filter) { categoryFilter = filter; }
 
 private:
 	TorrentManager &torrentManager;
+	Utils::SystemUtils::SystemOpener &systemOpener;
 	lt::torrent_handle selectedTorrent;
 
 	// Callback for torrent removal (handled by parent)
-	std::function<void(const lt::info_hash_t &, RemoveTorrentType)> onRemoveTorrent;
+	std::function<void(const lt::info_hash_t &, const std::string &, TorrentRemovalMode)> onRemoveTorrent;
+	std::function<void(const Result &)> onResult;
 
 	// Cache for ImGuiListClipper
 	std::vector<ManagedTorrent> m_torrentListCache;
