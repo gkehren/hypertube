@@ -1,0 +1,84 @@
+import { Button, VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "theme.slint";
+
+export component AppSidebar inherits Rectangle {
+	in property <int> sidebar-width: 240;
+	in property <bool> collapsed: false;
+	in property <int> active-tab: 0;
+	in property <int> category-filter: 0;
+
+	callback add-torrent();
+	callback torrents-tab();
+	callback search-tab();
+	callback preferences-tab();
+	callback logs-tab();
+	callback select-category(int);
+
+	background: ThemeTokens.surface;
+	width: root.collapsed ? 56px : root.sidebar-width * 1px;
+
+	VerticalBox {
+		padding: 16px;
+		alignment: start;
+
+		Text {
+			text: root.collapsed ? "H" : "Hypertube";
+			accessible-label: "Hypertube";
+			font-size: 22px;
+			color: ThemeTokens.foreground;
+			horizontal-alignment: center;
+		}
+
+		Button {
+			text: root.collapsed ? "+" : "Add torrent";
+			accessible-label: "Add torrent";
+			clicked => { root.add-torrent(); }
+		}
+
+		Button {
+			text: root.collapsed ? "T" : "Torrents";
+			accessible-label: "Torrents";
+			clicked => { root.torrents-tab(); }
+		}
+
+		Button {
+			text: root.collapsed ? "S" : "Search";
+			accessible-label: "Search";
+			clicked => { root.search-tab(); }
+		}
+
+		Rectangle { height: 1px; }
+
+		Button {
+			text: root.collapsed ? "P" : "Preferences";
+			accessible-label: "Preferences";
+			clicked => { root.preferences-tab(); }
+		}
+
+		Button {
+			text: root.collapsed ? "L" : "Logs";
+			accessible-label: "Logs";
+			clicked => { root.logs-tab(); }
+		}
+
+		Rectangle { }
+
+		Text {
+			text: root.active-tab == 0 ? "Local torrents" : "";
+			color: ThemeTokens.muted-foreground;
+			font-size: 12px;
+			visible: !root.collapsed;
+		}
+
+		if (!root.collapsed && root.active-tab == 0): VerticalBox {
+			Text { text: "Categories"; color: ThemeTokens.muted-foreground; font-size: 12px; }
+			Button { text: "All Torrents"; clicked => { root.select-category(0); } }
+			Button { text: "Downloading"; clicked => { root.select-category(1); } }
+			Button { text: "Seeding"; clicked => { root.select-category(2); } }
+			Button { text: "Completed"; clicked => { root.select-category(3); } }
+			Button { text: "Paused"; clicked => { root.select-category(4); } }
+			Button { text: "Active"; clicked => { root.select-category(5); } }
+			Button { text: "Inactive"; clicked => { root.select-category(6); } }
+		}
+	}
+}

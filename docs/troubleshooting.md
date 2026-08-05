@@ -24,7 +24,8 @@ Reconfigure the same build directory first. If its cache points to an obsolete p
 
 ## The application does not open a window
 
-Run the executable from a terminal and inspect GLFW/OpenGL output. Check:
+Run `hypertube-slint` from a terminal and inspect its stderr first. For the
+transitional `hypertube-imgui` frontend, inspect GLFW/OpenGL output. Check:
 
 - graphics drivers and OpenGL support;
 - display/session environment;
@@ -33,12 +34,21 @@ Run the executable from a terminal and inspect GLFW/OpenGL output. Check:
 
 The application logs startup failures to stderr before the normal logger is available.
 
+## A native picker does not open
+
+The Slint frontend uses the platform picker boundary for `.torrent` files and
+directories. Linux tries `zenity` and then `kdialog`; macOS uses the system
+script bridge; Windows uses the native file-open dialog. If the picker is not
+installed, unavailable in the current desktop session, or cancelled, enter
+the path manually in the same dialog and continue. This does not change the
+stored torrent or preference data.
+
 ## Settings or torrents are missing after restart
 
 Check the active path mode first:
 
 ```sh
-HYPERTUBE_PORTABLE=1 ./build/hypertube
+HYPERTUBE_PORTABLE=1 ./build/hypertube-slint
 ```
 
 Then inspect the corresponding `settings.json`, `torrents.json`, and `.bak` files. The application tries the primary file and then the backup when the primary is missing, malformed, or schema-invalid. Preserve both candidates before editing them.

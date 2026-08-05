@@ -393,68 +393,11 @@ void UIManager::displayCategories()
 
 	// Section header
 	HypertubeTheme::drawSectionHeader("Filter Torrents");
-
-	// Get torrent counts for each category
-	auto torrents = torrentManager.getTorrentSnapshot();
-	int allCount = static_cast<int>(torrents.size());
-	int downloadingCount = 0;
-	int seedingCount = 0;
-	int completedCount = 0;
-	int pausedCount = 0;
-	int activeCount = 0;
-	int inactiveCount = 0;
-
-	auto statusCache = torrentManager.getStatusCache();
-
-	for (const auto &torrent : torrents)
+	for (const auto &category : torrentTableUI->getCategories())
 	{
-		const auto &hash = torrent.hash;
-		const auto &handle = torrent.handle;
-		if (!handle.is_valid())
-			continue;
-
-		const lt::torrent_status *status = nullptr;
-		if (statusCache)
-		{
-			auto it = statusCache->find(hash);
-			if (it != statusCache->end())
-			{
-				status = &it->second;
-			}
-		}
-
-		if (!status)
-			continue;
-
-		if (status->state == lt::torrent_status::downloading ||
-			status->state == lt::torrent_status::downloading_metadata)
-			downloadingCount++;
-		if (status->state == lt::torrent_status::seeding)
-			seedingCount++;
-		if (status->is_finished)
-			completedCount++;
-		if (handle.flags() & lt::torrent_flags::paused)
-			pausedCount++;
-		if (status->download_payload_rate > 0 || status->upload_payload_rate > 0)
-			activeCount++;
-		else
-			inactiveCount++;
+		if (HypertubeTheme::drawCategoryItem(category.label.c_str(), "", selectedCategory == category.id, category.count))
+			selectedCategory = category.id;
 	}
-
-	if (HypertubeTheme::drawCategoryItem("All Torrents", "", selectedCategory == 0, allCount))
-		selectedCategory = 0;
-	if (HypertubeTheme::drawCategoryItem("Downloading", "", selectedCategory == 1, downloadingCount))
-		selectedCategory = 1;
-	if (HypertubeTheme::drawCategoryItem("Seeding", "", selectedCategory == 2, seedingCount))
-		selectedCategory = 2;
-	if (HypertubeTheme::drawCategoryItem("Completed", "", selectedCategory == 3, completedCount))
-		selectedCategory = 3;
-	if (HypertubeTheme::drawCategoryItem("Paused", "", selectedCategory == 4, pausedCount))
-		selectedCategory = 4;
-	if (HypertubeTheme::drawCategoryItem("Active", "", selectedCategory == 5, activeCount))
-		selectedCategory = 5;
-	if (HypertubeTheme::drawCategoryItem("Inactive", "", selectedCategory == 6, inactiveCount))
-		selectedCategory = 6;
 
 	torrentTableUI->setCategoryFilter(selectedCategory);
 

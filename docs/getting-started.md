@@ -1,14 +1,17 @@
 # Getting started
 
-Hypertube is a cross-platform C++17 desktop BitTorrent client built with Dear ImGui and libtorrent.
+Hypertube is a cross-platform C++20 desktop BitTorrent client. The current
+bootstrap frontend is Slint; the Dear ImGui frontend remains available during
+the migration.
 
 ## Prerequisites
 
 You need:
 
-- a C++17 compiler;
-- CMake 3.20 or newer;
-- OpenGL and GLFW development files;
+- a C++20 compiler;
+- CMake 3.21 or newer;
+- Rust 1.88 or newer and Fontconfig development files for the Slint frontend;
+- OpenGL and GLFW development files for the transitional frontend;
 - libtorrent-rasterbar and cURL development files;
 - a network connection on the first configure if CMake must download dependencies.
 
@@ -19,7 +22,7 @@ Platform-specific package commands are maintained in [Build](build.md).
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j2
-./build/hypertube
+./build/hypertube-slint
 ```
 
 For a release-oriented local build, use `-DCMAKE_BUILD_TYPE=Release`. Run the tests before launching a new build:
@@ -53,14 +56,14 @@ The same Preferences dialog can route both search and BitTorrent traffic through
 For a portable installation, either set the environment variable or create a marker next to the executable/current working directory:
 
 ```sh
-HYPERTUBE_PORTABLE=1 ./build/hypertube
+HYPERTUBE_PORTABLE=1 ./build/hypertube-slint
 ```
 
 or:
 
 ```sh
 touch portable.mode
-./build/hypertube
+./build/hypertube-slint
 ```
 
 Portable mode stores configuration under `./config`, runtime data under `./data`, cache files under `./cache`, and diagnostics at `./data/hypertube.log`. See [Configuration and data](configuration.md).

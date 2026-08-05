@@ -4,7 +4,7 @@
 
 This file is the operating guide for AI agents working in the Hypertube repository. It applies to the whole repository unless a more specific `AGENTS.md` is added in a subdirectory.
 
-Hypertube is a cross-platform C++17 BitTorrent desktop client. It uses Dear ImGui for the UI, libtorrent for torrent operations, cURL for search HTTP requests, and nlohmann/json for persisted configuration. The project is moving from a functional demo toward a reliable daily-use application, so correctness, recoverability, responsiveness, and inspectable behavior take priority over superficial feature breadth.
+Hypertube is a cross-platform C++20 BitTorrent desktop client. It uses Dear ImGui during the UI migration, libtorrent for torrent operations, cURL for search HTTP requests, and nlohmann/json for persisted configuration. The project is moving from a functional demo toward a reliable daily-use application, so correctness, recoverability, responsiveness, and inspectable behavior take priority over superficial feature breadth.
 
 Read this file together with `README.md` and the existing code before changing behavior. Keep the README and this file consistent when build, runtime, configuration, or packaging behavior changes.
 
@@ -28,7 +28,11 @@ CMakeLists.txt           Dependency discovery, targets, tests, and packaging
 README.md                User-facing features, configuration, and build guide
 ```
 
-The main executable is `hypertube`. The test targets are `unit_tests`, `config_tests`, and `search_tests`. `tests/benchmark_favorites.cpp` is a benchmark source and is not automatically included in the normal test suite unless the build configuration is extended.
+The migration build produces `hypertube-slint` and the transitional
+`hypertube-imgui` frontend. The test targets are `unit_tests`, `config_tests`,
+and `search_tests`. `tests/benchmark_favorites.cpp` is a benchmark source and
+is not automatically included in the normal test suite unless the build
+configuration is extended.
 
 ## Working agreement for agents
 
@@ -106,16 +110,20 @@ The portable bundle should contain the executable and the seed `config/` directo
 
 ### Platform notes
 
-- Linux/macOS: use a C++17 compiler and the platform command from `README.md`; use `nproc` or `sysctl` only when available.
+- Linux/macOS: use a C++20 compiler and the platform command from `README.md`; use `nproc` or `sysctl` only when available.
 - Windows: use the documented vcpkg toolchain and `cmake --build build --config Release`.
-- CMake minimum version is 3.20.
+- CMake minimum version is 3.21.
 - Release builds enable aggressive optimization (`-O3`, LTO, and platform-specific tuning). Use Debug for diagnosis and tests unless release behavior is specifically being validated.
 
 ## Architecture and ownership
 
 ### Application lifecycle
 
-`src/main.cpp` initializes and cleans up cURL globally. `App` creates directories, initializes logging and GLFW, loads persisted torrent/settings state, owns the service objects, runs the UI loop, and waits for asynchronous persistence before shutdown.
+`src/main.cpp` initializes and cleans up cURL globally for the transitional
+ImGui frontend. `src/main_slint.cpp` uses the same toolkit-neutral `App` with
+Slint. `App` creates runtime directories, initializes logging, loads persisted
+torrent/settings state, owns the service objects, and waits for asynchronous
+persistence before shutdown. `ImGuiApp` owns only the legacy GLFW/OpenGL loop.
 
 Do not initialize or clean up cURL once per request. Do not destroy the GLFW window or services while worker callbacks can still use them.
 
@@ -145,7 +153,7 @@ Important invariants:
 - Keep asynchronous saves alive until the manager is destroyed or `waitForAsyncOperations()` has completed.
 - Add regression tests for malformed JSON, invalid schema, backup recovery, concurrent access, and atomic-save behavior when touching this code.
 
-The current settings schema is version 1. `settings.json` contains application settings; `torrents.json` contains persisted torrent entries. Runtime torrent state must not be committed to the repository.
+The current settings schema is version 2. Version 1 settings are migrated by adding the nested UI layout defaults. `settings.json` contains application settings; `torrents.json` contains persisted torrent entries. Runtime torrent state must not be committed to the repository.
 
 ### TorrentManager
 
@@ -195,7 +203,7 @@ Never log passwords, access tokens, private keys, or sensitive user data. Be car
 
 ## C++ and UI conventions
 
-- Use C++17 and match the surrounding code style: `#pragma once`, tabs in C++ implementation bodies, braces and naming consistent with nearby files.
+- Use C++20 and match the surrounding code style: `#pragma once`, tabs in C++ implementation bodies, braces and naming consistent with nearby files.
 - Prefer RAII, standard containers, `std::filesystem`, scoped locks, and explicit ownership over raw owning pointers.
 - Keep headers self-contained and include what they use. Avoid broad unrelated refactors while changing a feature.
 - Use `Result` for expected operational failures and include a useful message. Catch exceptions at subsystem boundaries when external libraries can throw.

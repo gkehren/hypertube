@@ -1,0 +1,129 @@
+import { Button, HorizontalBox, LineEdit, ListView, VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "theme.slint";
+import { DetailFileRow, DetailPeerRow, DetailTrackerRow } from "detail-types.slint";
+
+export component DetailsView inherits Rectangle {
+	in property <int> selected-tab: 0;
+	in property <string> message;
+	in property <string> name;
+	in property <string> state-label;
+	in property <string> progress-label;
+	in property <string> size-label;
+	in property <string> download-rate-label;
+	in property <string> upload-rate-label;
+	in property <string> eta-label;
+	in property <string> save-path;
+	in-out property <string> download-limit;
+	in-out property <string> upload-limit;
+	in property <[DetailFileRow]> files: [];
+	in property <[DetailPeerRow]> peers: [];
+	in property <[DetailTrackerRow]> trackers: [];
+	in property <bool> sequential-download: false;
+
+	callback select-tab(int);
+	callback details-action(int);
+	callback preview-file(int);
+	callback set-file-priority(int, int);
+	callback set-speed-limits(string, string);
+	callback set-sequential(bool);
+
+	background: ThemeTokens.surface;
+	border-width: 1px;
+	border-color: ThemeTokens.border;
+
+	VerticalBox {
+		padding: 16px;
+		HorizontalBox {
+			Button { text: "General"; clicked => { root.select-tab(0); } }
+			Button { text: "Files"; clicked => { root.select-tab(1); } }
+			Button { text: "Peers"; clicked => { root.select-tab(2); } }
+			Button { text: "Trackers"; clicked => { root.select-tab(3); } }
+			Button { text: "Settings"; clicked => { root.select-tab(4); } }
+		}
+
+		Text { text: root.message; color: ThemeTokens.muted-foreground; }
+
+		if (root.selected-tab == 0): VerticalBox {
+			Text { text: root.name == "" ? "Select a torrent" : root.name; color: ThemeTokens.foreground; font-size: 18px; }
+			Text { text: root.state-label + "  |  " + root.progress-label + "  |  " + root.size-label; color: ThemeTokens.muted-foreground; }
+			Text { text: "Down " + root.download-rate-label + "   Up " + root.upload-rate-label + "   ETA " + root.eta-label; color: ThemeTokens.muted-foreground; }
+			Text { text: root.save-path; color: ThemeTokens.muted-foreground; }
+		}
+
+		if (root.selected-tab == 1): ListView {
+			accessible-role: list;
+			accessible-label: "Torrent files";
+			accessible-item-count: root.files.length;
+			for file in root.files: HorizontalBox {
+				height: 32px;
+				accessible-role: list-item;
+				accessible-label: file.name + ", " + file.size-label + ", " + file.progress-label;
+				Text { text: file.name; color: ThemeTokens.foreground; }
+				Text { text: file.size-label; color: ThemeTokens.muted-foreground; width: 100px; }
+				Text { text: file.progress-label; color: ThemeTokens.muted-foreground; width: 90px; }
+				Text { text: "Priority " + file.priority-label; color: ThemeTokens.muted-foreground; width: 110px; }
+				Button {
+					text: "-";
+					enabled: file.priority > 0;
+					clicked => { root.set-file-priority(file.index, file.priority - 1); }
+				}
+				Button {
+					text: "+";
+					enabled: file.priority < 7;
+					clicked => { root.set-file-priority(file.index, file.priority + 1); }
+				}
+				Button {
+					text: "Preview";
+					enabled: file.previewable;
+					clicked => { root.preview-file(file.index); }
+				}
+			}
+		}
+
+		if (root.selected-tab == 2): ListView {
+			accessible-role: list;
+			accessible-label: "Torrent peers";
+			accessible-item-count: root.peers.length;
+			for peer in root.peers: HorizontalBox {
+				height: 32px;
+				accessible-role: list-item;
+				accessible-label: peer.address + ", " + peer.client;
+				Text { text: peer.address; color: ThemeTokens.foreground; }
+				Text { text: peer.client; color: ThemeTokens.muted-foreground; width: 150px; }
+				Text { text: "Down " + peer.download-speed-label; color: ThemeTokens.muted-foreground; width: 130px; }
+				Text { text: "Up " + peer.upload-speed-label; color: ThemeTokens.muted-foreground; width: 130px; }
+			}
+		}
+
+		if (root.selected-tab == 3): ListView {
+			accessible-role: list;
+			accessible-label: "Torrent trackers";
+			accessible-item-count: root.trackers.length;
+			for tracker in root.trackers: HorizontalBox {
+				height: 32px;
+				accessible-role: list-item;
+				accessible-label: tracker.url + ", " + tracker.status-label;
+				Text { text: tracker.url; color: ThemeTokens.foreground; }
+				Text { text: tracker.status-label; color: tracker.verified ? ThemeTokens.success : ThemeTokens.warning; width: 140px; }
+			}
+		}
+
+		if (root.selected-tab == 4): VerticalBox {
+			Text { text: "Per-torrent settings"; color: ThemeTokens.foreground; }
+			Text { text: root.sequential-download ? "Sequential download enabled" : "Sequential download disabled"; color: ThemeTokens.muted-foreground; }
+			HorizontalBox {
+				Text { text: "Download limit (bytes/s, 0 = unlimited)"; color: ThemeTokens.muted-foreground; }
+				LineEdit { text <=> root.download-limit; }
+				Text { text: "Upload limit (bytes/s, 0 = unlimited)"; color: ThemeTokens.muted-foreground; }
+				LineEdit { text <=> root.upload-limit; }
+				Button { text: "Apply speed limits"; clicked => { root.set-speed-limits(root.download-limit, root.upload-limit); } }
+			}
+			Button {
+				text: root.sequential-download ? "Disable sequential" : "Enable sequential";
+				clicked => { root.set-sequential(!root.sequential-download); }
+			}
+			Button { text: "Open containing folder"; clicked => { root.details-action(0); } }
+			Button { text: "Preview largest media"; clicked => { root.details-action(1); } }
+		}
+	}
+}

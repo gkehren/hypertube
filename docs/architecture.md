@@ -1,13 +1,19 @@
 # Architecture
 
-Hypertube is a single desktop process with a Dear ImGui/OpenGL main loop, a libtorrent session, asynchronous search and persistence workers, and platform-specific filesystem helpers.
+Hypertube is a single desktop process with shared torrent/search/persistence
+services and two frontends during the Slint migration. `hypertube-slint` uses
+the toolkit-neutral presenters and a Slint event loop; `hypertube-imgui` keeps
+the legacy Dear ImGui/GLFW/OpenGL loop available for parity checks.
 
 ## Component overview
 
 ```mermaid
 flowchart TD
-    Main[src/main.cpp] --> App[App]
-    App --> UI[UIManager]
+    Main[src/main_slint.cpp] --> App[App]
+    Legacy[src/main.cpp] --> ImGuiApp[ImGuiApp]
+    App --> Presenters[Toolkit-neutral presenters]
+    Presenters --> Slint[Slint controller and views]
+    ImGuiApp --> UI[Legacy UIManager]
     App --> Config[ConfigManager]
     App --> Torrents[TorrentManager]
     App --> Search[SearchEngine]
@@ -31,11 +37,19 @@ flowchart TD
 
 ### Application lifecycle
 
-`main.cpp` initializes cURL globally, constructs `App`, runs the UI loop, and cleans up cURL. `App` creates runtime directories, initializes GLFW and logging, loads settings and torrents, then waits for asynchronous persistence during destruction.
+`main_slint.cpp` initializes cURL globally, constructs `App`, binds the Slint
+controller, runs the Slint event loop, and shuts services down in order.
+`main.cpp` follows the same service lifecycle through `ImGuiApp` for the
+transitional frontend. `App` itself is toolkit-independent: it creates runtime
+directories, initializes logging, loads settings and torrents, and waits for
+asynchronous persistence during shutdown.
 
 ### UI layer
 
-`UIManager` owns frame orchestration and coordinates the specialized views:
+`SlintAppController` owns Slint property/callback wiring and polls owned DTO
+snapshots from the presenters. The specialized Slint views cover the shell,
+torrent table, details, search, preferences, and diagnostics. `UIManager`
+remains the legacy frame orchestrator and coordinates:
 
 - `TorrentTableUI`: list, filtering, selection, and torrent actions;
 - `TorrentDetailsUI`: files, peers, trackers, status, and settings details;

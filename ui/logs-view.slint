@@ -1,0 +1,35 @@
+import { Button, HorizontalBox, ListView, VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "theme.slint";
+import { LogRow } from "log-types.slint";
+
+export component LogsView inherits Rectangle {
+	in property <[LogRow]> rows: [];
+	in property <string> state-message;
+	callback clear-logs();
+
+	background: ThemeTokens.background;
+	VerticalBox {
+		padding: 20px;
+		HorizontalBox {
+			Text { text: "Diagnostics"; color: ThemeTokens.foreground; font-size: 24px; }
+			Rectangle { }
+			Button { text: "Clear"; clicked => { root.clear-logs(); } }
+		}
+		Text { text: root.state-message; color: ThemeTokens.muted-foreground; }
+		ListView {
+			accessible-role: list;
+			accessible-label: "Diagnostics log";
+			accessible-item-count: root.rows.length;
+			for row in root.rows: HorizontalBox {
+				height: 34px;
+				accessible-role: list-item;
+				accessible-label: row.level + ", " + row.category + ": " + row.message;
+				Text { text: row.timestamp; color: ThemeTokens.muted-foreground; width: 170px; }
+				Text { text: row.level; color: row.severity >= 3 ? ThemeTokens.error : row.severity == 2 ? ThemeTokens.warning : ThemeTokens.muted-foreground; width: 80px; }
+				Text { text: row.category; color: ThemeTokens.accent; width: 110px; }
+				Text { text: row.message; color: ThemeTokens.foreground; }
+			}
+		}
+		if (root.rows.length == 0): Text { text: "No diagnostics"; color: ThemeTokens.muted-foreground; }
+	}
+}

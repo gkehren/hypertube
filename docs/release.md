@@ -6,7 +6,9 @@ This document describes the release workflow that exists today and separates it 
 
 - The project version used by CPack is currently `0.1.0` in `CMakeLists.txt`.
 - The configured package generator is ZIP.
-- The installable runtime component contains the `hypertube` executable and seed `config/` directory.
+- The installable runtime component contains both `hypertube-slint`, the
+  current bootstrap frontend, and `hypertube-imgui`, the transitional frontend,
+  plus the seed `config/` directory.
 - There is currently no repository CI workflow, release tag policy, checksum generation, or automated publication workflow.
 
 ## Prepare a release build
@@ -34,7 +36,8 @@ The resulting layout should be:
 
 ```text
 dist/hypertube/
-├── hypertube
+├── hypertube-slint
+├── hypertube-imgui
 └── config/
     └── settings.json
 ```
@@ -53,7 +56,8 @@ Inspect the archive before publication:
 unzip -l Hypertube-0.1.0-Linux.zip
 ```
 
-The exact archive name is generator- and platform-dependent. Confirm that it contains only the executable and intended seed configuration files.
+The exact archive name is generator- and platform-dependent. Confirm that it
+contains both intended executables and only the seed configuration files.
 
 ## Manual release checklist
 

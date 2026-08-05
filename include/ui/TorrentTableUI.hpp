@@ -8,6 +8,7 @@
 #include <functional>
 #include "TorrentManager.hpp"
 #include "SystemUtils.hpp"
+#include "presentation/TorrentListPresenter.hpp"
 
 struct TorrentRemovalInfo;
 
@@ -40,11 +41,13 @@ public:
 	// Callback setup for actions that need to be handled by parent
 	void setRemoveTorrentCallback(std::function<void(const lt::info_hash_t &, const std::string &, TorrentRemovalMode)> callback);
 	void setResultCallback(std::function<void(const Result &)> callback);
-	void setCategoryFilter(int filter) { categoryFilter = filter; }
+	void setCategoryFilter(int filter) { presenter.setCategoryFilter(filter); }
+	std::vector<Presentation::CategoryDto> getCategories() { return presenter.buildCategories(); }
 
 private:
 	TorrentManager &torrentManager;
 	Utils::SystemUtils::SystemOpener &systemOpener;
+	Presentation::TorrentListPresenter presenter;
 	lt::torrent_handle selectedTorrent;
 
 	// Callback for torrent removal (handled by parent)
@@ -52,8 +55,5 @@ private:
 	std::function<void(const Result &)> onResult;
 
 	// Cache for ImGuiListClipper
-	std::vector<ManagedTorrent> m_torrentListCache;
-	int categoryFilter = 0;
-
-	bool matchesCategory(const ManagedTorrent &torrent, const lt::torrent_status *status) const;
+	std::vector<Presentation::TorrentRowDto> m_torrentListCache;
 };

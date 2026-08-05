@@ -7,11 +7,12 @@ This page is an evidence-based status matrix. `Implemented` means the behavior i
 | Area | Capability | Status | Evidence | Limitations or next step |
 | --- | --- | --- | --- | --- |
 | UI | Cross-platform GLFW/OpenGL Dear ImGui interface with persistent docking | Implemented | `src/ui/UIManager.cpp`, `src/ui/Theme.cpp` | Platform-specific rendering still needs release validation. |
+| UI | Slint shell, torrent table, selection, sorting, details, search, preferences, and logs | Partial | `src/ui/slint/SlintAppController.cpp`, `ui/` | Built as `hypertube-slint`; native picker adapters and persisted interactive splitters exist, while screen-reader/runtime checks and final parity remain. |
 | UI | File, magnet, and preferences keyboard shortcuts | Implemented | `UIManager::handleKeyboardShortcuts` | Shortcuts are suppressed while editing text. |
 | Torrents | Add `.torrent` files | Implemented | `TorrentManager::addTorrent`, `ModalDialogs` | Requires a readable file and writable save path. |
 | Torrents | Add magnet links | Implemented | `TorrentManager::addMagnetTorrent` | Peer discovery and metadata acquisition are network-dependent. |
 | Torrents | BitTorrent v1/v2 identity and duplicate prevention | Implemented | `lt::info_hash_t`, `torrent_tests` | Hybrid torrents follow libtorrent identity semantics. |
-| Torrents | Typed pause, resume, force-start, recheck, queue, reannounce, sequential, and remove actions | Implemented | `TorrentTableUI`, `TorrentManager` | Remove behavior depends on the selected remove mode. |
+| Torrents | Typed pause, resume, force-start, recheck, queue, reannounce, sequential, per-file priority, speed-limit, and remove actions | Implemented | `TorrentTableUI`, `SlintAppController`, `TorrentManager` | Remove behavior depends on the selected remove mode. |
 | Torrents | Progress, speed, peers, seeds, ETA, and status | Implemented | `TorrentManager` status cache, `TorrentTableUI` | Status snapshots are refreshed asynchronously at a bounded interval. |
 | Torrents | File, peer, tracker, and torrent details | Implemented | `TorrentManager` detail snapshots, `TorrentDetailsUI.cpp` | Files, peers, and trackers are collected off the UI thread and capped where necessary. |
 | Torrents | Open data location, copy magnet, and context actions | Implemented | `TorrentTableUI.cpp`, `SystemOpener`, `SystemUtils.cpp` | Results are drained on the UI thread; OS integration varies by platform. |
@@ -24,7 +25,7 @@ This page is an evidence-based status matrix. `Implemented` means the behavior i
 | Search | Retry, provider fallback, and bounded five-minute cache | Implemented | `SearchEngine::performSearch`, `makeHttpRequest` | A later-page Torznab error is returned instead of mixing provider pages. |
 | Search | Main-thread-safe asynchronous results | Implemented | `startSearch`, `takeCompletedSearch`, `shutdown` | One active search is supported at a time. |
 | Search | Search history and favorites | Implemented | `SearchEngine`, `ConfigManager` | Stored locally in the settings data. |
-| Persistence | Versioned JSON settings and migrations | Implemented | `ConfigManager`, schema version 1 | Future schema changes must add migration tests. |
+| Persistence | Versioned JSON settings and migrations | Implemented | `ConfigManager`, schema version 2 with v1 UI-layout migration | Future schema changes must add migration tests. |
 | Persistence | Atomic saves, `.bak` recovery, and transactional preferences | Implemented | `ConfigManager.cpp`, `UIManager.cpp`, `test_config_manager.cpp` | Preferences are committed only after the candidate is durably written; credential/runtime rollback is best-effort if restoration itself fails. |
 | Persistence | Periodic torrent autosave and fast-resume data | Implemented | `App.cpp`, torrent schema version 2 | Resume data is bounded and invalid blobs fall back to magnet/torrent identity. |
 | Runtime | Per-user and portable data locations | Implemented | `AppPaths.cpp` | Portable mode is based on the current working directory. |

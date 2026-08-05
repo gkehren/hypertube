@@ -43,7 +43,7 @@ TEST_F(ConfigManagerTest, CreateDefaultConfig)
 	manager.load(configPath);
 
 	// Check version
-	EXPECT_EQ(manager.getConfigVersion(), 1);
+	EXPECT_EQ(manager.getConfigVersion(), 2);
 
 	// Check default values
 	EXPECT_EQ(manager.getDownloadSpeedLimit(), 0);
@@ -82,6 +82,40 @@ TEST_F(ConfigManagerTest, SaveAndLoadConfig)
 	EXPECT_FALSE(manager2.getEnableDHT());
 	EXPECT_FALSE(manager2.getEnableUPnP());
 	EXPECT_TRUE(manager2.getEnableNATPMP());
+}
+
+TEST_F(ConfigManagerTest, PersistsUiLayoutAndMigratesMissingDefaults)
+{
+	const std::string configPath = (testDir / "ui-layout.json").string();
+	{
+		std::ofstream file(configPath);
+		file << R"({"version":1,"settings":{}})";
+	}
+
+	ConfigManager manager;
+	ASSERT_TRUE(manager.load(configPath));
+	EXPECT_EQ(manager.getConfigVersion(), 2);
+	const PreferencesSettings defaults = manager.getPreferencesSettings();
+	EXPECT_EQ(defaults.ui.sidebarWidth, 240);
+	EXPECT_EQ(defaults.ui.bottomPanelHeight, 300);
+
+	PreferencesSettings candidate = defaults;
+	candidate.ui.sidebarWidth = 360;
+	candidate.ui.bottomPanelHeight = 420;
+	candidate.ui.sidebarCollapsed = true;
+	candidate.ui.selectedMainTab = 2;
+	candidate.ui.selectedDetailsTab = 1;
+	ASSERT_TRUE(manager.savePreferencesCandidate(configPath, candidate).get());
+	ASSERT_TRUE(manager.commitPreferences(candidate));
+
+	ConfigManager restored;
+	ASSERT_TRUE(restored.load(configPath));
+	const PreferencesSettings saved = restored.getPreferencesSettings();
+	EXPECT_EQ(saved.ui.sidebarWidth, 360);
+	EXPECT_EQ(saved.ui.bottomPanelHeight, 420);
+	EXPECT_TRUE(saved.ui.sidebarCollapsed);
+	EXPECT_EQ(saved.ui.selectedMainTab, 2);
+	EXPECT_EQ(saved.ui.selectedDetailsTab, 1);
 }
 
 TEST_F(ConfigManagerTest, PreferencesCandidateCommitsOnlyAfterDurableSave)
@@ -199,7 +233,7 @@ TEST_F(ConfigManagerTest, MigrateFromLegacyConfig)
 	manager.load(configPath);
 
 	// Should be migrated to version 1
-	EXPECT_EQ(manager.getConfigVersion(), 1);
+	EXPECT_EQ(manager.getConfigVersion(), 2);
 
 	// Old values should be preserved
 	EXPECT_EQ(manager.getDownloadSpeedLimit(), 2048000);
@@ -229,7 +263,7 @@ TEST_F(ConfigManagerTest, ConfigVersionPersists)
 	file.close();
 
 	EXPECT_TRUE(savedConfig.contains("version"));
-	EXPECT_EQ(savedConfig["version"], 1);
+	EXPECT_EQ(savedConfig["version"], 2);
 }
 
 TEST_F(ConfigManagerTest, LoadInvalidJson)
@@ -249,7 +283,7 @@ TEST_F(ConfigManagerTest, LoadInvalidJson)
     EXPECT_FALSE(res.success);
 
     // Check if it fell back to defaults
-    EXPECT_EQ(manager.getConfigVersion(), 1);
+    EXPECT_EQ(manager.getConfigVersion(), 2);
     EXPECT_EQ(manager.getDownloadSpeedLimit(), 0);
 }
 
@@ -329,7 +363,7 @@ TEST_F(ConfigManagerTest, LoadEmptyFile)
     EXPECT_FALSE(res.success);
 
     // Check if it fell back to defaults
-    EXPECT_EQ(manager.getConfigVersion(), 1);
+    EXPECT_EQ(manager.getConfigVersion(), 2);
 }
 
 TEST_F(ConfigManagerTest, LoadTorrentsInvalidJson)

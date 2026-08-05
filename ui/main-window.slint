@@ -1,0 +1,478 @@
+import { Button, HorizontalBox, LineEdit, ListView, VerticalBox } from "std-widgets.slint";
+import { AppSidebar } from "app-sidebar.slint";
+import { SearchView } from "search-view.slint";
+import { SearchResultRow } from "search-types.slint";
+import { DetailsView } from "details-view.slint";
+import { DetailFileRow, DetailPeerRow, DetailTrackerRow } from "detail-types.slint";
+import { LogsView } from "logs-view.slint";
+import { LogRow } from "log-types.slint";
+import { PreferencesView } from "preferences-view.slint";
+import { ThemeTokens } from "theme.slint";
+
+export struct TorrentRow {
+	id: string,
+	name: string,
+	state-label: string,
+	progress-label: string,
+	progress: float,
+	size-label: string,
+	download-rate-label: string,
+	upload-rate-label: string,
+	peers-label: string,
+	seeds-label: string,
+	eta-label: string,
+	paused: bool,
+	error: bool,
+	active: bool,
+}
+
+export component MainWindow inherits Window {
+	callback request-close();
+	callback refresh-torrents();
+	callback select-torrent(string);
+	callback execute-torrent-command(string, int);
+	callback remove-torrent(string);
+	callback confirm-remove(int);
+	callback cancel-remove();
+	callback torrents-tab();
+	callback search-tab();
+	callback preferences-tab();
+	callback logs-tab();
+	callback add-torrent();
+	callback add-search-result(string);
+	callback submit-add-magnet(string, string);
+	callback submit-add-file(string, string);
+	callback cancel-add();
+	callback browse-torrent-file();
+	callback browse-save-directory();
+	callback select-category(int);
+	callback filter-torrents(string);
+	callback sort-torrents(int);
+	callback execute-search(string);
+	callback cancel-search();
+	callback load-more-search();
+	callback select-search-result(string);
+	callback toggle-search-favorite(string);
+	callback select-details-tab(int);
+	callback details-action(int);
+	callback preview-detail-file(int);
+	callback set-file-priority(int, int);
+	callback set-speed-limits(string, string);
+	callback set-sequential(bool);
+	callback clear-logs();
+	callback change-theme(int);
+	callback toggle-sidebar();
+	callback browse-preference-directory();
+	callback apply-preferences();
+	callback resize-layout(int, int);
+	callback navigate-torrent(int);
+	callback focus-search();
+	callback cancel-dialogs();
+
+	in property <string> version-text;
+	in property <string> startup-state;
+	in-out property <int> sidebar-width: 240;
+	in-out property <int> bottom-panel-height: 300;
+	in property <bool> sidebar-collapsed: false;
+	in property <int> active-tab: 0;
+	in property <int> category-filter: 0;
+	in property <string> selected-torrent-id;
+	in property <string> selected-torrent-name;
+	in property <string> selected-torrent-state;
+	in property <string> selected-torrent-progress;
+	in property <string> selected-torrent-size;
+	in property <string> selected-torrent-down-rate;
+	in property <string> selected-torrent-up-rate;
+	in property <string> selected-torrent-eta;
+	in property <string> selected-torrent-save-path;
+	in-out property <string> selected-download-limit;
+	in-out property <string> selected-upload-limit;
+	in property <bool> selected-torrent-paused: false;
+	in property <bool> selected-sequential-download: false;
+	in property <string> details-message;
+	in property <[TorrentRow]> torrent-rows: [];
+	in-out property <string> search-query;
+	in property <string> search-state-message;
+	in property <bool> search-loading: false;
+	in property <bool> search-can-load-more: false;
+	in property <[SearchResultRow]> search-rows: [];
+	in property <int> selected-details-tab: 0;
+	in property <[DetailFileRow]> detail-files: [];
+	in property <[DetailPeerRow]> detail-peers: [];
+	in property <[DetailTrackerRow]> detail-trackers: [];
+	in property <[LogRow]> log-rows: [];
+	in property <string> logs-state-message;
+	in property <int> selected-theme: 0;
+	in property <string> preferences-state-message;
+	in-out property <string> preference-download-limit;
+	in-out property <string> preference-upload-limit;
+	in-out property <string> preference-download-path;
+	in-out property <bool> preference-enable-dht: true;
+	in-out property <bool> preference-enable-upnp: true;
+	in-out property <bool> preference-enable-natpmp: true;
+	in-out property <bool> preference-torznab-enabled: false;
+	in-out property <string> preference-torznab-url;
+	in-out property <bool> preference-proxy-enabled: false;
+	in-out property <string> preference-proxy-type: "socks5";
+	in-out property <string> preference-proxy-host;
+	in-out property <string> preference-proxy-port;
+	in-out property <string> preference-proxy-username;
+	in-out property <bool> add-dialog-open: false;
+	in-out property <string> add-magnet-uri;
+	in-out property <string> add-file-path;
+	in-out property <string> add-save-path: "./downloads";
+	in property <string> add-dialog-message;
+	in property <bool> remove-dialog-open: false;
+	in property <string> remove-dialog-name;
+
+	title: "Hypertube";
+	preferred-width: 1280px;
+	preferred-height: 760px;
+
+	background: ThemeTokens.background;
+	forward-focus: main-scope;
+
+	main-scope := FocusScope {
+		KeyBinding {
+			keys: @keys(Control + O);
+			activated => { root.add-torrent(); }
+		}
+		KeyBinding {
+			keys: @keys(Control + U);
+			activated => { root.add-torrent(); }
+		}
+		KeyBinding {
+			keys: @keys(Control + P);
+			activated => { root.preferences-tab(); }
+		}
+		KeyBinding {
+			keys: @keys(Control + F);
+			activated => { root.focus-search(); }
+		}
+		KeyBinding {
+			keys: @keys(UpArrow);
+			enabled: root.active-tab == 0 && !root.add-dialog-open && !root.remove-dialog-open;
+			activated => { root.navigate-torrent(-1); }
+		}
+		KeyBinding {
+			keys: @keys(DownArrow);
+			enabled: root.active-tab == 0 && !root.add-dialog-open && !root.remove-dialog-open;
+			activated => { root.navigate-torrent(1); }
+		}
+		KeyBinding {
+			keys: @keys(Space);
+			enabled: root.active-tab == 0 && root.selected-torrent-id != "" && !root.add-dialog-open && !root.remove-dialog-open;
+			activated => { root.execute-torrent-command(root.selected-torrent-id, root.selected-torrent-paused ? 1 : 0); }
+		}
+		KeyBinding {
+			keys: @keys(Delete);
+			enabled: root.active-tab == 0 && root.selected-torrent-id != "" && !root.add-dialog-open && !root.remove-dialog-open;
+			activated => { root.remove-torrent(root.selected-torrent-id); }
+		}
+		KeyBinding {
+			keys: @keys(Escape);
+			enabled: root.add-dialog-open || root.remove-dialog-open;
+			activated => { root.cancel-dialogs(); }
+		}
+
+		content := Rectangle {
+			width: parent.width;
+			height: parent.height;
+
+			HorizontalBox {
+			padding: 0px;
+
+		AppSidebar {
+			sidebar-width: root.sidebar-width;
+			collapsed: root.sidebar-collapsed;
+			active-tab: root.active-tab;
+			category-filter: root.category-filter;
+			add-torrent => { root.add-torrent(); }
+			torrents-tab => { root.torrents-tab(); }
+			search-tab => { root.search-tab(); }
+			preferences-tab => { root.preferences-tab(); }
+			logs-tab => { root.logs-tab(); }
+			select-category(index) => { root.select-category(index); }
+		}
+
+		Rectangle {
+			width: 8px;
+			background: ThemeTokens.border;
+			TouchArea {
+				property <length> drag-start-width;
+				width: parent.width;
+				height: parent.height;
+				pointer-event(event) => {
+					if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down)
+					{
+						self.drag-start-width = root.sidebar-width * 1px;
+					}
+				}
+				moved => {
+					if (self.pressed)
+					{
+						root.sidebar-width = clamp(round((self.drag-start-width + self.mouse-x - self.pressed-x) / 1px), 120, 600);
+					}
+				}
+				changed pressed => {
+					if (!self.pressed) { root.resize-layout(root.sidebar-width, root.bottom-panel-height); }
+				}
+			}
+		}
+
+		if (root.active-tab == 1): SearchView {
+			query <=> root.search-query;
+			state-message: root.search-state-message;
+			loading: root.search-loading;
+			can-load-more: root.search-can-load-more;
+			rows: root.search-rows;
+			execute-search(query) => { root.execute-search(query); }
+			cancel-search => { root.cancel-search(); }
+			load-more => { root.load-more-search(); }
+			select-result(id) => { root.select-search-result(id); }
+			toggle-favorite(id) => { root.toggle-search-favorite(id); }
+			add-result(id) => { root.add-search-result(id); }
+		}
+
+		if (root.active-tab == 3): LogsView {
+			rows: root.log-rows;
+			state-message: root.logs-state-message;
+			clear-logs => { root.clear-logs(); }
+		}
+
+		if (root.active-tab == 2): PreferencesView {
+			selected-theme: root.selected-theme;
+			sidebar-collapsed: root.sidebar-collapsed;
+			state-message: root.preferences-state-message;
+			download-limit <=> root.preference-download-limit;
+			upload-limit <=> root.preference-upload-limit;
+			download-path <=> root.preference-download-path;
+			enable-dht <=> root.preference-enable-dht;
+			enable-upnp <=> root.preference-enable-upnp;
+			enable-natpmp <=> root.preference-enable-natpmp;
+			torznab-enabled <=> root.preference-torznab-enabled;
+			torznab-url <=> root.preference-torznab-url;
+			proxy-enabled <=> root.preference-proxy-enabled;
+			proxy-type <=> root.preference-proxy-type;
+			proxy-host <=> root.preference-proxy-host;
+			proxy-port <=> root.preference-proxy-port;
+			proxy-username <=> root.preference-proxy-username;
+			change-theme(theme) => { root.change-theme(theme); }
+			toggle-sidebar => { root.toggle-sidebar(); }
+			browse-download-directory => { root.browse-preference-directory(); }
+			apply-preferences => { root.apply-preferences(); }
+		}
+
+		if (root.active-tab != 1 && root.active-tab != 2 && root.active-tab != 3): VerticalBox {
+			padding: 20px;
+			alignment: start;
+
+			HorizontalBox {
+				Text {
+					text: root.active-tab == 0 ? "Torrents" : root.active-tab == 1 ? "Search" : root.active-tab == 2 ? "Preferences" : "Logs";
+					font-size: 24px;
+					color: ThemeTokens.foreground;
+				}
+				Rectangle { }
+				Button {
+					text: "Refresh";
+					clicked => { root.refresh-torrents(); }
+				}
+				Button {
+					text: "Close";
+					clicked => { root.request-close(); }
+				}
+			}
+
+			HorizontalBox {
+				LineEdit {
+					placeholder-text: "Filter torrents";
+					edited(text) => { root.filter-torrents(text); }
+				}
+				Button {
+					text: "Add magnet";
+					clicked => { root.add-torrent(); }
+				}
+			}
+
+			HorizontalBox {
+				Text { text: root.startup-state; color: ThemeTokens.muted-foreground; }
+				Rectangle { }
+				Text { text: root.version-text; color: ThemeTokens.muted-foreground; }
+			}
+
+			HorizontalBox {
+				Button { text: "Name"; clicked => { root.sort-torrents(1); } }
+				Button { text: "Size"; clicked => { root.sort-torrents(2); } }
+				Button { text: "Progress"; clicked => { root.sort-torrents(3); } }
+				Button { text: "State"; clicked => { root.sort-torrents(4); } }
+				Button { text: "Seeds"; clicked => { root.sort-torrents(8); } }
+				Button { text: "Peers"; clicked => { root.sort-torrents(9); } }
+				Button { text: "Down"; clicked => { root.sort-torrents(6); } }
+				Button { text: "Up"; clicked => { root.sort-torrents(7); } }
+				Button { text: "ETA"; clicked => { root.sort-torrents(10); } }
+			}
+
+			ListView {
+				accessible-role: list;
+				accessible-label: "Torrent list";
+				accessible-item-count: root.torrent-rows.length;
+				for torrent in root.torrent-rows: Rectangle {
+					height: 48px;
+					accessible-role: list-item;
+					accessible-label: torrent.name + ", " + torrent.state-label + ", " + torrent.progress-label;
+					accessible-item-selectable: true;
+					accessible-item-selected: torrent.id == root.selected-torrent-id;
+					background: torrent.id == root.selected-torrent-id ? ThemeTokens.surface-hover : ThemeTokens.surface;
+					border-width: 1px;
+					border-color: ThemeTokens.border;
+
+					TouchArea {
+						width: parent.width;
+						height: parent.height;
+						clicked => { root.select-torrent(torrent.id); }
+					}
+
+					HorizontalBox {
+						padding: 8px;
+						Text { text: torrent.name; color: ThemeTokens.foreground; }
+						Text { text: torrent.size-label; color: ThemeTokens.muted-foreground; width: 110px; }
+						Text { text: torrent.progress-label; color: ThemeTokens.muted-foreground; width: 100px; }
+						Text { text: torrent.state-label; color: ThemeTokens.muted-foreground; width: 150px; }
+						Text { text: torrent.seeds-label; color: ThemeTokens.muted-foreground; width: 70px; }
+						Text { text: torrent.peers-label; color: ThemeTokens.muted-foreground; width: 70px; }
+						Text { text: torrent.download-rate-label; color: ThemeTokens.muted-foreground; width: 130px; }
+						Text { text: torrent.upload-rate-label; color: ThemeTokens.muted-foreground; width: 130px; }
+						Text { text: torrent.eta-label; color: ThemeTokens.muted-foreground; width: 100px; }
+						Button {
+							text: torrent.paused ? "Resume" : "Pause";
+							clicked => { root.execute-torrent-command(torrent.id, torrent.paused ? 1 : 0); }
+						}
+						Button {
+							text: "Remove";
+							clicked => { root.remove-torrent(torrent.id); }
+						}
+						Button {
+							text: "Recheck";
+							clicked => { root.execute-torrent-command(torrent.id, 3); }
+						}
+					}
+
+				}
+			}
+
+			if (root.torrent-rows.length == 0): Text {
+				text: root.startup-state == "Ready" ? "No torrents yet" : root.startup-state;
+				color: ThemeTokens.muted-foreground;
+				horizontal-alignment: center;
+			}
+
+			Rectangle {
+				height: 8px;
+				background: ThemeTokens.border;
+				TouchArea {
+					property <length> drag-start-height;
+					width: parent.width;
+					height: parent.height;
+					pointer-event(event) => {
+						if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down)
+						{
+							self.drag-start-height = root.bottom-panel-height * 1px;
+						}
+					}
+					moved => {
+						if (self.pressed)
+						{
+							root.bottom-panel-height = clamp(round((self.drag-start-height - self.mouse-y + self.pressed-y) / 1px), 120, 1000);
+						}
+					}
+					changed pressed => {
+						if (!self.pressed) { root.resize-layout(root.sidebar-width, root.bottom-panel-height); }
+					}
+				}
+			}
+
+			DetailsView {
+				height: root.bottom-panel-height * 1px;
+				selected-tab: root.selected-details-tab;
+				message: root.details-message;
+				name: root.selected-torrent-name;
+				state-label: root.selected-torrent-state;
+				progress-label: root.selected-torrent-progress;
+				size-label: root.selected-torrent-size;
+				download-rate-label: root.selected-torrent-down-rate;
+				upload-rate-label: root.selected-torrent-up-rate;
+				eta-label: root.selected-torrent-eta;
+				save-path: root.selected-torrent-save-path;
+				download-limit <=> root.selected-download-limit;
+				upload-limit <=> root.selected-upload-limit;
+				files: root.detail-files;
+				peers: root.detail-peers;
+				trackers: root.detail-trackers;
+				sequential-download: root.selected-sequential-download;
+				select-tab(tab) => { root.select-details-tab(tab); }
+			details-action(action) => { root.details-action(action); }
+			preview-file(index) => { root.preview-detail-file(index); }
+			set-file-priority(index, priority) => { root.set-file-priority(index, priority); }
+			set-speed-limits(download, upload) => { root.set-speed-limits(download, upload); }
+			set-sequential(enabled) => { root.set-sequential(enabled); }
+				}
+			}
+		}
+
+		if (root.add-dialog-open): Rectangle {
+			x: (root.width - 540px) / 2;
+			y: (root.height - 360px) / 2;
+			width: 540px;
+			height: 360px;
+			background: ThemeTokens.surface;
+			border-width: 2px;
+			border-color: ThemeTokens.accent;
+			VerticalBox {
+				padding: 20px;
+				Text { text: "Add torrent"; color: ThemeTokens.foreground; font-size: 22px; }
+				Text { text: root.add-dialog-message; color: ThemeTokens.warning; }
+				Text { text: "Magnet URI"; color: ThemeTokens.muted-foreground; }
+					LineEdit { text <=> root.add-magnet-uri; placeholder-text: "magnet:?xt=urn:btih:..."; }
+				Text { text: "or torrent file path"; color: ThemeTokens.muted-foreground; }
+				HorizontalBox {
+					LineEdit { text <=> root.add-file-path; placeholder-text: "/path/to/file.torrent"; }
+					Button { text: "Browse file"; clicked => { root.browse-torrent-file(); } }
+				}
+				Text { text: "Save directory"; color: ThemeTokens.muted-foreground; }
+				HorizontalBox {
+					LineEdit { text <=> root.add-save-path; }
+					Button { text: "Browse folder"; clicked => { root.browse-save-directory(); } }
+				}
+				HorizontalBox {
+					Button { text: "Add magnet"; clicked => { root.submit-add-magnet(root.add-magnet-uri, root.add-save-path); } }
+					Button { text: "Add file"; clicked => { root.submit-add-file(root.add-file-path, root.add-save-path); } }
+					Button { text: "Cancel"; clicked => { root.cancel-add(); } }
+				}
+			}
+		}
+
+		if (root.remove-dialog-open): Rectangle {
+			x: (root.width - 500px) / 2;
+			y: (root.height - 220px) / 2;
+			width: 500px;
+			height: 220px;
+			background: ThemeTokens.surface;
+			border-width: 2px;
+			border-color: ThemeTokens.warning;
+			VerticalBox {
+				padding: 20px;
+				Text { text: "Remove torrent"; color: ThemeTokens.foreground; font-size: 22px; }
+				Text { text: "Remove '" + root.remove-dialog-name + "'?"; color: ThemeTokens.muted-foreground; }
+				HorizontalBox {
+					Button { text: "Keep files"; clicked => { root.confirm-remove(0); } }
+					Button { text: "Delete data"; clicked => { root.confirm-remove(1); } }
+					Button { text: "Delete source"; clicked => { root.confirm-remove(2); } }
+					Button { text: "Delete data + source"; clicked => { root.confirm-remove(3); } }
+					Button { text: "Cancel"; clicked => { root.cancel-remove(); } }
+				}
+			}
+		}
+	}
+	}
+}

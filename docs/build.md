@@ -1,6 +1,8 @@
 # Build system
 
-Hypertube uses CMake 3.20 or newer and requires C++17. The project prefers system or package-manager dependencies and falls back to CMake `FetchContent` when a dependency is not found.
+Hypertube uses CMake 3.21 or newer and requires C++20. The project prefers
+system or package-manager dependencies and falls back to CMake `FetchContent`
+when a dependency is not found.
 
 ## Dependency resolution
 
@@ -13,6 +15,8 @@ The build searches for:
 - nlohmann/json;
 - libtorrent-rasterbar;
 - cURL;
+- Rust 1.88 or newer for the pinned Slint 1.16.1 build;
+- Fontconfig development files on Linux for Slint's software renderer;
 - X11 on Linux when available.
 
 When a package is not available locally, CMake can download a pinned dependency revision where configured. The first configure may therefore require network access and additional build time.
@@ -24,7 +28,7 @@ Ubuntu/Debian:
 ```sh
 sudo apt update
 sudo apt install -y cmake build-essential libtorrent-rasterbar-dev \
-  libcurl4-openssl-dev libgl1-mesa-dev libglfw3-dev libx11-dev
+  libcurl4-openssl-dev libfontconfig1-dev libgl1-mesa-dev libglfw3-dev libx11-dev
 ```
 
 Arch Linux:
@@ -37,7 +41,7 @@ Fedora:
 
 ```sh
 sudo dnf install cmake gcc-c++ libtorrent-rasterbar-devel libcurl-devel \
-  glfw-devel mesa-libGL-devel
+  fontconfig-devel glfw-devel mesa-libGL-devel
 ```
 
 If a distribution package does not provide a compatible ImGui or ImGuiFileDialog target, the CMake fallback may fetch it.
@@ -111,7 +115,9 @@ Use this configuration for changes involving concurrency, ownership, parsing, ca
 
 ## Build outputs
 
-The main executable is `build/hypertube` on single-config platforms. Multi-config generators place it under the selected configuration directory, for example `build/Release/hypertube.exe`.
+Single-config builds produce `build/hypertube-slint` and the transitional
+`build/hypertube-imgui`. Multi-config generators place them under the selected
+configuration directory, for example `build/Release/hypertube-slint.exe`.
 
 Build directories, generated CPack output, downloaded dependencies, and runtime data must remain untracked.
 
@@ -123,7 +129,7 @@ Build directories, generated CPack output, downloaded dependencies, and runtime 
 | GLFW target not found | Missing package or incomplete vcpkg setup | Check package-manager installation and toolchain path. |
 | FetchContent cannot clone/download | Network or proxy restriction | Install the dependency locally or configure with network access. |
 | Libtorrent target mismatch | Incompatible package config | Check the discovered CMake target and package version. |
-| Build succeeds but window fails | Runtime graphics/driver issue | Run the application from a terminal and inspect GLFW diagnostics. |
+| Build succeeds but the window fails | Runtime display/backend issue | Run `hypertube-slint` from a terminal first; if testing the legacy frontend, inspect GLFW/OpenGL diagnostics. |
 
 ## Build validation
 

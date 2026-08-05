@@ -1,6 +1,7 @@
 #include <iostream>
 #include <curl/curl.h>
 #include "App.hpp"
+#include "ImGuiApp.hpp"
 
 int main(int, char **)
 {
@@ -10,7 +11,10 @@ int main(int, char **)
 	try
 	{
 		App app;
-		app.run();
+		app.initialize();
+		ImGuiApp frontend(app);
+		frontend.run();
+		app.shutdown();
 	}
 	catch (const std::exception &e)
 	{

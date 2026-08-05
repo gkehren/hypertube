@@ -1,6 +1,7 @@
 #include "TorrentTableUI.hpp"
 #include "UIManager.hpp"
 #include "StringUtils.hpp"
+#include "presentation/UiFormatters.hpp"
 #include "SystemUtils.hpp"
 #include "Theme.hpp"
 #include <iostream>
@@ -13,7 +14,7 @@
 #include <cstdint>
 
 TorrentTableUI::TorrentTableUI(TorrentManager &torrentManager, Utils::SystemUtils::SystemOpener &systemOpener)
-	: torrentManager(torrentManager), systemOpener(systemOpener)
+	: torrentManager(torrentManager), systemOpener(systemOpener), presenter(torrentManager)
 {
 }
 
@@ -53,32 +54,19 @@ void TorrentTableUI::displayTorrentTableHeader()
 
 void TorrentTableUI::displayTorrentTableBody()
 {
-	auto torrents = torrentManager.getTorrentSnapshot();
+	const auto torrents = torrentManager.getTorrentSnapshot();
 	// Get status cache snapshot once. It is immutable for the duration of this
 	// frame, so filtering and rendering use a consistent view.
 	auto statusCache = torrentManager.getStatusCache();
 
-	// Update cache
-	m_torrentListCache.clear();
-	m_torrentListCache.reserve(torrents.size());
-	for (const auto &torrent : torrents)
-	{
-		const lt::torrent_status *status = nullptr;
-		if (statusCache)
-		{
-			auto it = statusCache->find(torrent.hash);
-			if (it != statusCache->end())
-				status = &it->second;
-		}
-		if (matchesCategory(torrent, status))
-			m_torrentListCache.push_back(torrent);
-	}
+	// The presenter owns filtering, sorting, stable IDs, and selection recovery.
+	m_torrentListCache = presenter.buildRows();
 
 	if (m_torrentListCache.empty())
 	{
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(1);
-		if (categoryFilter == 0)
+		if (presenter.categoryFilter() == 0)
 			ImGui::TextWrapped("No torrents yet. Use File > Add a torrent or paste a magnet link to get started.");
 		else
 			ImGui::TextWrapped("No torrents match this filter.");
@@ -92,42 +80,31 @@ void TorrentTableUI::displayTorrentTableBody()
 	{
 		for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
 		{
-			const auto &torrent = m_torrentListCache[i];
-			const auto &info_hash = torrent.hash;
-			const auto &handle = torrent.handle;
+			const auto &row = m_torrentListCache[i];
+			const auto infoHash = presenter.hashForId(row.id);
+			if (!infoHash)
+				continue;
+			const auto torrent = std::find_if(torrents.begin(), torrents.end(), [&infoHash](const ManagedTorrent &candidate)
+			{
+				return candidate.hash == *infoHash;
+			});
+			if (torrent == torrents.end())
+				continue;
+			const auto &handle = torrent->handle;
 
 			const lt::torrent_status* statusPtr = nullptr;
 			if (statusCache)
 			{
-				auto it = statusCache->find(info_hash);
+				auto it = statusCache->find(*infoHash);
 				if (it != statusCache->end())
 				{
 					statusPtr = &it->second;
 				}
 			}
 
-			displayTorrentTableRow(handle, info_hash, statusPtr);
+			displayTorrentTableRow(handle, *infoHash, statusPtr);
 		}
 	}
-}
-
-bool TorrentTableUI::matchesCategory(const ManagedTorrent &torrent, const lt::torrent_status *status) const
-{
-	if (categoryFilter == 0 || !status)
-		return categoryFilter == 0;
-	if (categoryFilter == 1)
-		return status->state == lt::torrent_status::downloading || status->state == lt::torrent_status::downloading_metadata;
-	if (categoryFilter == 2)
-		return status->state == lt::torrent_status::seeding;
-	if (categoryFilter == 3)
-		return status->is_finished;
-	if (categoryFilter == 4)
-		return (status->flags & lt::torrent_flags::paused) != lt::torrent_flags_t{};
-	if (categoryFilter == 5)
-		return status->download_payload_rate > 0 || status->upload_payload_rate > 0;
-	if (categoryFilter == 6)
-		return status->download_payload_rate == 0 && status->upload_payload_rate == 0;
-	return true;
 }
 
 void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, const lt::info_hash_t &info_hash, const lt::torrent_status *cachedStatus)
@@ -143,7 +120,11 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 	bool isSelected = (selectedTorrent == handle);
 
 	// Get status string for coloring
-	const char *statusStr = Utils::torrentStateToString(status.state, status.flags);
+	const std::string statusText = Presentation::UiFormatters::torrentStateToString(
+		static_cast<int>(status.state),
+		(status.flags & lt::torrent_flags::paused) != lt::torrent_flags_t{},
+		status.is_finished);
+	const char *statusStr = statusText.c_str();
 	ImVec4 statusColor = HypertubeTheme::getStatusColor(statusStr);
 	const auto &palette = HypertubeTheme::getCurrentPalette();
 
@@ -165,6 +146,7 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 	if (ImGui::Selectable(status.name.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap))
 	{
 		selectedTorrent = handle;
+		presenter.setSelectedId(Presentation::TorrentListPresenter::idForHash(info_hash));
 	}
 
 	displayTorrentContextMenu(handle, info_hash);
@@ -172,9 +154,7 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 	// Column 2: Size
 	ImGui::TableSetColumnIndex(2);
 	ImGui::AlignTextToFramePadding();
-	char sizeBuf[64];
-	Utils::formatBytes(status.total_wanted, false, sizeBuf, sizeof(sizeBuf));
-	ImGui::Text("%s", sizeBuf);
+	ImGui::Text("%s", Presentation::UiFormatters::formatBytes(status.total_wanted).c_str());
 
 	// Column 3: Progress bar
 	ImGui::TableSetColumnIndex(3);
@@ -189,12 +169,11 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 	else
 		progressColor = palette.progressDownload;
 
-	char progressText[32];
-	snprintf(progressText, sizeof(progressText), "%.1f%%", status.progress * 100.0f);
+	const std::string progressText = Presentation::UiFormatters::formatProgress(status.progress);
 
 	ImGui::PushStyleColor(ImGuiCol_PlotHistogram, progressColor);
 	ImGui::PushStyleColor(ImGuiCol_FrameBg, palette.progressBackground);
-	ImGui::ProgressBar(status.progress, ImVec2(-1, progressBarHeight), progressText);
+	ImGui::ProgressBar(status.progress, ImVec2(-1, progressBarHeight), progressText.c_str());
 	ImGui::PopStyleColor(2);
 
 	// Column 4: Status
@@ -205,29 +184,28 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 	// Column 5: Download speed
 	ImGui::TableSetColumnIndex(5);
 	ImGui::AlignTextToFramePadding();
-	char downSpeedBuf[64];
-	Utils::formatBytes(status.download_payload_rate, true, downSpeedBuf, sizeof(downSpeedBuf));
+	const std::string downSpeedBuf = Presentation::UiFormatters::formatRate(status.download_payload_rate);
 	if (status.download_payload_rate > 0)
-		ImGui::TextColored(palette.success, "%s", downSpeedBuf);
+		ImGui::TextColored(palette.success, "%s", downSpeedBuf.c_str());
 	else
-		ImGui::Text("%s", downSpeedBuf);
+		ImGui::Text("%s", downSpeedBuf.c_str());
 
 	// Column 6: Upload speed
 	ImGui::TableSetColumnIndex(6);
 	ImGui::AlignTextToFramePadding();
-	char upSpeedBuf[64];
-	Utils::formatBytes(status.upload_payload_rate, true, upSpeedBuf, sizeof(upSpeedBuf));
+	const std::string upSpeedBuf = Presentation::UiFormatters::formatRate(status.upload_payload_rate);
 	if (status.upload_payload_rate > 0)
-		ImGui::TextColored(palette.info, "%s", upSpeedBuf);
+		ImGui::TextColored(palette.info, "%s", upSpeedBuf.c_str());
 	else
-		ImGui::Text("%s", upSpeedBuf);
+		ImGui::Text("%s", upSpeedBuf.c_str());
 
 	// Column 7: ETA
 	ImGui::TableSetColumnIndex(7);
 	ImGui::AlignTextToFramePadding();
-	char etaBuf[64];
-	Utils::computeETA(status, etaBuf, sizeof(etaBuf));
-	ImGui::Text("%s", etaBuf);
+	const auto remaining = std::max<std::int64_t>(0, status.total_wanted - status.total_wanted_done);
+	const std::int64_t etaSeconds = status.state == lt::torrent_status::downloading && status.download_payload_rate > 0
+		? remaining / status.download_payload_rate : -1;
+	ImGui::Text("%s", Presentation::UiFormatters::formatEta(etaSeconds).c_str());
 
 	// Column 8: Seeds/Peers
 	ImGui::TableSetColumnIndex(8);

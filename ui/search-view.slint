@@ -1,0 +1,86 @@
+import { Button, HorizontalBox, LineEdit, ListView, VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "theme.slint";
+import { SearchResultRow } from "search-types.slint";
+
+export component SearchView inherits Rectangle {
+	in-out property <string> query;
+	in property <string> state-message;
+	in property <bool> loading: false;
+	in property <bool> can-load-more: false;
+	in property <[SearchResultRow]> rows: [];
+
+	callback execute-search(string);
+	callback cancel-search();
+	callback load-more();
+	callback select-result(string);
+	callback toggle-favorite(string);
+	callback add-result(string);
+
+	background: ThemeTokens.background;
+
+	VerticalBox {
+		padding: 20px;
+		HorizontalBox {
+			LineEdit {
+				text <=> root.query;
+				placeholder-text: "Search torrents";
+			}
+			Button {
+				text: root.loading ? "Searching..." : "Search";
+				clicked => { root.execute-search(root.query); }
+			}
+			Button {
+				text: "Cancel";
+				enabled: root.loading;
+				clicked => { root.cancel-search(); }
+			}
+		}
+
+		Text { text: root.state-message; color: ThemeTokens.muted-foreground; }
+
+		ListView {
+			accessible-role: list;
+			accessible-label: "Search results";
+			accessible-item-count: root.rows.length;
+			for result in root.rows: Rectangle {
+				height: 62px;
+				accessible-role: list-item;
+				accessible-label: result.name + ", " + result.size-label + ", " + result.seeders-label + " seeders";
+				background: ThemeTokens.surface;
+				border-width: 1px;
+				border-color: ThemeTokens.border;
+				HorizontalBox {
+					padding: 8px;
+					TouchArea {
+						clicked => { root.select-result(result.id); }
+					}
+					Text { text: result.name; color: ThemeTokens.foreground; }
+					Text { text: result.size-label; color: ThemeTokens.muted-foreground; width: 110px; }
+					Text { text: "S " + result.seeders-label + " / L " + result.leechers-label; color: ThemeTokens.muted-foreground; width: 130px; }
+					Text { text: result.category; color: ThemeTokens.muted-foreground; width: 120px; }
+					Text { text: result.published-label; color: ThemeTokens.muted-foreground; width: 130px; }
+					Button {
+						text: result.favorite ? "Unfavorite" : "Favorite";
+						clicked => { root.toggle-favorite(result.id); }
+					}
+					Button {
+						text: "Add";
+						clicked => { root.add-result(result.id); }
+					}
+				}
+			}
+		}
+
+		if (root.rows.length == 0 && !root.loading): Text {
+			text: "No search results";
+			color: ThemeTokens.muted-foreground;
+			horizontal-alignment: center;
+		}
+
+		Button {
+			text: "Load more";
+			enabled: root.can-load-more && !root.loading;
+			clicked => { root.load-more(); }
+		}
+	}
+}

@@ -1,11 +1,11 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.21)
 
 # Project name
 project(hypertube CXX)
 
 # C++ standard
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(HYPERTUBE_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 
@@ -211,10 +211,41 @@ if(UNIX AND NOT APPLE)
     find_package(X11 QUIET)
 endif()
 
+# Slint is introduced as a second frontend while the ImGui frontend remains
+# available for parity checks.  Keep the version and backend choices explicit
+# so a local Qt installation cannot silently change the renderer.
+set(SLINT_FEATURE_BACKEND_QT OFF CACHE BOOL "" FORCE)
+set(SLINT_FEATURE_BACKEND_WINIT ON CACHE BOOL "" FORCE)
+# Use Winit's software renderer for the bootstrap frontend. Keep the renderer
+# choice explicit while the Linux Fontconfig dependency remains checked below.
+set(SLINT_FEATURE_RENDERER_FEMTOVG OFF CACHE BOOL "" FORCE)
+set(SLINT_FEATURE_RENDERER_SOFTWARE ON CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    Slint
+    GIT_REPOSITORY https://github.com/slint-ui/slint.git
+    GIT_TAG v1.16.1
+    SOURCE_SUBDIR api/cpp
+)
+FetchContent_MakeAvailable(Slint)
+
+# Slint's Linux software renderer uses Fontconfig through its statically linked
+# Rust runtime. Keep the dependency explicit so the final application link is
+# reproducible instead of relying on transitive Rust build details.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(HYPERTUBE_FONTCONFIG QUIET IMPORTED_TARGET fontconfig)
+    endif()
+    if(NOT TARGET PkgConfig::HYPERTUBE_FONTCONFIG)
+        message(FATAL_ERROR "Fontconfig development files are required for the Slint Linux frontend")
+    endif()
+endif()
+
 # Source files
 set(SOURCES
 	src/main.cpp
 	src/app/App.cpp
+	src/app/ImGuiApp.cpp
     src/ui/UIManager.cpp
     src/ui/TorrentTableUI.cpp
     src/ui/TorrentDetailsUI.cpp
@@ -313,11 +344,36 @@ target_link_libraries(hypertube_search PUBLIC
     CURL::libcurl
 )
 
-# Create the executable
-add_executable(hypertube ${SOURCES})
+# Toolkit-neutral presentation and controller layer.  Both frontends use this
+# target; it deliberately has no ImGui or Slint dependency.
+add_library(hypertube_presentation STATIC
+    src/presentation/UiFormatters.cpp
+    src/presentation/TorrentListPresenter.cpp
+    src/presentation/TorrentDetailsPresenter.cpp
+    src/presentation/SearchPresenter.cpp
+    src/presentation/LogsPresenter.cpp
+    src/presentation/PreferencesController.cpp
+)
+
+target_include_directories(hypertube_presentation PUBLIC
+    "include"
+    "include/app"
+    "include/utils"
+)
+
+target_link_libraries(hypertube_presentation PUBLIC
+    hypertube_torrent
+    hypertube_search
+    hypertube_utils
+    LibtorrentRasterbar::torrent-rasterbar
+)
+
+# Create the legacy frontend executable during the migration.  It remains
+# buildable beside the new Slint frontend until functional parity is reached.
+add_executable(hypertube-imgui ${SOURCES})
 
 # Set target-specific include directories
-target_include_directories(hypertube PRIVATE
+target_include_directories(hypertube-imgui PRIVATE
     "include"
     "include/app"
     "include/ui"
@@ -325,11 +381,12 @@ target_include_directories(hypertube PRIVATE
 )
 
 # Link libraries using modern imported targets
-target_link_libraries(hypertube PRIVATE
+	target_link_libraries(hypertube-imgui PRIVATE
 	hypertube_utils
 	hypertube_torrent
     hypertube_config
     hypertube_search
+    hypertube_presentation
     LibtorrentRasterbar::torrent-rasterbar
     OpenGL::GL
     glfw
@@ -341,19 +398,88 @@ target_link_libraries(hypertube PRIVATE
 
 # Platform-specific libraries
 if(UNIX AND NOT APPLE AND X11_FOUND)
-    target_link_libraries(hypertube PRIVATE ${X11_LIBRARIES})
+    target_link_libraries(hypertube-imgui PRIVATE ${X11_LIBRARIES})
 endif()
 
 if(WIN32)
-    target_link_libraries(hypertube PRIVATE ws2_32 iphlpapi crypt32 dbghelp)
+	target_link_libraries(hypertube-imgui PRIVATE ws2_32 iphlpapi crypt32 dbghelp ole32)
 endif()
+
+add_executable(hypertube-slint
+    src/main_slint.cpp
+    src/app/App.cpp
+    src/ui/slint/SlintAppController.cpp
+    src/ui/slint/SlintModelAdapter.cpp
+    src/ui/slint/SearchModelAdapter.cpp
+    src/ui/slint/DetailsModelAdapter.cpp
+    src/ui/slint/LogModelAdapter.cpp
+    src/ui/slint/DialogService.cpp
+)
+
+target_include_directories(hypertube-slint PRIVATE
+    "include"
+    "include/app"
+    "include/ui"
+    "include/utils"
+    "include/ui/slint"
+)
+
+target_link_libraries(hypertube-slint PRIVATE
+    hypertube_utils
+    hypertube_torrent
+    hypertube_config
+    hypertube_search
+    hypertube_presentation
+    Slint::Slint
+    CURL::libcurl
+)
+
+if(TARGET PkgConfig::HYPERTUBE_FONTCONFIG)
+    target_link_libraries(hypertube-slint PRIVATE PkgConfig::HYPERTUBE_FONTCONFIG)
+endif()
+
+if(WIN32)
+    target_link_libraries(hypertube-slint PRIVATE ole32)
+endif()
+
+slint_target_sources(hypertube-slint
+    ui/main-window.slint
+)
+
+# Keep the static layout previews independently checkable without making them
+# part of the production executable or requiring slint-viewer at runtime.
+set(HYPERTUBE_SLINT_PREVIEW_SOURCES
+    ui/previews/torrent-table-preview.slint
+    ui/previews/search-preview.slint
+    ui/previews/preferences-preview.slint
+)
+set(HYPERTUBE_SLINT_PREVIEW_OUTPUTS)
+foreach(preview_source IN LISTS HYPERTUBE_SLINT_PREVIEW_SOURCES)
+    get_filename_component(preview_name "${preview_source}" NAME_WE)
+    set(preview_output "${CMAKE_CURRENT_BINARY_DIR}/${preview_name}.h")
+    add_custom_command(
+        OUTPUT "${preview_output}"
+        COMMAND $<TARGET_FILE:Slint::slint-compiler>
+            -f cpp
+            -I "${CMAKE_SOURCE_DIR}/ui"
+            -o "${preview_output}"
+            "${CMAKE_SOURCE_DIR}/${preview_source}"
+        DEPENDS
+            "${CMAKE_SOURCE_DIR}/${preview_source}"
+            "${CMAKE_SOURCE_DIR}/ui/theme.slint"
+        COMMENT "Checking Slint preview ${preview_name}"
+        VERBATIM
+    )
+    list(APPEND HYPERTUBE_SLINT_PREVIEW_OUTPUTS "${preview_output}")
+endforeach()
+add_custom_target(slint-preview-check DEPENDS ${HYPERTUBE_SLINT_PREVIEW_OUTPUTS})
 
 file(COPY config DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
 # Portable distribution: install the executable and seed configuration into a
 # flat directory that can be zipped for Linux/macOS/Windows packaging jobs.
 include(GNUInstallDirs)
-install(TARGETS hypertube COMPONENT runtime RUNTIME DESTINATION . BUNDLE DESTINATION .)
+install(TARGETS hypertube-imgui hypertube-slint COMPONENT runtime RUNTIME DESTINATION . BUNDLE DESTINATION .)
 install(DIRECTORY config DESTINATION . COMPONENT runtime)
 set(CPACK_GENERATOR "ZIP")
 set(CPACK_PACKAGE_NAME "Hypertube")
@@ -364,17 +490,17 @@ include(CPack)
 
 # Add optimized flags for Release build
 if(MSVC)
-    target_compile_options(hypertube PRIVATE
+    target_compile_options(hypertube-imgui PRIVATE
         $<$<CONFIG:Release>:/O2 /arch:AVX2 /GL /fp:fast>
     )
-    target_link_options(hypertube PRIVATE
+    target_link_options(hypertube-imgui PRIVATE
         $<$<CONFIG:Release>:/LTCG>
     )
 else()
-    target_compile_options(hypertube PRIVATE
+    target_compile_options(hypertube-imgui PRIVATE
         $<$<CONFIG:Release>:-O3 -march=native -flto -ffast-math>
     )
-    target_link_options(hypertube PRIVATE
+    target_link_options(hypertube-imgui PRIVATE
         $<$<CONFIG:Release>:-flto>
     )
 endif()

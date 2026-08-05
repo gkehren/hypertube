@@ -1,0 +1,23 @@
+export struct DetailFileRow {
+	index: int,
+	name: string,
+	size-label: string,
+	progress-label: string,
+	priority-label: string,
+	priority: int,
+	previewable: bool,
+}
+
+export struct DetailPeerRow {
+	address: string,
+	client: string,
+	flags: string,
+	download-speed-label: string,
+	upload-speed-label: string,
+}
+
+export struct DetailTrackerRow {
+	url: string,
+	status-label: string,
+	verified: bool,
+}

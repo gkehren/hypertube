@@ -1,5 +1,6 @@
 #include "SearchUI.hpp"
 #include "StringUtils.hpp"
+#include "presentation/UiFormatters.hpp"
 #include "SystemUtils.hpp"
 #include "Theme.hpp"
 #include <algorithm>
@@ -320,9 +321,7 @@ void SearchUI::displayFavoriteRow(const TorrentSearchResult &result, int index)
 	// Size
 	ImGui::TableSetColumnIndex(1);
 	ImGui::AlignTextToFramePadding();
-	char sizeBuf[64];
-	Utils::formatBytes(result.sizeBytes, false, sizeBuf, sizeof(sizeBuf));
-	ImGui::Text("%s", sizeBuf);
+	ImGui::Text("%s", Presentation::UiFormatters::formatBytes(static_cast<std::int64_t>(result.sizeBytes)).c_str());
 
 	// Seeders with color coding
 	ImGui::TableSetColumnIndex(2);
@@ -368,16 +367,12 @@ void SearchUI::displayFavoriteRow(const TorrentSearchResult &result, int index)
 	// Created date
 	ImGui::TableSetColumnIndex(6);
 	ImGui::AlignTextToFramePadding();
-	char createdDate[32];
-	formatUnixTime(result.createdUnix, createdDate, sizeof(createdDate));
-	ImGui::Text("%s", createdDate);
+	ImGui::Text("%s", Presentation::UiFormatters::formatUnixDate(result.createdUnix).c_str());
 
 	// Last seen (scraped date)
 	ImGui::TableSetColumnIndex(7);
 	ImGui::AlignTextToFramePadding();
-	char scrapedDate[32];
-	formatUnixTime(result.scrapedDate, scrapedDate, sizeof(scrapedDate));
-	ImGui::Text("%s", scrapedDate);
+	ImGui::Text("%s", Presentation::UiFormatters::formatUnixDate(result.scrapedDate).c_str());
 
 	// Category
 	ImGui::TableSetColumnIndex(8);
@@ -463,9 +458,7 @@ void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result,
 	// Size
 	ImGui::TableSetColumnIndex(1);
 	ImGui::AlignTextToFramePadding();
-	char sizeBuf[64];
-	Utils::formatBytes(result.sizeBytes, false, sizeBuf, sizeof(sizeBuf));
-	ImGui::Text("%s", sizeBuf);
+	ImGui::Text("%s", Presentation::UiFormatters::formatBytes(static_cast<std::int64_t>(result.sizeBytes)).c_str());
 
 	// Seeders with color coding
 	ImGui::TableSetColumnIndex(2);
@@ -511,16 +504,12 @@ void SearchUI::displayEnhancedSearchResultRow(const TorrentSearchResult &result,
 	// Created date
 	ImGui::TableSetColumnIndex(6);
 	ImGui::AlignTextToFramePadding();
-	char createdDate[32];
-	formatUnixTime(result.createdUnix, createdDate, sizeof(createdDate));
-	ImGui::Text("%s", createdDate);
+	ImGui::Text("%s", Presentation::UiFormatters::formatUnixDate(result.createdUnix).c_str());
 
 	// Last seen (scraped date)
 	ImGui::TableSetColumnIndex(7);
 	ImGui::AlignTextToFramePadding();
-	char scrapedDate[32];
-	formatUnixTime(result.scrapedDate, scrapedDate, sizeof(scrapedDate));
-	ImGui::Text("%s", scrapedDate);
+	ImGui::Text("%s", Presentation::UiFormatters::formatUnixDate(result.scrapedDate).c_str());
 
 	// Category
 	ImGui::TableSetColumnIndex(8);
@@ -634,44 +623,8 @@ void SearchUI::formatUnixTime(int64_t unixTime, char *buffer, size_t bufferSize)
 	{
 		return;
 	}
-
-	if (unixTime == 0)
-	{
-		snprintf(buffer, bufferSize, "N/A");
-		return;
-	}
-
-	// Handle both seconds and milliseconds timestamps
-	std::time_t time;
-	if (unixTime > 1000000000000LL)
-	{ // If timestamp is in milliseconds (> year 2001 in ms)
-		time = static_cast<std::time_t>(unixTime / 1000);
-	}
-	else
-	{
-		time = static_cast<std::time_t>(unixTime);
-	}
-
-	// Validate the timestamp is reasonable (between 1970 and 2100)
-	if (time < 0 || time > 4102444800)
-	{ // 4102444800 = 2100-01-01
-		snprintf(buffer, bufferSize, "Invalid TS");
-		return;
-	}
-
-	// Use localtime for local time
-	std::tm tm_buf = {};
-	if (!Utils::SystemUtils::getLocalTime(time, tm_buf))
-	{
-		snprintf(buffer, bufferSize, "TM Error");
-		return;
-	}
-
-	// Use manual formatting
-	if (std::strftime(buffer, bufferSize, "%Y-%m-%d", &tm_buf) == 0)
-	{
-		snprintf(buffer, bufferSize, "Format Error");
-	}
+	const std::string formatted = Presentation::UiFormatters::formatUnixDate(unixTime);
+	std::snprintf(buffer, bufferSize, "%s", formatted.c_str());
 }
 
 void SearchUI::setSearchResultSelectedCallback(std::function<void(const TorrentSearchResult &)> callback)

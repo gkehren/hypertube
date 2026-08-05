@@ -131,7 +131,7 @@ void applyPreferencesToJson(json &config, const PreferencesSettings &settings)
 	if (!config.is_object())
 		config = json::object();
 	if (!config.contains("version"))
-		config["version"] = 1;
+		config["version"] = ConfigManager::CURRENT_CONFIG_VERSION;
 	config["theme"] = settings.theme;
 	if (!config.contains("settings") || !config["settings"].is_object())
 		config["settings"] = json::object();
@@ -149,6 +149,12 @@ void applyPreferencesToJson(json &config, const PreferencesSettings &settings)
 	target["proxy"]["host"] = settings.proxyHost;
 	target["proxy"]["port"] = std::clamp(settings.proxyPort, 1, 65535);
 	target["proxy"]["username"] = settings.proxyUsername;
+	config["ui"] = {
+		{"sidebar_width", std::clamp(settings.ui.sidebarWidth, 120, 600)},
+		{"bottom_panel_height", std::clamp(settings.ui.bottomPanelHeight, 120, 1000)},
+		{"sidebar_collapsed", settings.ui.sidebarCollapsed},
+		{"selected_main_tab", std::max(settings.ui.selectedMainTab, 0)},
+		{"selected_details_tab", std::max(settings.ui.selectedDetailsTab, 0)}};
 }
 } // namespace
 
@@ -250,6 +256,13 @@ json ConfigManager::createDefaultConfig() const
 				{"port", 1080},
 				{"username", ""}
 			}}
+		}},
+		{"ui", {
+			{"sidebar_width", 240},
+			{"bottom_panel_height", 300},
+			{"sidebar_collapsed", false},
+			{"selected_main_tab", 0},
+			{"selected_details_tab", 0}
 		}}
 	};
 	return defaultConfig;
@@ -404,6 +417,12 @@ PreferencesSettings ConfigManager::getPreferencesSettings() const
 	settings.proxyHost = proxy.value("host", "127.0.0.1");
 	settings.proxyPort = std::clamp(proxy.value("port", 1080), 1, 65535);
 	settings.proxyUsername = proxy.value("username", "");
+	const json &ui = config.contains("ui") && config["ui"].is_object() ? config["ui"] : empty;
+	settings.ui.sidebarWidth = std::clamp(ui.value("sidebar_width", 240), 120, 600);
+	settings.ui.bottomPanelHeight = std::clamp(ui.value("bottom_panel_height", 300), 120, 1000);
+	settings.ui.sidebarCollapsed = ui.value("sidebar_collapsed", false);
+	settings.ui.selectedMainTab = std::max(ui.value("selected_main_tab", 0), 0);
+	settings.ui.selectedDetailsTab = std::max(ui.value("selected_details_tab", 0), 0);
 	return settings;
 }
 
@@ -848,6 +867,9 @@ void ConfigManager::ensureDefaultConfigUnlocked()
 
 	// Fill nested defaults without replacing valid user-owned values or unknown keys.
 	applyMissingDefaults(config["settings"], defaults["settings"]);
+	if (!config.contains("ui") || !config["ui"].is_object())
+		config["ui"] = json::object();
+	applyMissingDefaults(config["ui"], defaults["ui"]);
 }
 
 void ConfigManager::migrateConfig(int fromVersion, int toVersion)
@@ -905,8 +927,12 @@ void ConfigManager::migrateConfigUnlocked(int fromVersion, int toVersion)
 		config["version"] = 1;
 	}
 
-	// Future migrations can be added here
-	// if (fromVersion == 1 && toVersion >= 2) { ... }
+	if (fromVersion <= 1 && toVersion >= 2)
+	{
+		if (!config.contains("ui") || !config["ui"].is_object())
+			config["ui"] = json::object();
+		config["version"] = 2;
+	}
 }
 
 void ConfigManager::saveFavoritesAndHistory(const std::vector<TorrentSearchResult> &favorites, const std::vector<std::string> &searchHistory)
@@ -1160,6 +1186,27 @@ bool ConfigManager::validateConfig()
 				}
 			}
 		}
+	}
+
+	if (config.contains("ui"))
+	{
+		const auto &ui = config["ui"];
+		if (!ui.is_object())
+			return false;
+		if (ui.contains("sidebar_width") &&
+			(!ui["sidebar_width"].is_number_integer() || ui["sidebar_width"].get<int>() < 120 || ui["sidebar_width"].get<int>() > 600))
+			return false;
+		if (ui.contains("bottom_panel_height") &&
+			(!ui["bottom_panel_height"].is_number_integer() || ui["bottom_panel_height"].get<int>() < 120 || ui["bottom_panel_height"].get<int>() > 1000))
+			return false;
+		if (ui.contains("sidebar_collapsed") && !ui["sidebar_collapsed"].is_boolean())
+			return false;
+		if (ui.contains("selected_main_tab") &&
+			(!ui["selected_main_tab"].is_number_integer() || ui["selected_main_tab"].get<int>() < 0))
+			return false;
+		if (ui.contains("selected_details_tab") &&
+			(!ui["selected_details_tab"].is_number_integer() || ui["selected_details_tab"].get<int>() < 0))
+			return false;
 	}
 
 	return true;

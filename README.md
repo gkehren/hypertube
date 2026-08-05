@@ -1,6 +1,8 @@
 # Hypertube
 
-Hypertube is a cross-platform C++17 BitTorrent desktop client built with Dear ImGui, GLFW, OpenGL, libtorrent, cURL, and nlohmann/json.
+Hypertube is a cross-platform C++20 BitTorrent desktop client currently using
+Dear ImGui, GLFW, OpenGL, libtorrent, cURL, and nlohmann/json. A Slint frontend
+is being added incrementally; see [the migration notes](docs/slint-migration.md).
 
 The project provides torrent file and magnet-link management, live torrent status, integrated search, favorites, history, filtering, configurable download behavior, persistent state, portable mode, and in-app diagnostics.
 
@@ -10,8 +12,12 @@ The project provides torrent file and magnet-link management, live torrent statu
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j2
 ctest --test-dir build --output-on-failure
-./build/hypertube
+./build/hypertube-slint
 ```
+
+The migration build also produces `hypertube-imgui`, the transitional legacy
+frontend retained for parity checks. The Slint frontend is the current
+bootstrap entry point; platform runtime smoke tests are still pending.
 
 The first CMake configure may download missing dependencies. Platform package prerequisites and alternative build configurations are documented in [docs/build.md](docs/build.md).
 

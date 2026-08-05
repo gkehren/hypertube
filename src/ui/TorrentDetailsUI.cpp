@@ -1,6 +1,7 @@
 #include "TorrentDetailsUI.hpp"
 #include "TorrentManager.hpp"
 #include "StringUtils.hpp"
+#include "presentation/UiFormatters.hpp"
 #include "SystemUtils.hpp"
 #include "Theme.hpp"
 #include <iostream>
@@ -406,9 +407,8 @@ void TorrentDetailsUI::displayTorrentDetailsContent(const lt::torrent_status &st
 		ImGui::TableSetColumnIndex(1);
 		ImVec4 progressColor = (status.state == lt::torrent_status::seeding) ? palette.progressUpload : palette.progressDownload;
 		ImGui::PushStyleColor(ImGuiCol_PlotHistogram, progressColor);
-		char progressText[32];
-		snprintf(progressText, sizeof(progressText), "%.1f%%", status.progress * 100.0f);
-		ImGui::ProgressBar(status.progress, ImVec2(-1, 0), progressText);
+		const std::string progressText = Presentation::UiFormatters::formatProgress(status.progress);
+		ImGui::ProgressBar(status.progress, ImVec2(-1, 0), progressText.c_str());
 		ImGui::PopStyleColor();
 
 		// Status
@@ -416,7 +416,8 @@ void TorrentDetailsUI::displayTorrentDetailsContent(const lt::torrent_status &st
 		ImGui::TableSetColumnIndex(0);
 		ImGui::TextColored(palette.textSecondary, "Status:");
 		ImGui::TableSetColumnIndex(1);
-		const char *statusStr = Utils::torrentStateToString(status.state, status.flags);
+		const std::string statusText = torrentStateToString(status.state, status.flags);
+		const char *statusStr = statusText.c_str();
 		ImVec4 statusColor = HypertubeTheme::getStatusColor(statusStr);
 		ImGui::TextColored(statusColor, "%s", statusStr);
 
@@ -482,21 +483,23 @@ void TorrentDetailsUI::displayTorrentDetailsContent(const lt::torrent_status &st
 
 std::string TorrentDetailsUI::formatBytes(size_t bytes, bool speed)
 {
-	char buf[64];
-	Utils::formatBytes(bytes, speed, buf, sizeof(buf));
-	return std::string(buf);
+	return Presentation::UiFormatters::formatBytes(static_cast<std::int64_t>(bytes), speed);
 }
 
 std::string TorrentDetailsUI::torrentStateToString(lt::torrent_status::state_t state, lt::torrent_flags_t flags)
 {
-	return std::string(Utils::torrentStateToString(state, flags));
+	return Presentation::UiFormatters::torrentStateToString(
+		static_cast<int>(state),
+		(flags & lt::torrent_flags::paused) != lt::torrent_flags_t{},
+		state == lt::torrent_status::finished);
 }
 
 std::string TorrentDetailsUI::computeETA(const lt::torrent_status &status) const
 {
-	char buf[64];
-	Utils::computeETA(status, buf, sizeof(buf));
-	return std::string(buf);
+	const std::int64_t remaining = std::max<std::int64_t>(0, status.total_wanted - status.total_wanted_done);
+	const std::int64_t etaSeconds = status.state == lt::torrent_status::downloading && status.download_payload_rate > 0
+		? remaining / status.download_payload_rate : -1;
+	return Presentation::UiFormatters::formatEta(etaSeconds);
 }
 
 void TorrentDetailsUI::displayTorrentDetails_Settings(const lt::torrent_handle &selectedTorrent)

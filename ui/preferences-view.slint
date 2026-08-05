@@ -1,0 +1,132 @@
+import { Button, HorizontalBox, LineEdit, VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "theme.slint";
+
+export component PreferencesView inherits Rectangle {
+	in property <int> selected-theme: 0;
+	in property <bool> sidebar-collapsed: false;
+	in property <string> state-message;
+	in-out property <string> download-limit;
+	in-out property <string> upload-limit;
+	in-out property <string> download-path;
+	in-out property <bool> enable-dht: true;
+	in-out property <bool> enable-upnp: true;
+	in-out property <bool> enable-natpmp: true;
+	in-out property <bool> torznab-enabled: false;
+	in-out property <string> torznab-url;
+	in-out property <bool> proxy-enabled: false;
+	in-out property <string> proxy-type: "socks5";
+	in-out property <string> proxy-host;
+	in-out property <string> proxy-port;
+	in-out property <string> proxy-username;
+	callback change-theme(int);
+	callback toggle-sidebar();
+	callback browse-download-directory();
+	callback apply-preferences();
+
+	background: ThemeTokens.background;
+	VerticalBox {
+		padding: 20px;
+		Text { text: "Preferences"; color: ThemeTokens.foreground; font-size: 24px; }
+		Text { text: root.state-message; color: ThemeTokens.muted-foreground; }
+
+		Text { text: "Theme"; color: ThemeTokens.foreground; }
+		HorizontalBox {
+			Button {
+				text: "Dark";
+				clicked => {
+					ThemeTokens.background = #15181d;
+					ThemeTokens.surface = #1c2129;
+					ThemeTokens.surface-hover = #293448;
+					ThemeTokens.foreground = #f5f7fa;
+					ThemeTokens.muted-foreground = #9aa4b2;
+					root.change-theme(0);
+				}
+			}
+			Button {
+				text: "Ocean";
+				clicked => {
+					ThemeTokens.background = #101c2c;
+					ThemeTokens.surface = #16283c;
+					ThemeTokens.surface-hover = #244967;
+					ThemeTokens.foreground = #e6f4ff;
+					ThemeTokens.muted-foreground = #9db8cc;
+					root.change-theme(1);
+				}
+			}
+			Button {
+				text: "Nord";
+				clicked => {
+					ThemeTokens.background = #2e3440;
+					ThemeTokens.surface = #3b4252;
+					ThemeTokens.surface-hover = #434c5e;
+					ThemeTokens.foreground = #eceff4;
+					ThemeTokens.muted-foreground = #d8dee9;
+					root.change-theme(2);
+				}
+			}
+			Button {
+				text: "Dracula";
+				clicked => {
+					ThemeTokens.background = #282a36;
+					ThemeTokens.surface = #44475a;
+					ThemeTokens.surface-hover = #6272a4;
+					ThemeTokens.foreground = #f8f8f2;
+					ThemeTokens.muted-foreground = #bdc0c9;
+					root.change-theme(3);
+				}
+			}
+			Button {
+				text: "CyberPunk";
+				clicked => {
+					ThemeTokens.background = #100d1a;
+					ThemeTokens.surface = #211432;
+					ThemeTokens.surface-hover = #38235a;
+					ThemeTokens.foreground = #f5f0ff;
+					ThemeTokens.muted-foreground = #d0a8f5;
+					root.change-theme(4);
+				}
+			}
+		}
+
+		Text { text: "Default torrent settings"; color: ThemeTokens.foreground; }
+		HorizontalBox {
+			Text { text: "Download limit (bytes/s, 0 = unlimited)"; color: ThemeTokens.muted-foreground; }
+			LineEdit { text <=> root.download-limit; placeholder-text: "0"; }
+			Text { text: "Upload limit"; color: ThemeTokens.muted-foreground; }
+			LineEdit { text <=> root.upload-limit; placeholder-text: "0"; }
+		}
+		HorizontalBox {
+			LineEdit { text <=> root.download-path; placeholder-text: "~/Downloads"; }
+			Button { text: "Browse"; accessible-label: "Browse default download directory"; clicked => { root.browse-download-directory(); } }
+		}
+
+		Text { text: "Network discovery"; color: ThemeTokens.foreground; }
+		HorizontalBox {
+			Button { text: root.enable-dht ? "DHT enabled" : "DHT disabled"; clicked => { root.enable-dht = !root.enable-dht; } }
+			Button { text: root.enable-upnp ? "UPnP enabled" : "UPnP disabled"; clicked => { root.enable-upnp = !root.enable-upnp; } }
+			Button { text: root.enable-natpmp ? "NAT-PMP enabled" : "NAT-PMP disabled"; clicked => { root.enable-natpmp = !root.enable-natpmp; } }
+		}
+
+		Text { text: "Torznab search"; color: ThemeTokens.foreground; }
+		HorizontalBox {
+			Button { text: root.torznab-enabled ? "Enabled" : "Disabled"; clicked => { root.torznab-enabled = !root.torznab-enabled; } }
+			LineEdit { text <=> root.torznab-url; placeholder-text: "http://127.0.0.1:9696/..."; }
+		}
+
+		Text { text: "Proxy"; color: ThemeTokens.foreground; }
+		HorizontalBox {
+			Button { text: root.proxy-enabled ? "Enabled" : "Disabled"; clicked => { root.proxy-enabled = !root.proxy-enabled; } }
+			Button { text: "SOCKS5"; enabled: root.proxy-type != "socks5"; clicked => { root.proxy-type = "socks5"; } }
+			Button { text: "HTTP"; enabled: root.proxy-type != "http"; clicked => { root.proxy-type = "http"; } }
+			LineEdit { text <=> root.proxy-host; placeholder-text: "127.0.0.1"; }
+			LineEdit { text <=> root.proxy-port; placeholder-text: "1080"; }
+		}
+		LineEdit { text <=> root.proxy-username; placeholder-text: "Proxy username (password stays in credential store)"; }
+
+		HorizontalBox {
+			Button { text: root.sidebar-collapsed ? "Expand sidebar" : "Collapse sidebar"; clicked => { root.toggle-sidebar(); } }
+			Rectangle { }
+			Button { text: "Apply preferences"; clicked => { root.apply-preferences(); } }
+		}
+	}
+}

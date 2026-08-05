@@ -1,12 +1,8 @@
 #pragma once
 
 #include <imgui.h>
-#include <libtorrent/alert.hpp>
-#include <libtorrent/alert_types.hpp>
-#include <string>
-#include <vector>
-#include <chrono>
 #include "Logger.hpp"
+#include "presentation/LogsPresenter.hpp"
 
 class TorrentManager;
 
@@ -29,7 +25,7 @@ public:
 	void setMaxLogEntries(size_t maxEntries);
 
 private:
-	TorrentManager &torrentManager;
+	Presentation::LogsPresenter presenter;
 	size_t maxLogEntries = 1000; // Default max entries
 	bool autoScroll = true;
 
@@ -39,8 +35,4 @@ private:
 	bool showWarnings = true;
 	bool showErrors = true;
 
-	// Helper methods
-	void addLogEntry(const std::string &category, const std::string &message, Utils::LogLevel level = Utils::LogLevel::Info);
-	std::string formatTimestamp(const std::chrono::system_clock::time_point &time) const;
-	void processAlert(lt::alert *alert);
 };

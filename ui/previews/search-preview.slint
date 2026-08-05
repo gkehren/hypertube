@@ -1,0 +1,61 @@
+import { Button, HorizontalBox, ListView, VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "../theme.slint";
+
+export struct PreviewSearchResult {
+	name: string,
+	metadata: string,
+	favorite: bool,
+}
+
+component PreviewSearchRow inherits Rectangle {
+	in property <string> name;
+	in property <string> metadata;
+	in property <bool> favorite: false;
+
+	accessible-role: list-item;
+	accessible-label: root.name + ", " + root.metadata;
+	background: ThemeTokens.surface;
+	border-width: 1px;
+	border-color: ThemeTokens.border;
+
+	HorizontalBox {
+		padding: 8px;
+		Text { text: root.name; color: ThemeTokens.foreground; }
+		Text { text: root.metadata; color: ThemeTokens.muted-foreground; width: 250px; }
+		Button { text: root.favorite ? "Unfavorite" : "Favorite"; }
+		Button { text: "Add"; }
+	}
+}
+
+export component SearchPreview inherits Window {
+	in property <[PreviewSearchResult]> rows: [
+		{ name: "A short result", metadata: "1.2 GiB · 240 seeders", favorite: true },
+		{ name: "A result with a very long title that should not hide its actions", metadata: "4.7 GiB · 12 seeders", favorite: false },
+		{ name: "Unicode пример 日本語", metadata: "0 B · 0 seeders", favorite: false },
+	];
+	title: "Hypertube search preview";
+	preferred-width: 1100px;
+	preferred-height: 520px;
+	background: ThemeTokens.background;
+
+	VerticalBox {
+		padding: 20px;
+		HorizontalBox {
+			Text { text: "Search results"; color: ThemeTokens.foreground; font-size: 24px; }
+			Rectangle { }
+			Button { text: "Cancel"; }
+		}
+		Text { text: "3 results · page 2 · provider: example"; color: ThemeTokens.muted-foreground; }
+		ListView {
+			accessible-role: list;
+			accessible-label: "Search result preview";
+			accessible-item-count: root.rows.length;
+			for row in root.rows: PreviewSearchRow {
+				name: row.name;
+				metadata: row.metadata;
+				favorite: row.favorite;
+			}
+		}
+		Button { text: "Load more"; }
+	}
+}
