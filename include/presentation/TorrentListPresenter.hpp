@@ -40,6 +40,7 @@ public:
 
 	std::vector<TorrentRowDto> buildRows();
 	std::vector<CategoryDto> buildCategories();
+	std::optional<TorrentRowDto> findRowById(const std::string &id);
 
 	Result executeCommand(const std::string &id, TorrentCommand command);
 	Result removeTorrent(const std::string &id, TorrentRemovalMode mode);

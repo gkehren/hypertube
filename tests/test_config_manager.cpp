@@ -142,6 +142,27 @@ TEST_F(ConfigManagerTest, PreferencesCandidateCommitsOnlyAfterDurableSave)
 	EXPECT_FALSE(restored.getEnableDHT());
 }
 
+TEST_F(ConfigManagerTest, FinalSettingsSnapshotKeepsCommittedPreferences)
+{
+	ConfigManager manager;
+	const std::string configPath = (testDir / "final-settings-snapshot.json").string();
+	ASSERT_TRUE(manager.load(configPath));
+
+	PreferencesSettings candidate = manager.getPreferencesSettings();
+	candidate.downloadSpeedLimit = 456789;
+	candidate.ui.sidebarWidth = 360;
+	ASSERT_TRUE(manager.savePreferencesCandidate(configPath, candidate).get());
+	ASSERT_TRUE(manager.commitPreferences(candidate));
+
+	manager.save(configPath);
+	manager.waitForAsyncOperations();
+
+	ConfigManager restored;
+	ASSERT_TRUE(restored.load(configPath));
+	EXPECT_EQ(restored.getDownloadSpeedLimit(), 456789);
+	EXPECT_EQ(restored.getPreferencesSettings().ui.sidebarWidth, 360);
+}
+
 TEST_F(ConfigManagerTest, PreferencesCandidatePreservesUnknownData)
 {
 	const std::string configPath = (testDir / "transactional-unknown.json").string();

@@ -1,9 +1,10 @@
 import { Button, HorizontalBox, LineEdit, ListView, VerticalBox } from "std-widgets.slint";
 import { ThemeTokens } from "theme.slint";
 import { DetailFileRow, DetailPeerRow, DetailTrackerRow } from "detail-types.slint";
+import { DetailsAction, DetailsTab } from "enums.slint";
 
 export component DetailsView inherits Rectangle {
-	in property <int> selected-tab: 0;
+	in property <DetailsTab> selected-tab: DetailsTab.general;
 	in property <string> message;
 	in property <string> name;
 	in property <string> state-label;
@@ -20,8 +21,9 @@ export component DetailsView inherits Rectangle {
 	in property <[DetailTrackerRow]> trackers: [];
 	in property <bool> sequential-download: false;
 
-	callback select-tab(int);
-	callback details-action(int);
+	callback select-tab(DetailsTab);
+	callback details-action(DetailsAction);
+	callback copy-magnet();
 	callback preview-file(int);
 	callback set-file-priority(int, int);
 	callback set-speed-limits(string, string);
@@ -34,23 +36,23 @@ export component DetailsView inherits Rectangle {
 	VerticalBox {
 		padding: 16px;
 		HorizontalBox {
-			Button { text: "General"; clicked => { root.select-tab(0); } }
-			Button { text: "Files"; clicked => { root.select-tab(1); } }
-			Button { text: "Peers"; clicked => { root.select-tab(2); } }
-			Button { text: "Trackers"; clicked => { root.select-tab(3); } }
-			Button { text: "Settings"; clicked => { root.select-tab(4); } }
+			Button { text: "General"; clicked => { root.select-tab(DetailsTab.general); } }
+			Button { text: "Files"; clicked => { root.select-tab(DetailsTab.files); } }
+			Button { text: "Peers"; clicked => { root.select-tab(DetailsTab.peers); } }
+			Button { text: "Trackers"; clicked => { root.select-tab(DetailsTab.trackers); } }
+			Button { text: "Settings"; clicked => { root.select-tab(DetailsTab.settings); } }
 		}
 
 		Text { text: root.message; color: ThemeTokens.muted-foreground; }
 
-		if (root.selected-tab == 0): VerticalBox {
+		if (root.selected-tab == DetailsTab.general): VerticalBox {
 			Text { text: root.name == "" ? "Select a torrent" : root.name; color: ThemeTokens.foreground; font-size: 18px; }
 			Text { text: root.state-label + "  |  " + root.progress-label + "  |  " + root.size-label; color: ThemeTokens.muted-foreground; }
 			Text { text: "Down " + root.download-rate-label + "   Up " + root.upload-rate-label + "   ETA " + root.eta-label; color: ThemeTokens.muted-foreground; }
 			Text { text: root.save-path; color: ThemeTokens.muted-foreground; }
 		}
 
-		if (root.selected-tab == 1): ListView {
+		if (root.selected-tab == DetailsTab.files): ListView {
 			accessible-role: list;
 			accessible-label: "Torrent files";
 			accessible-item-count: root.files.length;
@@ -80,7 +82,7 @@ export component DetailsView inherits Rectangle {
 			}
 		}
 
-		if (root.selected-tab == 2): ListView {
+		if (root.selected-tab == DetailsTab.peers): ListView {
 			accessible-role: list;
 			accessible-label: "Torrent peers";
 			accessible-item-count: root.peers.length;
@@ -95,7 +97,7 @@ export component DetailsView inherits Rectangle {
 			}
 		}
 
-		if (root.selected-tab == 3): ListView {
+		if (root.selected-tab == DetailsTab.trackers): ListView {
 			accessible-role: list;
 			accessible-label: "Torrent trackers";
 			accessible-item-count: root.trackers.length;
@@ -108,7 +110,7 @@ export component DetailsView inherits Rectangle {
 			}
 		}
 
-		if (root.selected-tab == 4): VerticalBox {
+		if (root.selected-tab == DetailsTab.settings): VerticalBox {
 			Text { text: "Per-torrent settings"; color: ThemeTokens.foreground; }
 			Text { text: root.sequential-download ? "Sequential download enabled" : "Sequential download disabled"; color: ThemeTokens.muted-foreground; }
 			HorizontalBox {
@@ -122,8 +124,9 @@ export component DetailsView inherits Rectangle {
 				text: root.sequential-download ? "Disable sequential" : "Enable sequential";
 				clicked => { root.set-sequential(!root.sequential-download); }
 			}
-			Button { text: "Open containing folder"; clicked => { root.details-action(0); } }
-			Button { text: "Preview largest media"; clicked => { root.details-action(1); } }
+			Button { text: "Open containing folder"; clicked => { root.details-action(DetailsAction.open-containing-folder); } }
+			Button { text: "Preview largest media"; clicked => { root.details-action(DetailsAction.preview-largest-media); } }
+			Button { text: "Copy magnet URI"; clicked => { root.copy-magnet(); } }
 		}
 	}
 }

@@ -28,7 +28,9 @@ public:
 	Result startSearch(const std::string &query);
 	Result loadMore();
 	void cancel();
+	void clearHistory();
 	void update();
+	std::uint64_t revision() const { return revision_; }
 
 	SearchState state() const { return state_; }
 	const std::string &stateMessage() const { return stateMessage_; }
@@ -58,6 +60,7 @@ private:
 	std::string stateMessage_;
 	uint64_t activeRequestId_ = 0;
 	uint64_t favoritesRevision_ = 0;
+	uint64_t revision_ = 0;
 	bool hasMore_ = true;
 	bool loadingMore_ = false;
 	SearchState state_ = SearchState::Idle;

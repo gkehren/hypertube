@@ -8,6 +8,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include <functional>
 #include "Result.hpp"
 
 namespace Utils {
@@ -22,7 +23,9 @@ namespace Utils {
 
         class SystemOpener {
         public:
-            explicit SystemOpener(std::size_t maxPending = 32);
+            using Executor = std::function<Result(OpenOperationKind, const std::string &)>;
+
+            explicit SystemOpener(std::size_t maxPending = 32, Executor executor = {});
             ~SystemOpener();
             SystemOpener(const SystemOpener &) = delete;
             SystemOpener &operator=(const SystemOpener &) = delete;
@@ -45,6 +48,7 @@ namespace Utils {
             std::thread worker;
             bool stopping = false;
             std::uint64_t nextId = 1;
+            Executor executor;
 
             Result enqueue(OpenOperationKind kind, const std::string &path, std::uint64_t *id);
             Result execute(const Request &request);
@@ -90,5 +94,10 @@ namespace Utils {
          * @param filePath The full path to the file to preview.
          */
         Result openFilePreview(const std::string& filePath);
+
+        // Copies text without invoking a shell. The implementation uses the
+        // native Win32 clipboard, pbcopy, or the first available Linux
+        // clipboard backend.
+        Result copyToClipboard(const std::string &text);
     }
 }

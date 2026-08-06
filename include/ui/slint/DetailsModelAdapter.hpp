@@ -23,4 +23,7 @@ private:
 	std::shared_ptr<slint::VectorModel<DetailFileRow>> files_;
 	std::shared_ptr<slint::VectorModel<DetailPeerRow>> peers_;
 	std::shared_ptr<slint::VectorModel<DetailTrackerRow>> trackers_;
+	std::vector<DetailFileRow> fileRows_;
+	std::vector<DetailPeerRow> peerRows_;
+	std::vector<DetailTrackerRow> trackerRows_;
 };

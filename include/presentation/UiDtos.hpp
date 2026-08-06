@@ -6,6 +6,15 @@
 
 namespace Presentation
 {
+enum class TorrentUiState
+{
+	Downloading,
+	Seeding,
+	Completed,
+	Paused,
+	Other
+};
+
 struct TorrentRowDto
 {
 	std::string id;
@@ -30,6 +39,7 @@ struct TorrentRowDto
 	bool active = false;
 	bool error = false;
 	bool finished = false;
+	TorrentUiState state = TorrentUiState::Other;
 };
 
 struct CategoryDto
@@ -97,6 +107,7 @@ enum class DetailsState
 struct TorrentDetailsDto
 {
 	DetailsState state = DetailsState::Loading;
+	std::uint64_t revision = 0;
 	std::string message;
 	std::string savePath;
 	bool truncated = false;

@@ -103,6 +103,7 @@ struct TorrentDetailsSnapshot
 	std::string savePath;
 	std::string message;
 	bool truncated = false;
+	std::uint64_t revision = 0;
 	std::vector<TorrentFileSnapshot> files;
 	std::vector<TorrentPeerSnapshot> peers;
 	std::vector<TorrentTrackerSnapshot> trackers;
@@ -133,6 +134,7 @@ public:
 	// Status cache methods
 	std::optional<lt::torrent_status> getCachedStatus(const lt::info_hash_t &hash) const;
 	std::shared_ptr<const std::unordered_map<lt::info_hash_t, lt::torrent_status>> getStatusCache() const;
+	std::uint64_t getStatusRevision() const;
 	void refreshStatusCache();
 	void requestStatusRefresh();
 	void setCacheRefreshInterval(int milliseconds);
@@ -164,6 +166,7 @@ private:
 	// Status cache
 	mutable std::mutex cacheMutex;
 	std::shared_ptr<const std::unordered_map<lt::info_hash_t, lt::torrent_status>> statusCache = std::make_shared<std::unordered_map<lt::info_hash_t, lt::torrent_status>>();
+	std::uint64_t statusRevision = 0;
 	std::chrono::steady_clock::time_point lastCacheRefresh;
 	int cacheRefreshIntervalMs = 250; // Default 250ms
 	std::thread statusWorker;
@@ -183,9 +186,10 @@ private:
 	std::deque<DetailRequest> detailRequests;
 	std::array<std::unordered_set<lt::info_hash_t>, 3> pendingDetailRequests;
 	std::array<std::unordered_map<lt::info_hash_t, std::shared_ptr<const TorrentDetailsSnapshot>>, 3> detailCache;
+	std::array<std::unordered_map<lt::info_hash_t, std::uint64_t>, 3> detailRevisions;
 	std::array<std::unordered_map<lt::info_hash_t, std::chrono::steady_clock::time_point>, 3> detailLastRefresh;
 	std::thread detailWorker;
 	std::atomic<bool> stopDetailWorker{false};
 	void detailWorkerLoop();
-	std::shared_ptr<const TorrentDetailsSnapshot> collectDetails(const DetailRequest &request);
+	std::shared_ptr<TorrentDetailsSnapshot> collectDetails(const DetailRequest &request);
 };

@@ -18,13 +18,23 @@ int main()
 	{
 		App app;
 		app.initialize();
-		auto window = MainWindow::create();
-		SlintAppController controller(app, window);
-		controller.bind();
-		controller.start();
-		slint::run_event_loop();
-		controller.stop();
+		int controllerExitCode = 0;
+		{
+			auto window = MainWindow::create();
+			SlintAppController controller(app, window);
+			controller.bind();
+			controller.start();
+			window->run();
+
+			const Result stopResult = controller.stop();
+			if (!stopResult)
+			{
+				std::cerr << "Failed to finalize Slint preferences: " << stopResult.message << std::endl;
+				controllerExitCode = 1;
+			}
+		}
 		app.shutdown();
+		exitCode = controllerExitCode;
 	}
 	catch (const std::exception &error)
 	{

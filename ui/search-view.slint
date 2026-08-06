@@ -8,6 +8,8 @@ export component SearchView inherits Rectangle {
 	in property <bool> loading: false;
 	in property <bool> can-load-more: false;
 	in property <[SearchResultRow]> rows: [];
+	in property <[string]> recent-queries: [];
+	in property <bool> focus-request: false;
 
 	callback execute-search(string);
 	callback cancel-search();
@@ -15,13 +17,19 @@ export component SearchView inherits Rectangle {
 	callback select-result(string);
 	callback toggle-favorite(string);
 	callback add-result(string);
+	callback select-history(string);
+	callback clear-history();
+
+	public function focus-search-field() {
+		search-input.focus();
+	}
 
 	background: ThemeTokens.background;
 
 	VerticalBox {
 		padding: 20px;
 		HorizontalBox {
-			LineEdit {
+			search-input := LineEdit {
 				text <=> root.query;
 				placeholder-text: "Search torrents";
 			}
@@ -38,6 +46,15 @@ export component SearchView inherits Rectangle {
 
 		Text { text: root.state-message; color: ThemeTokens.muted-foreground; }
 
+		if (root.recent-queries.length > 0): HorizontalBox {
+			Text { text: "Recent:"; color: ThemeTokens.muted-foreground; }
+			for recent in root.recent-queries: Button {
+				text: recent;
+				clicked => { root.select-history(recent); }
+			}
+			Button { text: "Clear history"; clicked => { root.clear-history(); } }
+		}
+
 		ListView {
 			accessible-role: list;
 			accessible-label: "Search results";
@@ -49,11 +66,13 @@ export component SearchView inherits Rectangle {
 				background: ThemeTokens.surface;
 				border-width: 1px;
 				border-color: ThemeTokens.border;
+				TouchArea {
+					width: parent.width;
+					height: parent.height;
+					clicked => { root.select-result(result.id); }
+				}
 				HorizontalBox {
 					padding: 8px;
-					TouchArea {
-						clicked => { root.select-result(result.id); }
-					}
 					Text { text: result.name; color: ThemeTokens.foreground; }
 					Text { text: result.size-label; color: ThemeTokens.muted-foreground; width: 110px; }
 					Text { text: "S " + result.seeders-label + " / L " + result.leechers-label; color: ThemeTokens.muted-foreground; width: 130px; }
@@ -82,5 +101,9 @@ export component SearchView inherits Rectangle {
 			enabled: root.can-load-more && !root.loading;
 			clicked => { root.load-more(); }
 		}
+	}
+
+	changed focus-request => {
+		search-input.focus();
 	}
 }

@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <cstdint>
 
 #include "AppPaths.hpp"
 
@@ -13,6 +14,7 @@ namespace
 {
 std::filesystem::path g_logPath;
 std::deque<Utils::LogRecord> g_recent;
+std::uint64_t g_revision = 0;
 constexpr std::size_t MAX_RECENT_LOGS = 1000;
 
 const char *levelName(Utils::LogLevel level)
@@ -72,6 +74,7 @@ void Logger::log(LogLevel level, const std::string &category, const std::string 
 
 	LogRecord record{std::chrono::system_clock::now(), level, category, message};
 	g_recent.push_back(record);
+	++g_revision;
 	while (g_recent.size() > MAX_RECENT_LOGS)
 		g_recent.pop_front();
 
@@ -109,10 +112,17 @@ std::vector<LogRecord> Logger::recent()
 	return std::vector<LogRecord>(g_recent.begin(), g_recent.end());
 }
 
+std::uint64_t Logger::revision()
+{
+	std::lock_guard<std::mutex> lock(mutex());
+	return g_revision;
+}
+
 void Logger::clearRecent()
 {
 	std::lock_guard<std::mutex> lock(mutex());
 	g_recent.clear();
+	++g_revision;
 }
 
 std::filesystem::path Logger::logPath()

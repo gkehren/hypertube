@@ -1,18 +1,22 @@
 import { Button, VerticalBox } from "std-widgets.slint";
 import { ThemeTokens } from "theme.slint";
+import { CategoryRow } from "category-types.slint";
+import { AppTab, TorrentCategory } from "enums.slint";
 
 export component AppSidebar inherits Rectangle {
 	in property <int> sidebar-width: 240;
 	in property <bool> collapsed: false;
-	in property <int> active-tab: 0;
-	in property <int> category-filter: 0;
+	in property <AppTab> active-tab: AppTab.torrents;
+	in property <TorrentCategory> category-filter: TorrentCategory.all;
+	in property <[CategoryRow]> categories: [];
 
 	callback add-torrent();
 	callback torrents-tab();
 	callback search-tab();
+	callback favorites-tab();
 	callback preferences-tab();
 	callback logs-tab();
-	callback select-category(int);
+	callback select-category(TorrentCategory);
 
 	background: ThemeTokens.surface;
 	width: root.collapsed ? 56px : root.sidebar-width * 1px;
@@ -47,6 +51,12 @@ export component AppSidebar inherits Rectangle {
 			clicked => { root.search-tab(); }
 		}
 
+		Button {
+			text: root.collapsed ? "F" : "Favorites";
+			accessible-label: "Favorites";
+			clicked => { root.favorites-tab(); }
+		}
+
 		Rectangle { height: 1px; }
 
 		Button {
@@ -64,21 +74,19 @@ export component AppSidebar inherits Rectangle {
 		Rectangle { }
 
 		Text {
-			text: root.active-tab == 0 ? "Local torrents" : "";
+			text: root.active-tab == AppTab.torrents ? "Local torrents" : "";
 			color: ThemeTokens.muted-foreground;
 			font-size: 12px;
 			visible: !root.collapsed;
 		}
 
-		if (!root.collapsed && root.active-tab == 0): VerticalBox {
+		if (!root.collapsed && root.active-tab == AppTab.torrents): VerticalBox {
 			Text { text: "Categories"; color: ThemeTokens.muted-foreground; font-size: 12px; }
-			Button { text: "All Torrents"; clicked => { root.select-category(0); } }
-			Button { text: "Downloading"; clicked => { root.select-category(1); } }
-			Button { text: "Seeding"; clicked => { root.select-category(2); } }
-			Button { text: "Completed"; clicked => { root.select-category(3); } }
-			Button { text: "Paused"; clicked => { root.select-category(4); } }
-			Button { text: "Active"; clicked => { root.select-category(5); } }
-			Button { text: "Inactive"; clicked => { root.select-category(6); } }
+			for category in root.categories: Button {
+				text: category.label + " (" + category.count + ")";
+				enabled: root.category-filter != category.filter;
+				clicked => { root.select-category(category.filter); }
+			}
 		}
 	}
 }

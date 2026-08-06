@@ -159,11 +159,11 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::info_hash_t &hash)
 			// Column 3: Priority
 			ImGui::TableSetColumnIndex(3);
 			int priority_index;
-			if (file.priority == static_cast<int>(lt::dont_download))
+			if (file.priority == static_cast<int>(static_cast<lt::download_priority_t::underlying_type>(lt::dont_download)))
 				priority_index = 0;
-			else if (file.priority == static_cast<int>(lt::low_priority))
+			else if (file.priority == static_cast<int>(static_cast<lt::download_priority_t::underlying_type>(lt::low_priority)))
 				priority_index = 1;
-			else if (file.priority >= static_cast<int>(lt::top_priority))
+			else if (file.priority >= static_cast<int>(static_cast<lt::download_priority_t::underlying_type>(lt::top_priority)))
 				priority_index = 3;
 			else
 				priority_index = 2; // default_priority
@@ -177,11 +177,11 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::info_hash_t &hash)
 				int new_priority;
 				switch (priority_index)
 				{
-					case 0: new_priority = static_cast<int>(lt::dont_download); break;
-					case 1: new_priority = static_cast<int>(lt::low_priority); break;
-					case 2: new_priority = static_cast<int>(lt::default_priority); break;
-					case 3: new_priority = static_cast<int>(lt::top_priority); break;
-					default: new_priority = static_cast<int>(lt::default_priority); break;
+					case 0: new_priority = static_cast<int>(static_cast<lt::download_priority_t::underlying_type>(lt::dont_download)); break;
+					case 1: new_priority = static_cast<int>(static_cast<lt::download_priority_t::underlying_type>(lt::low_priority)); break;
+					case 2: new_priority = static_cast<int>(static_cast<lt::download_priority_t::underlying_type>(lt::default_priority)); break;
+					case 3: new_priority = static_cast<int>(static_cast<lt::download_priority_t::underlying_type>(lt::top_priority)); break;
+					default: new_priority = static_cast<int>(static_cast<lt::download_priority_t::underlying_type>(lt::default_priority)); break;
 				}
 				const Result result = torrentManager.setFilePriority(hash, file.index, new_priority);
 				if (!result && onResult)
@@ -215,9 +215,10 @@ void TorrentDetailsUI::displayTorrentDetails_Files(const lt::info_hash_t &hash)
 					const Result sequentialResult = torrentManager.executeCommand(hash, TorrentCommand::EnableSequential);
 					if (!sequentialResult && onResult)
 						onResult(sequentialResult);
-					if (file.priority < static_cast<int>(lt::top_priority))
+					if (file.priority < static_cast<int>(static_cast<lt::download_priority_t::underlying_type>(lt::top_priority)))
 					{
-						const Result priorityResult = torrentManager.setFilePriority(hash, file.index, static_cast<int>(lt::top_priority));
+						const Result priorityResult = torrentManager.setFilePriority(hash, file.index,
+							static_cast<int>(static_cast<lt::download_priority_t::underlying_type>(lt::top_priority)));
 						if (!priorityResult && onResult)
 							onResult(priorityResult);
 					}

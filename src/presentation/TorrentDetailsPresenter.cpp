@@ -98,6 +98,7 @@ TorrentDetailsDto TorrentDetailsPresenter::buildSection(DetailsTab tab)
 		return result;
 
 	result.state = mapState(snapshot->state);
+	result.revision = snapshot->revision;
 	result.message = snapshot->message;
 	result.savePath = snapshot->savePath;
 	result.truncated = snapshot->truncated;
@@ -191,7 +192,8 @@ Result TorrentDetailsPresenter::previewFile(int fileIndex)
 	const Result sequential = setSequentialDownload(true);
 	if (!sequential)
 		return sequential;
-	const Result priority = setFilePriority(found->index, static_cast<int>(lt::top_priority));
+	const Result priority = setFilePriority(found->index,
+		static_cast<int>(static_cast<lt::download_priority_t::underlying_type>(lt::top_priority)));
 	if (!priority)
 		return priority;
 	return systemOpener.enqueuePreview((std::filesystem::path(snapshot->savePath) / found->relativePath).string());
@@ -213,5 +215,12 @@ Result TorrentDetailsPresenter::previewLargestMediaFile()
 	if (!largest)
 		return Result::Failure("No previewable media file was found", ResultCode::NotFound);
 	return previewFile(largest->index);
+}
+Result TorrentDetailsPresenter::copyMagnetUri()
+{
+	const auto handle = selectedHandle();
+	if (!handle)
+		return Result::Failure("No torrent is selected", ResultCode::NotFound);
+	return Utils::SystemUtils::copyToClipboard(lt::make_magnet_uri(*handle));
 }
 } // namespace Presentation

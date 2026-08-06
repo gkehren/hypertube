@@ -31,6 +31,7 @@ Result SearchPresenter::startSearch(const std::string &query)
 	activeRequestId_ = requestId;
 	stateMessage_.clear();
 	state_ = SearchState::Loading;
+	++revision_;
 	return Result::Success();
 }
 
@@ -47,6 +48,7 @@ Result SearchPresenter::loadMore()
 	loadingMore_ = true;
 	state_ = SearchState::Loading;
 	stateMessage_.clear();
+	++revision_;
 	return Result::Success();
 }
 
@@ -56,12 +58,19 @@ void SearchPresenter::cancel()
 		searchEngine.cancelCurrentSearch();
 }
 
+void SearchPresenter::clearHistory()
+{
+	searchEngine.clearSearchHistory();
+	++revision_;
+}
+
 void SearchPresenter::update()
 {
 	if (favoritesRevision_ != searchEngine.getFavoritesRevision())
 	{
 		favorites_ = searchEngine.getFavorites();
 		favoritesRevision_ = searchEngine.getFavoritesRevision();
+		++revision_;
 	}
 
 	const auto completion = searchEngine.takeCompletedSearch();
@@ -81,6 +90,7 @@ void SearchPresenter::update()
 			state_ = SearchState::Failed;
 			stateMessage_ = completion->result.message;
 		}
+		++revision_;
 		return;
 	}
 
@@ -97,6 +107,7 @@ void SearchPresenter::update()
 		state_ = SearchState::Results;
 		stateMessage_.clear();
 	}
+	++revision_;
 }
 
 void SearchPresenter::mergeUnique(std::vector<TorrentSearchResult> incoming)
@@ -153,12 +164,14 @@ void SearchPresenter::addFavorite(const TorrentSearchResult &result)
 {
 	searchEngine.addToFavorites(result);
 	favoritesRevision_ = 0;
+	++revision_;
 }
 
 void SearchPresenter::removeFavorite(const std::string &infoHash)
 {
 	searchEngine.removeFromFavorites(infoHash);
 	favoritesRevision_ = 0;
+	++revision_;
 }
 
 bool SearchPresenter::isFavorite(const std::string &infoHash) const

@@ -1,11 +1,19 @@
 import { Button, HorizontalBox, ListView, VerticalBox } from "std-widgets.slint";
 import { ThemeTokens } from "theme.slint";
 import { LogRow } from "log-types.slint";
+import { LogLevel } from "enums.slint";
 
 export component LogsView inherits Rectangle {
 	in property <[LogRow]> rows: [];
 	in property <string> state-message;
+	in property <bool> show-debug: false;
+	in property <bool> show-info: true;
+	in property <bool> show-warning: true;
+	in property <bool> show-error: true;
+	in property <bool> auto-scroll: true;
 	callback clear-logs();
+	callback set-log-filter(LogLevel, bool);
+	callback toggle-autoscroll(bool);
 
 	background: ThemeTokens.background;
 	VerticalBox {
@@ -13,10 +21,15 @@ export component LogsView inherits Rectangle {
 		HorizontalBox {
 			Text { text: "Diagnostics"; color: ThemeTokens.foreground; font-size: 24px; }
 			Rectangle { }
+			Button { text: "Debug"; clicked => { root.set-log-filter(LogLevel.debug, !root.show-debug); } }
+			Button { text: "Info"; clicked => { root.set-log-filter(LogLevel.info, !root.show-info); } }
+			Button { text: "Warning"; clicked => { root.set-log-filter(LogLevel.warning, !root.show-warning); } }
+			Button { text: "Error"; clicked => { root.set-log-filter(LogLevel.error, !root.show-error); } }
+			Button { text: root.auto-scroll ? "Autoscroll on" : "Autoscroll off"; clicked => { root.toggle-autoscroll(!root.auto-scroll); } }
 			Button { text: "Clear"; clicked => { root.clear-logs(); } }
 		}
 		Text { text: root.state-message; color: ThemeTokens.muted-foreground; }
-		ListView {
+		log-list := ListView {
 			accessible-role: list;
 			accessible-label: "Diagnostics log";
 			accessible-item-count: root.rows.length;
@@ -31,5 +44,8 @@ export component LogsView inherits Rectangle {
 			}
 		}
 		if (root.rows.length == 0): Text { text: "No diagnostics"; color: ThemeTokens.muted-foreground; }
+	}
+	changed rows => {
+		if (root.auto-scroll) { log-list.viewport-y = -log-list.viewport-height; }
 	}
 }

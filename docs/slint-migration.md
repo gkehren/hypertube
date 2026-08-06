@@ -6,9 +6,10 @@ Hypertube is being migrated incrementally from Dear ImGui/GLFW/OpenGL to a
 Slint 1.16.1 frontend. The torrent, search, persistence, credential, logging,
 and system services remain shared by both frontends during the transition.
 
-The migration is intentionally staged. The ImGui frontend remains buildable
-until the [parity checklist](ui-parity-checklist.md) is complete. No JSON
-format or network/torrent behavior is changed by the UI migration.
+The migration is intentionally staged. Slint is now the default frontend;
+the ImGui frontend remains buildable as an opt-in target until the [parity
+checklist](ui-parity-checklist.md) is complete. No JSON format or
+network/torrent behavior is changed by the UI migration.
 
 ## Baseline
 
@@ -46,7 +47,10 @@ sorting, stable-ID selection, confirmation-based removal, details,
 typed-path/magnet addition, native picker adapters, search, favorites, themes,
 preferences persistence, per-torrent settings, and bounded diagnostics. The
 model adapters now reconcile insert/update/delete/reorder changes by stable ID,
-and the static Slint previews are checked by the pinned compiler.
+the Slint controller is split into targeted UI façades, refreshes are gated by
+monotonic revisions and the active tab, compact layouts and modal scrims are
+validated by the Slint compiler, and static previews are checked by the pinned
+compiler through both a build target and CTest.
 
 The native picker boundary is implemented with Windows `IFileOpenDialog`,
 macOS `osascript`, and Linux `zenity`/`kdialog` fallbacks; availability and
@@ -55,7 +59,8 @@ details-panel splitters are implemented and persisted through the shared
 preferences controller. The remaining work is intentionally visible:
 screen-reader and 10,000-row runtime validation, visual/platform smoke tests,
 final ImGui removal, and packaged runtime verification. Until those gates
-pass, `hypertube-imgui` remains installed beside `hypertube-slint`.
+pass, `hypertube-imgui` remains available as an opt-in target beside
+`hypertube-slint`.
 
 ## Licensing gate
 

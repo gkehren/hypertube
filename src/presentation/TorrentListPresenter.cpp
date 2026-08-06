@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstdint>
 #include <limits>
+#include <type_traits>
 #include <utility>
 
 namespace
@@ -119,11 +120,23 @@ std::vector<TorrentRowDto> TorrentListPresenter::buildUnfilteredRows()
 		row.seeds = value.num_seeds;
 		row.peersLabel = UiFormatters::formatCount(row.peers);
 		row.seedsLabel = UiFormatters::formatCount(row.seeds);
-		row.queuePosition = value.queue_position < 0 ? -1 : static_cast<int>(value.queue_position) + 1;
+		using QueuePosition = std::remove_cv_t<decltype(value.queue_position)>;
+		const int queuePosition = static_cast<int>(static_cast<typename QueuePosition::underlying_type>(value.queue_position));
+		row.queuePosition = queuePosition < 0 ? -1 : queuePosition + 1;
 		row.paused = (value.flags & lt::torrent_flags::paused) != lt::torrent_flags_t{};
 		row.active = row.downloadRateBytes > 0 || row.uploadRateBytes > 0;
 		row.finished = value.is_finished;
 		row.error = static_cast<bool>(value.errc);
+		if (row.paused)
+			row.state = TorrentUiState::Paused;
+		else if (row.finished)
+			row.state = TorrentUiState::Completed;
+		else if (value.state == lt::torrent_status::seeding)
+			row.state = TorrentUiState::Seeding;
+		else if (value.state == lt::torrent_status::downloading || value.state == lt::torrent_status::downloading_metadata)
+			row.state = TorrentUiState::Downloading;
+		else
+			row.state = TorrentUiState::Other;
 		row.stateLabel = UiFormatters::torrentStateToString(static_cast<int>(value.state), row.paused, row.finished);
 		if (value.state == lt::torrent_status::downloading && row.downloadRateBytes > 0)
 		{
@@ -148,13 +161,13 @@ bool TorrentListPresenter::matchesCategory(const TorrentRowDto &row) const
 	case 0:
 		return true;
 	case 1:
-		return row.stateLabel == "Downloading" || row.stateLabel == "Downloading metadata";
+		return row.state == TorrentUiState::Downloading;
 	case 2:
-		return row.stateLabel == "Seeding";
+		return row.state == TorrentUiState::Seeding;
 	case 3:
-		return row.finished;
+		return row.state == TorrentUiState::Completed;
 	case 4:
-		return row.paused;
+		return row.state == TorrentUiState::Paused;
 	case 5:
 		return row.active;
 	case 6:
@@ -202,6 +215,22 @@ std::vector<TorrentRowDto> TorrentListPresenter::buildRows()
 		return sortAscending_ ? less : greater;
 	});
 	return rows;
+}
+
+std::optional<TorrentRowDto> TorrentListPresenter::findRowById(const std::string &id)
+{
+	if (id.empty())
+		return std::nullopt;
+
+	// Resolve selections against the unfiltered source of truth. The visible
+	// model can be filtered, reordered, or intentionally left untouched until
+	// its next status revision without making an existing torrent unavailable.
+	for (auto &row : buildUnfilteredRows())
+	{
+		if (row.id == id)
+			return row;
+	}
+	return std::nullopt;
 }
 
 std::vector<CategoryDto> TorrentListPresenter::buildCategories()

@@ -45,6 +45,7 @@ public:
 	Result openContainingFolder();
 	Result previewFile(int fileIndex);
 	Result previewLargestMediaFile();
+	Result copyMagnetUri();
 
 private:
 	TorrentManager &torrentManager;

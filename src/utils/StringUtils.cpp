@@ -179,4 +179,96 @@ namespace Utils {
         return magnet;
     }
 
+    std::string sanitizeUtf8(const std::string &value)
+    {
+        constexpr char replacement[] = "\xEF\xBF\xBD";
+        std::string sanitized;
+        sanitized.reserve(value.size());
+
+        const auto continuation = [](unsigned char byte) {
+            return byte >= 0x80 && byte <= 0xBF;
+        };
+
+        for (std::size_t index = 0; index < value.size();)
+        {
+            const auto first = static_cast<unsigned char>(value[index]);
+            std::size_t length = 0;
+            bool valid = false;
+
+            if (first <= 0x7F)
+            {
+                length = 1;
+                valid = true;
+            }
+            else if (first >= 0xC2 && first <= 0xDF)
+            {
+                length = 2;
+                valid = index + length <= value.size()
+                    && continuation(static_cast<unsigned char>(value[index + 1]));
+            }
+            else if (first == 0xE0)
+            {
+                length = 3;
+                valid = index + length <= value.size()
+                    && static_cast<unsigned char>(value[index + 1]) >= 0xA0
+                    && static_cast<unsigned char>(value[index + 1]) <= 0xBF
+                    && continuation(static_cast<unsigned char>(value[index + 2]));
+            }
+            else if ((first >= 0xE1 && first <= 0xEC) || (first >= 0xEE && first <= 0xEF))
+            {
+                length = 3;
+                valid = index + length <= value.size()
+                    && continuation(static_cast<unsigned char>(value[index + 1]))
+                    && continuation(static_cast<unsigned char>(value[index + 2]));
+            }
+            else if (first == 0xED)
+            {
+                length = 3;
+                valid = index + length <= value.size()
+                    && static_cast<unsigned char>(value[index + 1]) >= 0x80
+                    && static_cast<unsigned char>(value[index + 1]) <= 0x9F
+                    && continuation(static_cast<unsigned char>(value[index + 2]));
+            }
+            else if (first == 0xF0)
+            {
+                length = 4;
+                valid = index + length <= value.size()
+                    && static_cast<unsigned char>(value[index + 1]) >= 0x90
+                    && static_cast<unsigned char>(value[index + 1]) <= 0xBF
+                    && continuation(static_cast<unsigned char>(value[index + 2]))
+                    && continuation(static_cast<unsigned char>(value[index + 3]));
+            }
+            else if (first >= 0xF1 && first <= 0xF3)
+            {
+                length = 4;
+                valid = index + length <= value.size()
+                    && continuation(static_cast<unsigned char>(value[index + 1]))
+                    && continuation(static_cast<unsigned char>(value[index + 2]))
+                    && continuation(static_cast<unsigned char>(value[index + 3]));
+            }
+            else if (first == 0xF4)
+            {
+                length = 4;
+                valid = index + length <= value.size()
+                    && static_cast<unsigned char>(value[index + 1]) >= 0x80
+                    && static_cast<unsigned char>(value[index + 1]) <= 0x8F
+                    && continuation(static_cast<unsigned char>(value[index + 2]))
+                    && continuation(static_cast<unsigned char>(value[index + 3]));
+            }
+
+            if (valid)
+            {
+                sanitized.append(value, index, length);
+                index += length;
+            }
+            else
+            {
+                sanitized.append(replacement, sizeof(replacement) - 1);
+                ++index;
+            }
+        }
+
+        return sanitized;
+    }
+
 }

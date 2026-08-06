@@ -16,13 +16,13 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libtorrent-rasterbar-dev libcurl4-openssl-dev libgl1-mesa-dev libx11-dev libxi-dev libxrandr-dev libxinerama-dev libxcursor-dev libglu1-mesa-dev libglfw3-dev nlohmann-json3-dev
+        sudo apt-get install -y libtorrent-rasterbar-dev libcurl4-openssl-dev libfontconfig1-dev libgl1-mesa-dev libx11-dev libxi-dev libxrandr-dev libxinerama-dev libxcursor-dev libglu1-mesa-dev libglfw3-dev nlohmann-json3-dev
 
     - name: Configure CMake
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DHYPERTUBE_BUILD_SLINT=ON -DHYPERTUBE_BUILD_IMGUI=ON
 
     - name: Build
-      run: cmake --build build -j2
+      run: cmake --build build --target hypertube-slint hypertube-imgui unit_tests config_tests search_tests torrent_tests slint_model_tests slint-preview-check -j2
 
     - name: Test
       run: ctest --test-dir build --output-on-failure
@@ -37,10 +37,10 @@ jobs:
       run: brew install boost libtorrent-rasterbar curl glfw nlohmann-json pkg-config
 
     - name: Configure CMake
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DHYPERTUBE_BUILD_SLINT=ON -DHYPERTUBE_BUILD_IMGUI=ON
 
     - name: Build
-      run: cmake --build build -j2
+      run: cmake --build build --target hypertube-slint hypertube-imgui unit_tests config_tests search_tests torrent_tests slint_model_tests slint-preview-check -j2
 
     - name: Test
       run: ctest --test-dir build --output-on-failure
@@ -57,10 +57,10 @@ jobs:
 
     - name: Configure CMake
       shell: pwsh
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DHYPERTUBE_BUILD_SLINT=ON -DHYPERTUBE_BUILD_IMGUI=ON -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
 
     - name: Build
-      run: cmake --build build --config Debug --parallel 2
+      run: cmake --build build --config Debug --target hypertube-slint hypertube-imgui unit_tests config_tests search_tests torrent_tests slint_model_tests slint-preview-check --parallel 2
 
     - name: Test
       run: ctest --test-dir build -C Debug --output-on-failure

@@ -3,16 +3,29 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <string>
 
-// Native dialogs remain behind this boundary so the Slint views do not own a
-// platform file-picker implementation. The migration can provide a native
-// adapter without changing the Slint components or TorrentAddFlow.
+enum class DialogSelectionStatus
+{
+	Selected,
+	Cancelled,
+	Unavailable,
+	Failed
+};
+
+struct DialogSelection
+{
+	DialogSelectionStatus status = DialogSelectionStatus::Unavailable;
+	std::optional<std::filesystem::path> path;
+	std::string message;
+};
+
 class DialogService
 {
 public:
 	virtual ~DialogService() = default;
-	virtual std::optional<std::filesystem::path> openTorrentFile() = 0;
-	virtual std::optional<std::filesystem::path> selectDirectory() = 0;
+	virtual DialogSelection openTorrentFile() = 0;
+	virtual DialogSelection selectDirectory() = 0;
 };
 
 std::unique_ptr<DialogService> createDialogService();

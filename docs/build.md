@@ -6,18 +6,18 @@ when a dependency is not found.
 
 ## Dependency resolution
 
-The build searches for:
+The build searches for the shared dependencies:
 
-- OpenGL;
-- GLFW3;
-- Dear ImGui;
-- ImGuiFileDialog;
 - nlohmann/json;
 - libtorrent-rasterbar;
-- cURL;
-- Rust 1.88 or newer for the pinned Slint 1.16.1 build;
-- Fontconfig development files on Linux for Slint's software renderer;
-- X11 on Linux when available.
+- cURL.
+
+The default configuration is `HYPERTUBE_BUILD_SLINT=ON` and
+`HYPERTUBE_BUILD_IMGUI=OFF`. Slint additionally requires Rust 1.88 or newer
+for the pinned Slint 1.16.1 build and Fontconfig development files on Linux
+for its software renderer. ImGui additionally requires OpenGL, GLFW3, Dear
+ImGui, ImGuiFileDialog, and X11 on Linux when available. These frontend-only
+dependencies are not discovered when the corresponding option is disabled.
 
 When a package is not available locally, CMake can download a pinned dependency revision where configured. The first configure may therefore require network access and additional build time.
 
@@ -28,7 +28,7 @@ Ubuntu/Debian:
 ```sh
 sudo apt update
 sudo apt install -y cmake build-essential libtorrent-rasterbar-dev \
-  libcurl4-openssl-dev libfontconfig1-dev libgl1-mesa-dev libglfw3-dev libx11-dev
+  libcurl4-openssl-dev libfontconfig1-dev
 ```
 
 Arch Linux:
@@ -44,7 +44,9 @@ sudo dnf install cmake gcc-c++ libtorrent-rasterbar-devel libcurl-devel \
   fontconfig-devel glfw-devel mesa-libGL-devel
 ```
 
-If a distribution package does not provide a compatible ImGui or ImGuiFileDialog target, the CMake fallback may fetch it.
+Enable `HYPERTUBE_BUILD_IMGUI=ON` when a legacy ImGui build is required. If a
+distribution package does not provide a compatible ImGui or ImGuiFileDialog
+target, the CMake fallback may fetch it.
 
 ## macOS and Windows dependencies
 
@@ -57,7 +59,9 @@ brew install cmake glfw libtorrent-rasterbar curl nlohmann-json
 Windows with vcpkg:
 
 ```cmd
-vcpkg install glfw3 libtorrent curl nlohmann-json
+vcpkg install libtorrent curl nlohmann-json
+# Only needed for the legacy frontend:
+vcpkg install glfw3
 ```
 
 Configure Windows with the vcpkg toolchain:
@@ -65,6 +69,7 @@ Configure Windows with the vcpkg toolchain:
 ```cmd
 cmake -S . -B build ^
   -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake ^
+  -DHYPERTUBE_BUILD_SLINT=ON -DHYPERTUBE_BUILD_IMGUI=OFF ^
   -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ```
@@ -76,6 +81,22 @@ The exact runtime OpenGL/GLFW setup remains platform-dependent and must be smoke
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j2
+```
+
+Frontend-specific configurations:
+
+```sh
+# Slint only (default)
+cmake -S . -B build-slint-only -DHYPERTUBE_BUILD_SLINT=ON -DHYPERTUBE_BUILD_IMGUI=OFF
+cmake --build build-slint-only --target hypertube-slint slint-preview-check -j2
+
+# Legacy ImGui only
+cmake -S . -B build-imgui-only -DHYPERTUBE_BUILD_SLINT=OFF -DHYPERTUBE_BUILD_IMGUI=ON
+cmake --build build-imgui-only --target hypertube-imgui -j2
+
+# Both frontends
+cmake -S . -B build-full -DHYPERTUBE_BUILD_SLINT=ON -DHYPERTUBE_BUILD_IMGUI=ON
+cmake --build build-full --target hypertube-slint hypertube-imgui slint-preview-check -j2
 ```
 
 Use Debug for normal development, parser diagnosis, race investigation, and test failures.
@@ -140,5 +161,8 @@ cmake --build build -j2
 ctest --test-dir build --output-on-failure
 git diff --check
 ```
+
+`slint-preview-check` is registered as a CTest test whenever Slint is enabled,
+so `ctest` validates the preview sources as part of the configured frontend.
 
 For CMake or packaging changes, also follow [Release](release.md) and verify a non-root runtime install.

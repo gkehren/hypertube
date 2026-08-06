@@ -1,8 +1,9 @@
 import { Button, HorizontalBox, LineEdit, VerticalBox } from "std-widgets.slint";
 import { ThemeTokens } from "theme.slint";
+import { Theme } from "enums.slint";
 
 export component PreferencesView inherits Rectangle {
-	in property <int> selected-theme: 0;
+	in property <Theme> selected-theme: Theme.dark;
 	in property <bool> sidebar-collapsed: false;
 	in property <string> state-message;
 	in-out property <string> download-limit;
@@ -13,15 +14,21 @@ export component PreferencesView inherits Rectangle {
 	in-out property <bool> enable-natpmp: true;
 	in-out property <bool> torznab-enabled: false;
 	in-out property <string> torznab-url;
+	in property <bool> torznab-secret-stored: false;
+	in-out property <string> torznab-secret;
 	in-out property <bool> proxy-enabled: false;
 	in-out property <string> proxy-type: "socks5";
 	in-out property <string> proxy-host;
 	in-out property <string> proxy-port;
 	in-out property <string> proxy-username;
-	callback change-theme(int);
+	in property <bool> proxy-secret-stored: false;
+	in-out property <string> proxy-secret;
+	callback change-theme(Theme);
 	callback toggle-sidebar();
 	callback browse-download-directory();
 	callback apply-preferences();
+	callback clear-torznab-secret();
+	callback clear-proxy-secret();
 
 	background: ThemeTokens.background;
 	VerticalBox {
@@ -31,61 +38,11 @@ export component PreferencesView inherits Rectangle {
 
 		Text { text: "Theme"; color: ThemeTokens.foreground; }
 		HorizontalBox {
-			Button {
-				text: "Dark";
-				clicked => {
-					ThemeTokens.background = #15181d;
-					ThemeTokens.surface = #1c2129;
-					ThemeTokens.surface-hover = #293448;
-					ThemeTokens.foreground = #f5f7fa;
-					ThemeTokens.muted-foreground = #9aa4b2;
-					root.change-theme(0);
-				}
-			}
-			Button {
-				text: "Ocean";
-				clicked => {
-					ThemeTokens.background = #101c2c;
-					ThemeTokens.surface = #16283c;
-					ThemeTokens.surface-hover = #244967;
-					ThemeTokens.foreground = #e6f4ff;
-					ThemeTokens.muted-foreground = #9db8cc;
-					root.change-theme(1);
-				}
-			}
-			Button {
-				text: "Nord";
-				clicked => {
-					ThemeTokens.background = #2e3440;
-					ThemeTokens.surface = #3b4252;
-					ThemeTokens.surface-hover = #434c5e;
-					ThemeTokens.foreground = #eceff4;
-					ThemeTokens.muted-foreground = #d8dee9;
-					root.change-theme(2);
-				}
-			}
-			Button {
-				text: "Dracula";
-				clicked => {
-					ThemeTokens.background = #282a36;
-					ThemeTokens.surface = #44475a;
-					ThemeTokens.surface-hover = #6272a4;
-					ThemeTokens.foreground = #f8f8f2;
-					ThemeTokens.muted-foreground = #bdc0c9;
-					root.change-theme(3);
-				}
-			}
-			Button {
-				text: "CyberPunk";
-				clicked => {
-					ThemeTokens.background = #100d1a;
-					ThemeTokens.surface = #211432;
-					ThemeTokens.surface-hover = #38235a;
-					ThemeTokens.foreground = #f5f0ff;
-					ThemeTokens.muted-foreground = #d0a8f5;
-					root.change-theme(4);
-				}
-			}
+			Button { text: "Dark"; clicked => { root.change-theme(Theme.dark); } }
+			Button { text: "Ocean"; clicked => { root.change-theme(Theme.ocean); } }
+			Button { text: "Nord"; clicked => { root.change-theme(Theme.nord); } }
+			Button { text: "Dracula"; clicked => { root.change-theme(Theme.dracula); } }
+			Button { text: "CyberPunk"; clicked => { root.change-theme(Theme.cyberpunk); } }
 		}
 
 		Text { text: "Default torrent settings"; color: ThemeTokens.foreground; }
@@ -112,6 +69,11 @@ export component PreferencesView inherits Rectangle {
 			Button { text: root.torznab-enabled ? "Enabled" : "Disabled"; clicked => { root.torznab-enabled = !root.torznab-enabled; } }
 			LineEdit { text <=> root.torznab-url; placeholder-text: "http://127.0.0.1:9696/..."; }
 		}
+		HorizontalBox {
+			LineEdit { text <=> root.torznab-secret; input-type: password; placeholder-text: root.torznab-secret-stored ? "API key stored (enter to replace)" : "API key"; }
+			Text { text: root.torznab-secret-stored ? "Secret stored" : "No secret stored"; color: ThemeTokens.muted-foreground; }
+			Button { text: "Clear stored secret"; enabled: root.torznab-secret-stored; clicked => { root.clear-torznab-secret(); } }
+		}
 
 		Text { text: "Proxy"; color: ThemeTokens.foreground; }
 		HorizontalBox {
@@ -122,6 +84,11 @@ export component PreferencesView inherits Rectangle {
 			LineEdit { text <=> root.proxy-port; placeholder-text: "1080"; }
 		}
 		LineEdit { text <=> root.proxy-username; placeholder-text: "Proxy username (password stays in credential store)"; }
+		HorizontalBox {
+			LineEdit { text <=> root.proxy-secret; input-type: password; placeholder-text: root.proxy-secret-stored ? "Password stored (enter to replace)" : "Proxy password"; }
+			Text { text: root.proxy-secret-stored ? "Secret stored" : "No secret stored"; color: ThemeTokens.muted-foreground; }
+			Button { text: "Clear stored secret"; enabled: root.proxy-secret-stored; clicked => { root.clear-proxy-secret(); } }
+		}
 
 		HorizontalBox {
 			Button { text: root.sidebar-collapsed ? "Expand sidebar" : "Collapse sidebar"; clicked => { root.toggle-sidebar(); } }

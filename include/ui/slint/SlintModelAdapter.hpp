@@ -6,6 +6,7 @@
 #include <slint.h>
 
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 class SlintModelAdapter
@@ -24,4 +25,5 @@ private:
 
 	std::shared_ptr<Model> model_;
 	std::vector<TorrentRow> rows_;
+	std::unordered_map<std::string, std::size_t> indexById_;
 };

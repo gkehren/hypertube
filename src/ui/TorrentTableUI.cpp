@@ -135,10 +135,11 @@ void TorrentTableUI::displayTorrentTableRow(const lt::torrent_handle &handle, co
 
 	// Column 0: Queue position
 	ImGui::AlignTextToFramePadding();
-	if (status.queue_position < 0)
+	const int queuePosition = static_cast<int>(static_cast<lt::queue_position_t::underlying_type>(status.queue_position));
+	if (queuePosition < 0)
 		ImGui::TextUnformatted("-");
 	else
-		ImGui::Text("%d", static_cast<int>(status.queue_position) + 1);
+		ImGui::Text("%d", queuePosition + 1);
 
 	// Column 1: Name - Use selectable for row selection
 	ImGui::TableSetColumnIndex(1);

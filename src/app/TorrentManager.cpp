@@ -1,11 +1,13 @@
 #include "TorrentManager.hpp"
 #include "ConfigManager.hpp"
+#include "AppPaths.hpp"
 #include "Logger.hpp"
 #include "StringUtils.hpp"
 #include "SystemUtils.hpp"
 #include <iostream>
 #include <algorithm>
 #include <filesystem>
+#include <type_traits>
 #include <unordered_set>
 #include <libtorrent/alert_types.hpp>
 #include <libtorrent/read_resume_data.hpp>
@@ -13,10 +15,10 @@
 
 namespace
 {
-void invalidateStatusCache(std::mutex &cacheMutex, std::shared_ptr<const std::unordered_map<lt::info_hash_t, lt::torrent_status>> &cache)
+void markStatusCacheStale(std::mutex &cacheMutex, std::chrono::steady_clock::time_point &lastCacheRefresh)
 {
 	std::lock_guard<std::mutex> lock(cacheMutex);
-	cache = std::make_shared<std::unordered_map<lt::info_hash_t, lt::torrent_status>>();
+	lastCacheRefresh = {};
 }
 
 std::string hashForLog(const lt::info_hash_t &hash)
@@ -28,7 +30,7 @@ std::string hashForLog(const lt::info_hash_t &hash)
 	return "unknown";
 }
 
-Result validateAddPaths(const std::string &savePath, const std::string *torrentPath = nullptr)
+Result validateAddPaths(std::string &savePath, const std::string *torrentPath = nullptr)
 {
 	std::error_code error;
 	if (torrentPath)
@@ -40,6 +42,9 @@ Result validateAddPaths(const std::string &savePath, const std::string *torrentP
 
 	if (savePath.empty())
 		return Result::Failure("Download path cannot be empty", ResultCode::InvalidInput);
+	savePath = Utils::AppPaths::expandUserPath(savePath).string();
+	if (savePath.empty())
+		return Result::Failure("Download path cannot be resolved", ResultCode::InvalidInput);
 	const std::filesystem::path destination(savePath);
 	std::filesystem::create_directories(destination, error);
 	if (error || !std::filesystem::is_directory(destination, error))
@@ -55,14 +60,15 @@ std::size_t detailSectionIndex(TorrentDetailSection section)
 
 Result TorrentManager::addTorrent(const std::string &torrentPath, const std::string &savePath)
 {
-	Result validation = validateAddPaths(savePath, &torrentPath);
+	std::string resolvedSavePath = savePath;
+	Result validation = validateAddPaths(resolvedSavePath, &torrentPath);
 	if (!validation)
 		return validation;
 	std::lock_guard<std::mutex> operationLock(operationMutex);
 	try
 	{
 		lt::add_torrent_params params;
-		params.save_path = savePath;
+		params.save_path = resolvedSavePath;
 		params.ti = std::make_shared<lt::torrent_info>(torrentPath);
 		params.flags |= lt::torrent_flags::duplicate_is_error;
 		const lt::info_hash_t expectedHash = params.ti->info_hashes();
@@ -82,7 +88,7 @@ Result TorrentManager::addTorrent(const std::string &torrentPath, const std::str
 
 		std::cout << "Added torrent from file: " << handle.status().name << std::endl;
 		Utils::Logger::info("torrent", "Added torrent from file: " + torrentPath);
-		invalidateStatusCache(cacheMutex, statusCache);
+		markStatusCacheStale(cacheMutex, lastCacheRefresh);
 		return Result::Success();
 	}
 	catch (const std::exception &e)
@@ -95,7 +101,8 @@ Result TorrentManager::addTorrent(const std::string &torrentPath, const std::str
 
 Result TorrentManager::addMagnetTorrent(const std::string &magnetUri, const std::string &savePath)
 {
-	Result validation = validateAddPaths(savePath);
+	std::string resolvedSavePath = savePath;
+	Result validation = validateAddPaths(resolvedSavePath);
 	if (!validation)
 		return validation;
 	if (magnetUri.rfind("magnet:?", 0) != 0)
@@ -107,7 +114,7 @@ Result TorrentManager::addMagnetTorrent(const std::string &magnetUri, const std:
 		if (!params.info_hashes.has_v1() && !params.info_hashes.has_v2())
 			return Result::Failure("Magnet URI does not contain a supported info hash", ResultCode::InvalidInput);
 		std::cout << "Adding magnet torrent: " << params.name << " (hash: " << params.info_hashes.v1 << ")" << std::endl;
-		params.save_path = savePath;
+		params.save_path = resolvedSavePath;
 		params.flags |= lt::torrent_flags::duplicate_is_error;
 		if (params.info_hashes.has_v1() || params.info_hashes.has_v2())
 		{
@@ -124,7 +131,7 @@ Result TorrentManager::addMagnetTorrent(const std::string &magnetUri, const std:
 
 		std::cout << "Added magnet torrent: " << handle.status().name << std::endl;
 		Utils::Logger::info("torrent", "Added torrent from magnet URI");
-		invalidateStatusCache(cacheMutex, statusCache);
+		markStatusCacheStale(cacheMutex, lastCacheRefresh);
 		return Result::Success();
 	}
 	catch (const std::exception &e)
@@ -146,7 +153,7 @@ void TorrentManager::addTorrentsFromConfig(const std::vector<TorrentConfigData> 
 			{
 				lt::add_torrent_params params = lt::read_resume_data(data.resumeData);
 				if (!data.savePath.empty())
-					params.save_path = data.savePath;
+					params.save_path = Utils::AppPaths::expandUserPath(data.savePath).string();
 				params.flags |= lt::torrent_flags::duplicate_is_error;
 				lt::torrent_handle handle = session.add_torrent(params);
 				const lt::info_hash_t hash = handle.info_hashes();
@@ -225,7 +232,7 @@ Result TorrentManager::removeTorrent(const lt::info_hash_t &hash, TorrentRemoval
 			torrents.erase(hash);
 			torrentFilePaths.erase(hash);
 		}
-		invalidateStatusCache(cacheMutex, statusCache);
+		markStatusCacheStale(cacheMutex, lastCacheRefresh);
 		Utils::Logger::info("torrent", "Removed torrent " + hashForLog(hash));
 
 		if (!sourceRemovalError.empty())
@@ -282,7 +289,7 @@ Result TorrentManager::executeCommand(const lt::info_hash_t &hash, TorrentComman
 			handle.unset_flags(lt::torrent_flags::sequential_download);
 			break;
 		}
-		invalidateStatusCache(cacheMutex, statusCache);
+		markStatusCacheStale(cacheMutex, lastCacheRefresh);
 		return Result::Success();
 	}
 	catch (const std::exception &e)
@@ -415,6 +422,12 @@ std::shared_ptr<const std::unordered_map<lt::info_hash_t, lt::torrent_status>> T
 	return statusCache;
 }
 
+std::uint64_t TorrentManager::getStatusRevision() const
+{
+	std::lock_guard<std::mutex> lock(cacheMutex);
+	return statusRevision;
+}
+
 void TorrentManager::refreshStatusCache()
 {
 	auto newCache = std::make_shared<std::unordered_map<lt::info_hash_t, lt::torrent_status>>();
@@ -439,10 +452,7 @@ void TorrentManager::refreshStatusCache()
 	{
 		std::lock_guard<std::mutex> lock(cacheMutex);
 		statusCache = std::move(newCache);
-	}
-
-	{
-		std::lock_guard<std::mutex> lock(cacheMutex);
+		++statusRevision;
 		lastCacheRefresh = std::chrono::steady_clock::now();
 	}
 }
@@ -534,7 +544,7 @@ Result TorrentManager::setFilePriority(const lt::info_hash_t &hash, int fileInde
 	}
 }
 
-std::shared_ptr<const TorrentDetailsSnapshot> TorrentManager::collectDetails(const DetailRequest &request)
+std::shared_ptr<TorrentDetailsSnapshot> TorrentManager::collectDetails(const DetailRequest &request)
 {
 	auto snapshot = std::make_shared<TorrentDetailsSnapshot>();
 	snapshot->section = request.section;
@@ -590,7 +600,9 @@ std::shared_ptr<const TorrentDetailsSnapshot> TorrentManager::collectDetails(con
 				file.relativePath = std::string(storage.file_path(index));
 				file.size = storage.file_size(index);
 				file.downloaded = i < static_cast<int>(progress.size()) ? progress[static_cast<std::size_t>(i)] : 0;
-				file.priority = static_cast<int>(handle.file_priority(index));
+				const auto priority = handle.file_priority(index);
+				file.priority = static_cast<int>(static_cast<lt::aux::underlying_index_t<
+					std::remove_cv_t<decltype(priority)>>::type>(priority));
 				snapshot->files.push_back(std::move(file));
 			}
 		}
@@ -657,8 +669,12 @@ void TorrentManager::detailWorkerLoop()
 		const auto snapshot = collectDetails(request);
 		{
 			std::lock_guard<std::mutex> lock(detailMutex);
-			detailCache[detailSectionIndex(request.section)][request.hash] = snapshot;
-			detailLastRefresh[detailSectionIndex(request.section)][request.hash] = std::chrono::steady_clock::now();
+			const auto index = detailSectionIndex(request.section);
+			const auto revision = ++detailRevisions[index][request.hash];
+			if (snapshot)
+				snapshot->revision = revision;
+			detailCache[index][request.hash] = snapshot;
+			detailLastRefresh[index][request.hash] = std::chrono::steady_clock::now();
 		}
 	}
 }
