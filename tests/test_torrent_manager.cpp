@@ -133,6 +133,22 @@ TEST_F(TorrentManagerTest, CollectsFileDetailsOffTheCallingThread)
 	EXPECT_EQ(details->files.front().size, 1);
 }
 
+TEST_F(TorrentManagerTest, CollectionRevisionChangesOnlyForSuccessfulMembershipChanges)
+{
+	TorrentManager manager;
+	const auto initial = manager.getTorrentCollectionRevision();
+	const auto torrentPath = writeTorrentFile();
+	const auto downloadPath = testDirectory / "downloads";
+	ASSERT_TRUE(manager.addTorrent(torrentPath.string(), downloadPath.string()));
+	const auto added = manager.getTorrentCollectionRevision();
+	EXPECT_GT(added, initial);
+	EXPECT_FALSE(manager.addTorrent(torrentPath.string(), downloadPath.string()));
+	EXPECT_EQ(manager.getTorrentCollectionRevision(), added);
+	const auto hash = manager.getTorrentSnapshot().front().hash;
+	ASSERT_TRUE(manager.removeTorrent(hash, TorrentRemovalMode::KeepAllFiles));
+	EXPECT_GT(manager.getTorrentCollectionRevision(), added);
+}
+
 TEST_F(TorrentManagerTest, RefreshesStatusCacheWhenRequested)
 {
 	TorrentManager manager;

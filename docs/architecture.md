@@ -35,11 +35,13 @@ and waits for asynchronous persistence during shutdown.
 
 ### UI layer
 
-`SlintAppController` owns property and callback wiring and polls owned DTO
-snapshots from the presentation controllers. Specialized Slint views cover the
-shell, torrent table, details, search, preferences, and diagnostics. Rendering
-and UI mutation stay on the main thread while blocking service work runs behind
-owned asynchronous snapshots.
+`SlintAppController` owns lifetime and callback wiring. Refresh work is split
+between `TorrentRefreshCoordinator`, `DetailsRefreshCoordinator`,
+`SearchRefreshCoordinator`, `LogRefreshCoordinator`, and
+`NotificationController`; each coordinator owns its revision and cadence.
+Specialized Slint views cover the shell, torrent table, details, search,
+preferences, and diagnostics. Rendering and UI mutation stay on the main thread
+while blocking service work runs behind owned asynchronous snapshots.
 
 ### TorrentManager
 
@@ -107,7 +109,8 @@ The CMake project builds:
 - `hypertube_search`: search provider and HTTP service;
 - `hypertube_presentation`: toolkit-neutral DTOs, presenters, and persistence controllers;
 - `hypertube`: the Slint application executable;
-- `unit_tests`, `config_tests`, `search_tests`, `torrent_tests`, and `slint_model_tests`.
+- `unit_tests`, `config_tests`, `search_tests`, `torrent_tests`, `slint_model_tests`, and `slint_controller_tests`;
+- `slint-renderer-benchmark`: an opt-in redraw workload shared by the software and FemtoVG validation targets.
 
 New services should be isolated behind a small library when they need independent
 tests. UI code should depend on service interfaces and immutable snapshots, not

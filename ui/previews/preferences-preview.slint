@@ -1,27 +1,5 @@
-import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
-import { ThemeTokens } from "../theme.slint";
-
+import { PreferencesView } from "../preferences-view.slint";
 export component PreferencesPreview inherits Window {
-	title: "Hypertube preferences preview";
-	preferred-width: 720px;
-	preferred-height: 480px;
-	background: ThemeTokens.background;
-
-	VerticalBox {
-		padding: 24px;
-		Text { text: "Preferences"; color: ThemeTokens.foreground; font-size: 24px; }
-		Text { text: "Changes are saved transactionally"; color: ThemeTokens.muted-foreground; }
-		Text { text: "Theme"; color: ThemeTokens.foreground; }
-		HorizontalBox {
-			Button { text: "Dark"; }
-			Button { text: "Ocean"; }
-			Button { text: "Nord"; }
-			Button { text: "Dracula"; }
-			Button { text: "CyberPunk"; }
-		}
-		Text { text: "Sidebar"; color: ThemeTokens.foreground; }
-		Button { text: "Collapse sidebar"; }
-		Rectangle { }
-		Text { text: "Preview covers long labels, narrow widths, and high-DPI scaling."; color: ThemeTokens.muted-foreground; }
-	}
+	preferred-width: 800px; preferred-height: 600px;
+	PreferencesView { state-message: "Changes are saved transactionally."; download-path: "~/Downloads/非常に長いディレクトリ名"; torznab-secret-stored: true; proxy-secret-stored: true; }
 }

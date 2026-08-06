@@ -80,8 +80,10 @@ Result TorrentManager::addTorrent(const std::string &torrentPath, const std::str
 		lt::info_hash_t hash = handle.info_hashes();
 		{
 			std::lock_guard<std::mutex> lock(stateMutex);
-			torrents.emplace(hash, handle);
+			const auto [_, inserted] = torrents.emplace(hash, handle);
 			torrentFilePaths.emplace(hash, torrentPath);
+			if (inserted)
+				++torrentCollectionRevision;
 		}
 
 		std::cout << "Added torrent from file: " << handle.status().name << std::endl;
@@ -124,7 +126,9 @@ Result TorrentManager::addMagnetTorrent(const std::string &magnetUri, const std:
 		const lt::info_hash_t hash = handle.info_hashes();
 		{
 			std::lock_guard<std::mutex> lock(stateMutex);
-			torrents.emplace(hash, handle);
+			const auto [_, inserted] = torrents.emplace(hash, handle);
+			if (inserted)
+				++torrentCollectionRevision;
 		}
 
 		std::cout << "Added magnet torrent: " << handle.status().name << std::endl;
@@ -157,9 +161,11 @@ void TorrentManager::addTorrentsFromConfig(const std::vector<TorrentConfigData> 
 				const lt::info_hash_t hash = handle.info_hashes();
 				{
 					std::lock_guard<std::mutex> lock(stateMutex);
-					this->torrents.emplace(hash, handle);
+					const auto [_, inserted] = this->torrents.emplace(hash, handle);
 					if (!data.torrentFilePath.empty())
 						torrentFilePaths.emplace(hash, data.torrentFilePath);
+					if (inserted)
+						++torrentCollectionRevision;
 				}
 				Utils::Logger::info("torrent", "Restored torrent from fast-resume data");
 				continue;
@@ -227,7 +233,8 @@ Result TorrentManager::removeTorrent(const lt::info_hash_t &hash, TorrentRemoval
 
 		{
 			std::lock_guard<std::mutex> lock(stateMutex);
-			torrents.erase(hash);
+			if (torrents.erase(hash) > 0)
+				++torrentCollectionRevision;
 			torrentFilePaths.erase(hash);
 		}
 		markStatusCacheStale(cacheMutex, lastCacheRefresh);
@@ -577,7 +584,7 @@ std::shared_ptr<TorrentDetailsSnapshot> TorrentManager::collectDetails(const Det
 		if (it == torrents.end())
 		{
 			snapshot->state = TorrentDetailState::Unavailable;
-			snapshot->message = "Torrent is no longer available";
+			snapshot->message = "Torrent was removed before details could be refreshed";
 			return snapshot;
 		}
 		handle = it->second;

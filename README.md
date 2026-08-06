@@ -18,7 +18,9 @@ ctest --test-dir build --output-on-failure
 
 The Slint preview compiler check is registered in CTest. The first CMake
 configure may download missing dependencies. Platform package prerequisites
-are documented in [docs/build.md](docs/build.md).
+are documented in [docs/build.md](docs/build.md). Release packages use a
+portable CPU baseline; optional native-ISA and Slint renderer comparison builds
+are development tools documented in the same guide.
 
 ## Documentation
 
@@ -30,6 +32,7 @@ The complete documentation is maintained in [`docs/`](docs/):
 - [Architecture](docs/architecture.md)
 - [Build system](docs/build.md)
 - [Testing](docs/testing.md)
+- [Renderer evaluation](docs/renderer-evaluation.md)
 - [Build and release](docs/release.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Security and privacy](docs/security.md)

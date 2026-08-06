@@ -1,0 +1,48 @@
+import { ListView, VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "../theme.slint";
+import { TorrentRow } from "../torrent-types.slint";
+import { TorrentSort, UiTorrentCommand } from "../enums.slint";
+import { TorrentTableHeader } from "torrent-table-header.slint";
+import { TorrentTableRow } from "torrent-row.slint";
+import { TorrentTableGeometry } from "torrent-table-geometry.slint";
+
+export component TorrentTable inherits Rectangle {
+	in property <[TorrentRow]> rows: [];
+	in property <string> selected-id;
+	in property <string> empty-message: "No torrents yet";
+	in property <length> available-width: root.width;
+	callback select(string);
+	callback sort(TorrentSort);
+	callback execute(string, UiTorrentCommand);
+	callback remove(string);
+	callback copy-magnet(string);
+	private property <bool> compact: root.available-width < 1050px;
+	private property <bool> narrow: root.available-width < 720px;
+	private property <length> progress-width: root.narrow ? 130px : TorrentTableGeometry.progress-width;
+	private property <length> status-width: root.narrow ? 110px : TorrentTableGeometry.status-width;
+	background: ThemeTokens.background;
+	min-width: 0px;
+	preferred-width: 0px;
+	VerticalBox {
+		spacing: 2px;
+		TorrentTableHeader { compact: root.compact; narrow: root.narrow; progress-width: root.progress-width; status-width: root.status-width; sort(value) => { root.sort(value); } }
+		ListView {
+			accessible-role: list;
+			accessible-label: "Torrent list";
+			accessible-item-count: root.rows.length;
+			for torrent in root.rows: TorrentTableRow {
+				torrent: torrent;
+				selected: torrent.id == root.selected-id;
+				compact: root.compact;
+				narrow: root.narrow;
+				progress-width: root.progress-width;
+				status-width: root.status-width;
+				select(id) => { root.select(id); }
+				execute(id, command) => { root.execute(id, command); }
+				remove(id) => { root.remove(id); }
+				copy-magnet(id) => { root.copy-magnet(id); }
+			}
+		}
+		if (root.rows.length == 0): Text { text: root.empty-message; color: ThemeTokens.muted-foreground; horizontal-alignment: center; }
+	}
+}

@@ -3,8 +3,10 @@
 #include "presentation/UiDtos.hpp"
 #include "Result.hpp"
 #include "TorrentManager.hpp"
+#include "presentation/TorrentAvailability.hpp"
 
 #include <optional>
+#include <limits>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -45,6 +47,9 @@ public:
 	Result executeCommand(const std::string &id, TorrentCommand command);
 	Result removeTorrent(const std::string &id, TorrentRemovalMode mode);
 	std::optional<lt::info_hash_t> hashForId(const std::string &id) const;
+	TorrentAvailabilityInfo availabilityForId(const std::string &id);
+	std::size_t registrySize() const { ensureRegistryCurrent(); return hashesById_.size(); }
+	std::uint64_t collectionRevision() const { return torrentManager.getTorrentCollectionRevision(); }
 	static std::string idForHash(const lt::info_hash_t &hash);
 
 private:
@@ -54,9 +59,11 @@ private:
 	bool sortAscending_ = true;
 	std::string textFilter_;
 	std::string selectedId_;
-	std::unordered_map<std::string, lt::info_hash_t> hashesById_;
+	mutable std::unordered_map<std::string, lt::info_hash_t> hashesById_;
+	mutable std::uint64_t registryRevision_ = std::numeric_limits<std::uint64_t>::max();
 
 	std::vector<TorrentRowDto> buildUnfilteredRows();
+	void ensureRegistryCurrent() const;
 	bool matchesCategory(const TorrentRowDto &row) const;
 	bool matchesTextFilter(const TorrentRowDto &row) const;
 };

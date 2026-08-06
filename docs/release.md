@@ -27,6 +27,10 @@ cmake --build build-release -j2
 ctest --test-dir build-release --output-on-failure
 ```
 
+Do not enable `HYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS` for this build. The
+default Release configuration deliberately omits `/arch:AVX2` and
+`-march=native` so the artifact is not tied to the packaging host's CPU.
+
 ## Create a portable runtime directory
 
 ```sh
@@ -63,7 +67,9 @@ executable, required runtime libraries, and only seed configuration files.
 - [ ] Update [Features and status](features.md) for changed capabilities.
 - [ ] Update [Configuration and data](configuration.md) for schema changes.
 - [ ] Run a clean Release configure and build.
+- [ ] Confirm `HYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS=OFF` in the release cache.
 - [ ] Run CTest and relevant sanitizer tests.
+- [ ] Review recent software/FemtoVG reports before changing the production renderer.
 - [ ] Validate the non-root `runtime` install.
 - [ ] Inspect the ZIP contents.
 - [ ] Run the packaged executable in portable mode.

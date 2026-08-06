@@ -1,6 +1,7 @@
-import { Button, HorizontalBox, LineEdit, ListView, VerticalBox } from "std-widgets.slint";
+import { Button, HorizontalBox, LineEdit, ScrollView, VerticalBox } from "std-widgets.slint";
 import { ThemeTokens } from "theme.slint";
 import { SearchResultRow } from "search-types.slint";
+import { SearchResultList } from "components/search-result-list.slint";
 
 export component SearchView inherits Rectangle {
 	in-out property <string> query;
@@ -46,55 +47,19 @@ export component SearchView inherits Rectangle {
 
 		Text { text: root.state-message; color: ThemeTokens.muted-foreground; }
 
-		if (root.recent-queries.length > 0): HorizontalBox {
-			Text { text: "Recent:"; color: ThemeTokens.muted-foreground; }
-			for recent in root.recent-queries: Button {
-				text: recent;
-				clicked => { root.select-history(recent); }
-			}
-			Button { text: "Clear history"; clicked => { root.clear-history(); } }
-		}
-
-		ListView {
-			accessible-role: list;
-			accessible-label: "Search results";
-			accessible-item-count: root.rows.length;
-			for result in root.rows: Rectangle {
-				height: 62px;
-				accessible-role: list-item;
-				accessible-label: result.name + ", " + result.size-label + ", " + result.seeders-label + " seeders";
-				background: ThemeTokens.surface;
-				border-width: 1px;
-				border-color: ThemeTokens.border;
-				TouchArea {
-					width: parent.width;
-					height: parent.height;
-					clicked => { root.select-result(result.id); }
+		if (root.recent-queries.length > 0): ScrollView {
+			height: 44px;
+			HorizontalBox {
+				Text { text: "Recent:"; color: ThemeTokens.muted-foreground; }
+				for recent in root.recent-queries: Button {
+					text: recent;
+					clicked => { root.select-history(recent); }
 				}
-				HorizontalBox {
-					padding: 8px;
-					Text { text: result.name; color: ThemeTokens.foreground; }
-					Text { text: result.size-label; color: ThemeTokens.muted-foreground; width: 110px; }
-					Text { text: "S " + result.seeders-label + " / L " + result.leechers-label; color: ThemeTokens.muted-foreground; width: 130px; }
-					Text { text: result.category; color: ThemeTokens.muted-foreground; width: 120px; }
-					Text { text: result.published-label; color: ThemeTokens.muted-foreground; width: 130px; }
-					Button {
-						text: result.favorite ? "Unfavorite" : "Favorite";
-						clicked => { root.toggle-favorite(result.id); }
-					}
-					Button {
-						text: "Add";
-						clicked => { root.add-result(result.id); }
-					}
-				}
+				Button { text: "Clear history"; clicked => { root.clear-history(); } }
 			}
 		}
 
-		if (root.rows.length == 0 && !root.loading): Text {
-			text: "No search results";
-			color: ThemeTokens.muted-foreground;
-			horizontal-alignment: center;
-		}
+		SearchResultList { rows: root.rows; empty-message: root.loading ? "Searching…" : "No search results"; select(id) => { root.select-result(id); } toggle-favorite(id) => { root.toggle-favorite(id); } add(id) => { root.add-result(id); } }
 
 		Button {
 			text: "Load more";

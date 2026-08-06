@@ -1,0 +1,7 @@
+import { LogsView } from "../logs-view.slint";
+import { LogRow } from "../log-types.slint";
+export component LogsPreview inherits Window {
+	in property <[LogRow]> mock-rows: [{ timestamp: "2026-08-06 12:00:00", level: "Info", category: "torrent", message: "A very long diagnostic message that should remain inside the available row width and be elided", severity: 1 }, { timestamp: "2026-08-06 12:00:01", level: "Error", category: "system", message: "Example failure", severity: 3 }];
+	preferred-width: 1024px; preferred-height: 600px;
+	LogsView { rows: root.mock-rows; state-message: "2 records"; }
+}

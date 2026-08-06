@@ -16,6 +16,7 @@
 #include "presentation/TorrentAddController.hpp"
 #include "DialogService.hpp"
 #include "SlintControllerFacades.hpp"
+#include "SlintRefreshCoordinators.hpp"
 
 #include <slint.h>
 
@@ -36,53 +37,7 @@ public:
 private:
 	void refresh();
 	void autosave();
-	void selectTorrent(const std::string &id);
-	void executeCommand(const std::string &id, UiTorrentCommand command);
-	void removeTorrent(const std::string &id);
-	void confirmRemove(RemovalMode mode);
-	void cancelRemove();
-	void openAddDialog();
-	void addSelectedSearchResult(const std::string &id);
-	void submitMagnet(const std::string &magnet, const std::string &savePath);
-	void submitTorrentFile(const std::string &path, const std::string &savePath);
-	void cancelAdd();
-	void browseTorrentFile();
-	void browseSaveDirectory();
-	void detailsAction(DetailsAction action);
-	void previewDetailFile(int fileIndex);
-	void setFilePriority(int fileIndex, int priority);
-	void setSpeedLimits(const std::string &downloadLimit, const std::string &uploadLimit);
-	void setSequentialDownload(bool enabled);
-	void setActiveTab(AppTab tab);
-	void setCategoryFilter(TorrentCategory filter);
-	void setTextFilter(const std::string &filter);
-	void sortTorrents(TorrentSort field);
-	void executeSearch(const std::string &query);
-	void cancelSearch();
-	void loadMoreSearch();
-	void selectSearchResult(const std::string &id);
-	void toggleSearchFavorite(const std::string &id);
-	void refreshSearch();
-	void setSelectedDetailsTab(DetailsTab tab);
-	void clearLogs();
-	void setLogFilter(LogLevel level, bool enabled);
-	void setLogAutoscroll(bool enabled);
-	void changeTheme(Theme theme);
-	void toggleSidebar();
-	void browsePreferenceDirectory();
-	void applyPreferences();
-	void resizeLayout(int sidebarWidth, int bottomPanelHeight);
-	void navigateTorrent(int direction);
-	void focusSearch();
-	void copyMagnet(const std::string &id);
-	void selectSearchHistory(const std::string &query);
-	void clearSearchHistory();
-	void removeFavorite(const std::string &id);
-	void clearTorznabSecret();
-	void clearProxySecret();
-	void showAbout();
 	void applyUiState(const Presentation::UiStateSnapshot &state);
-	void drainSystemOpenResults();
 	void refreshCredentialIndicators();
 	static Presentation::UiStateSnapshot uiStateFrom(const PreferencesSettings &preferences);
 	Presentation::UiStateSnapshot currentUiState() const;
@@ -110,21 +65,16 @@ private:
 	std::unique_ptr<SlintUi::PreferencesUiController> preferencesUiController_;
 	std::unique_ptr<SlintUi::DialogCoordinator> dialogCoordinator_;
 	std::unique_ptr<SlintUi::AppShellController> appShellController_;
+	std::unique_ptr<SlintUi::TorrentRefreshCoordinator> torrentRefreshCoordinator_;
+	std::unique_ptr<SlintUi::SearchRefreshCoordinator> searchRefreshCoordinator_;
+	std::unique_ptr<SlintUi::LogRefreshCoordinator> logRefreshCoordinator_;
+	std::unique_ptr<SlintUi::DetailsRefreshCoordinator> detailsRefreshCoordinator_;
+	std::unique_ptr<SlintUi::NotificationController> notificationController_;
 	slint::Timer refreshTimer;
 	slint::Timer autosaveTimer;
 	bool started = false;
 	bool searchFocusRequest_ = false;
 	bool torrentViewDirty_ = true;
-	std::uint64_t lastStatusRevision_ = 0;
-	std::uint64_t lastSearchRevision_ = 0;
-	std::uint64_t lastLogRevision_ = 0;
-	std::uint64_t lastDetailsRevision_ = 0;
-	std::string lastDetailsTorrentId_;
-	int lastDetailsTab_ = -1;
-	std::chrono::steady_clock::time_point lastDetailsRefresh_{};
-	std::chrono::steady_clock::time_point systemOpenMessageDeadline_{};
-	std::string systemOpenMessage_;
-	bool systemOpenMessageTargetsDetails_ = false;
 	std::vector<Presentation::TorrentRowDto> visibleTorrentRows_;
 	Presentation::TorrentSortField sortField_ = Presentation::TorrentSortField::Queue;
 	bool sortAscending_ = true;

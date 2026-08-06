@@ -122,6 +122,7 @@ public:
 	Result removeTorrent(const lt::info_hash_t &hash, TorrentRemovalMode removeMode);
 	Result executeCommand(const lt::info_hash_t &hash, TorrentCommand command);
 	std::vector<ManagedTorrent> getTorrentSnapshot() const;
+	std::uint64_t getTorrentCollectionRevision() const { return torrentCollectionRevision.load(); }
 	Result getPersistenceSnapshot(std::vector<ManagedTorrent> &snapshot, std::chrono::milliseconds timeout = std::chrono::seconds(5));
 
 	// Speed limit methods
@@ -162,6 +163,7 @@ private:
 	mutable std::mutex stateMutex;
 	std::unordered_map<lt::info_hash_t, lt::torrent_handle> torrents;
 	std::unordered_map<lt::info_hash_t, std::string> torrentFilePaths;
+	std::atomic<std::uint64_t> torrentCollectionRevision{0};
 
 	// Status cache
 	mutable std::mutex cacheMutex;

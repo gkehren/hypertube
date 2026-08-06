@@ -92,7 +92,7 @@ std::vector<TorrentRowDto> TorrentListPresenter::buildUnfilteredRows()
 	const auto statusCache = torrentManager.getStatusCache();
 	std::vector<TorrentRowDto> rows;
 	rows.reserve(torrents.size());
-	hashesById_.clear();
+	ensureRegistryCurrent();
 
 	for (const auto &torrent : torrents)
 	{
@@ -105,7 +105,6 @@ std::vector<TorrentRowDto> TorrentListPresenter::buildUnfilteredRows()
 		// Keep the identity index independent from the status snapshot. Status
 		// loading is asynchronous and must not make a live torrent unavailable
 		// for selection or commands.
-		hashesById_.emplace(id, torrent.hash);
 		if (!statusCache)
 			continue;
 		auto status = statusCache->find(torrent.hash);
@@ -145,7 +144,8 @@ std::vector<TorrentRowDto> TorrentListPresenter::buildUnfilteredRows()
 			row.state = TorrentUiState::Downloading;
 		else
 			row.state = TorrentUiState::Other;
-		row.stateLabel = UiFormatters::torrentStateToString(static_cast<int>(value.state), row.paused, row.finished);
+		row.stateLabel = row.error ? value.errc.message()
+			: UiFormatters::torrentStateToString(static_cast<int>(value.state), row.paused, row.finished);
 		if (value.state == lt::torrent_status::downloading && row.downloadRateBytes > 0)
 		{
 			const auto remaining = std::max<std::int64_t>(0, value.total_wanted - value.total_wanted_done);
@@ -228,6 +228,24 @@ std::vector<TorrentRowDto> TorrentListPresenter::buildRows()
 	return rows;
 }
 
+void TorrentListPresenter::ensureRegistryCurrent() const
+{
+	const auto revision = torrentManager.getTorrentCollectionRevision();
+	if (revision == registryRevision_)
+		return;
+	auto torrents = torrentManager.getTorrentSnapshot();
+	hashesById_.clear();
+	for (const auto &torrent : torrents)
+	{
+		if (!torrent.handle.is_valid())
+			continue;
+		const auto id = torrentId(torrent.hash);
+		if (!id.empty())
+			hashesById_.emplace(id, torrent.hash);
+	}
+	registryRevision_ = revision;
+}
+
 std::optional<TorrentRowDto> TorrentListPresenter::findRowById(const std::string &id)
 {
 	if (id.empty())
@@ -301,6 +319,7 @@ std::vector<CategoryDto> TorrentListPresenter::buildCategories()
 
 std::optional<lt::info_hash_t> TorrentListPresenter::hashForId(const std::string &id) const
 {
+	ensureRegistryCurrent();
 	const auto found = hashesById_.find(id);
 	if (found != hashesById_.end())
 		return found->second;
@@ -310,11 +329,30 @@ std::optional<lt::info_hash_t> TorrentListPresenter::hashForId(const std::string
 	return std::nullopt;
 }
 
+TorrentAvailabilityInfo TorrentListPresenter::availabilityForId(const std::string &id)
+{
+	if (!Utils::TorrentIdentity::isValid(id))
+		return {TorrentAvailability::InvalidId, {}};
+	if (!hashForId(id))
+		return {TorrentAvailability::Removed, {}};
+	const auto row = findRowById(id);
+	if (!row)
+		return {TorrentAvailability::LoadingStatus, {}};
+	if (row->error)
+		return {TorrentAvailability::Error, row->stateLabel};
+	if (row->stateLabel.find("metadata") != std::string::npos
+		|| row->stateLabel.find("Metadata") != std::string::npos)
+		return {TorrentAvailability::MetadataPending, {}};
+	if (row->stateLabel == "Loading")
+		return {TorrentAvailability::LoadingStatus, {}};
+	return {TorrentAvailability::Available, {}};
+}
+
 Result TorrentListPresenter::executeCommand(const std::string &id, TorrentCommand command)
 {
 	const auto hash = hashForId(id);
 	if (!hash)
-		return Result::Failure("Torrent is no longer available", ResultCode::NotFound);
+		return availabilityFailure(availabilityForId(id));
 	return torrentManager.executeCommand(*hash, command);
 }
 
@@ -322,7 +360,7 @@ Result TorrentListPresenter::removeTorrent(const std::string &id, TorrentRemoval
 {
 	const auto hash = hashForId(id);
 	if (!hash)
-		return Result::Failure("Torrent is no longer available", ResultCode::NotFound);
+		return availabilityFailure(availabilityForId(id));
 	return torrentManager.removeTorrent(*hash, mode);
 }
 } // namespace Presentation

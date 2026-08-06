@@ -39,6 +39,7 @@ public:
 	void sort(TorrentSort field);
 
 private:
+	bool validateId(const std::string &id, bool allowLoading = true);
 	Presentation::TorrentListPresenter &presenter_;
 	MainWindow &window_;
 	Presentation::TorrentDetailsPresenter &detailsPresenter_;

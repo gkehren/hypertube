@@ -1,0 +1,7 @@
+import { FavoritesView } from "../favorites-view.slint";
+import { SearchResultRow } from "../search-types.slint";
+export component FavoritesPreview inherits Window {
+	in property <[SearchResultRow]> mock-rows: [{ id: "1", name: "Favorite with a long Unicode title 日本語", size-label: "1.2 GiB", seeders-label: "42", leechers-label: "3", category: "TV", published-label: "Today", favorite: true, magnet-available: true }];
+	preferred-width: 800px; preferred-height: 600px;
+	FavoritesView { rows: root.mock-rows; state-message: "1 favorite"; }
+}

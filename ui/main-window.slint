@@ -1,4 +1,4 @@
-import { Button, HorizontalBox, LineEdit, ListView, VerticalBox } from "std-widgets.slint";
+import { Button, HorizontalBox, LineEdit, ScrollView, VerticalBox } from "std-widgets.slint";
 import { AppSidebar } from "app-sidebar.slint";
 import { SearchView } from "search-view.slint";
 import { SearchResultRow } from "search-types.slint";
@@ -11,23 +11,9 @@ import { LogRow } from "log-types.slint";
 import { PreferencesView } from "preferences-view.slint";
 import { ThemeTokens } from "theme.slint";
 import { AppTab, DetailsAction, DetailsTab, LogLevel, RemovalMode, Theme, TorrentCategory, TorrentSort, UiTorrentCommand } from "enums.slint";
-
-export struct TorrentRow {
-	id: string,
-	name: string,
-	state-label: string,
-	progress-label: string,
-	progress: float,
-	size-label: string,
-	download-rate-label: string,
-	upload-rate-label: string,
-	peers-label: string,
-	seeds-label: string,
-	eta-label: string,
-	paused: bool,
-	error: bool,
-	active: bool,
-}
+import { TorrentRow } from "torrent-types.slint";
+import { TorrentTable } from "components/torrent-table.slint";
+import { AppMenuBar } from "components/app-menu-bar.slint";
 
 export component MainWindow inherits Window {
 	callback request-close();
@@ -94,6 +80,7 @@ export component MainWindow inherits Window {
 	in property <string> selected-torrent-name;
 	in property <string> selected-torrent-state;
 	in property <string> selected-torrent-progress;
+	in property <float> selected-torrent-progress-value: 0;
 	in property <string> selected-torrent-size;
 	in property <string> selected-torrent-down-rate;
 	in property <string> selected-torrent-up-rate;
@@ -127,6 +114,7 @@ export component MainWindow inherits Window {
 	in property <bool> log-auto-scroll: true;
 	in property <Theme> selected-theme: Theme.dark;
 	in property <string> preferences-state-message;
+	in property <bool> preferences-saving: false;
 	in-out property <string> preference-download-limit;
 	in-out property <string> preference-upload-limit;
 	in-out property <string> preference-download-path;
@@ -153,34 +141,29 @@ export component MainWindow inherits Window {
 	in property <string> add-dialog-message;
 	in property <bool> remove-dialog-open: false;
 	in property <string> remove-dialog-name;
-	private property <bool> compact-layout: root.width < 1100px;
-	private property <bool> narrow-layout: root.width < 900px;
+	private property <length> maximum-sidebar-width: max(120px, content.width - 528px);
+	private property <length> main-content-width: content.width - (root.sidebar-collapsed ? 56px : root.sidebar-width * 1px) - 8px;
+	private property <int> maximum-details-height: max(120, round((content.height - 294px) / 1px));
+	private property <bool> details-collapsed: false;
 
 	title: "Hypertube";
-	preferred-width: 1280px;
-	preferred-height: 760px;
+	width: 1280px;
+	height: 760px;
 
 	background: ThemeTokens.background;
 	forward-focus: main-scope;
 
 	changed selected-theme => { ThemeTokens.apply-theme(root.selected-theme); }
-
-	MenuBar {
-		Menu {
-			title: "File";
-			MenuItem { title: "Add torrent"; activated => { root.add-torrent(); } }
-			MenuItem { title: "Add magnet"; activated => { root.add-torrent(); } }
-			MenuSeparator {}
-			MenuItem { title: "Preferences"; activated => { root.preferences-tab(); } }
-			MenuItem { title: "Exit"; activated => { root.request-close(); } }
-		}
-		Menu {
-			title: "Help";
-			MenuItem { title: "About"; activated => { root.show-about(); } }
-		}
+	changed width => {
+		root.sidebar-width = clamp(root.sidebar-width, 120, min(600, round(root.maximum-sidebar-width / 1px)));
+	}
+	changed height => {
+		root.bottom-panel-height = clamp(root.bottom-panel-height, 120, root.maximum-details-height);
 	}
 
 	main-scope := FocusScope {
+		width: root.width;
+		height: root.height;
 		KeyBinding {
 			keys: @keys(Control + O);
 			activated => { root.add-torrent(); }
@@ -224,12 +207,11 @@ export component MainWindow inherits Window {
 		}
 
 		content := Rectangle {
-			width: parent.width;
-			height: parent.height;
+			width: root.width;
+			y: menu-bar.height;
+			height: root.height - menu-bar.height;
 
 			HorizontalBox {
-				y: 28px;
-				height: parent.height - 28px;
 			padding: 0px;
 
 		AppSidebar {
@@ -263,7 +245,7 @@ export component MainWindow inherits Window {
 				moved => {
 					if (self.pressed)
 					{
-						root.sidebar-width = clamp(round((self.drag-start-width + self.mouse-x - self.pressed-x) / 1px), 120, 600);
+						root.sidebar-width = clamp(round((self.drag-start-width + self.mouse-x - self.pressed-x) / 1px), 120, min(600, round(root.maximum-sidebar-width / 1px)));
 					}
 				}
 				changed pressed => {
@@ -299,6 +281,7 @@ export component MainWindow inherits Window {
 		}
 
 		if (root.active-tab == AppTab.logs): LogsView {
+			available-width: root.main-content-width;
 			rows: root.log-rows;
 			state-message: root.logs-state-message;
 			clear-logs => { root.clear-logs(); }
@@ -315,6 +298,7 @@ export component MainWindow inherits Window {
 			selected-theme: root.selected-theme;
 			sidebar-collapsed: root.sidebar-collapsed;
 			state-message: root.preferences-state-message;
+			saving: root.preferences-saving;
 			download-limit <=> root.preference-download-limit;
 			upload-limit <=> root.preference-upload-limit;
 			download-path <=> root.preference-download-path;
@@ -340,7 +324,7 @@ export component MainWindow inherits Window {
 			clear-proxy-secret => { root.clear-proxy-secret(); }
 		}
 
-		if (root.active-tab == AppTab.torrents): VerticalBox {
+		if (root.active-tab == AppTab.torrents): torrent-pane := VerticalBox {
 			padding: 20px;
 			alignment: start;
 
@@ -355,7 +339,7 @@ export component MainWindow inherits Window {
 					text: "Refresh";
 					clicked => { root.refresh-torrents(); }
 				}
-				Button {
+				if (root.main-content-width >= 600px): Button {
 					text: "Close";
 					clicked => { root.request-close(); }
 				}
@@ -366,7 +350,7 @@ export component MainWindow inherits Window {
 					placeholder-text: "Filter torrents";
 					edited(text) => { root.filter-torrents(text); }
 				}
-				Button {
+				if (root.main-content-width >= 600px): Button {
 					text: "Add magnet";
 					clicked => { root.add-torrent(); }
 				}
@@ -378,83 +362,31 @@ export component MainWindow inherits Window {
 				Text { text: root.version-text; color: ThemeTokens.muted-foreground; }
 			}
 
-			HorizontalBox {
-				Button { text: "Name"; clicked => { root.sort-torrents(TorrentSort.name); } }
-				if (!root.compact-layout): Button { text: "Size"; clicked => { root.sort-torrents(TorrentSort.size); } }
-				Button { text: "Progress"; clicked => { root.sort-torrents(TorrentSort.progress); } }
-				Button { text: "State"; clicked => { root.sort-torrents(TorrentSort.status); } }
-				if (!root.narrow-layout): Button { text: "Seeds"; clicked => { root.sort-torrents(TorrentSort.seeds); } }
-				if (!root.narrow-layout): Button { text: "Peers"; clicked => { root.sort-torrents(TorrentSort.peers); } }
-				if (!root.compact-layout): Button { text: "Down"; clicked => { root.sort-torrents(TorrentSort.download-rate); } }
-				if (!root.compact-layout): Button { text: "Up"; clicked => { root.sort-torrents(TorrentSort.upload-rate); } }
-				if (!root.compact-layout): Button { text: "ETA"; clicked => { root.sort-torrents(TorrentSort.eta); } }
-			}
-
-			ListView {
-				accessible-role: list;
-				accessible-label: "Torrent list";
-				accessible-item-count: root.torrent-rows.length;
-				for torrent in root.torrent-rows: Rectangle {
-					height: 48px;
-					accessible-role: list-item;
-					accessible-label: torrent.name + ", " + torrent.state-label + ", " + torrent.progress-label;
-					accessible-item-selectable: true;
-					accessible-item-selected: torrent.id == root.selected-torrent-id;
-					background: torrent.id == root.selected-torrent-id ? ThemeTokens.surface-hover : ThemeTokens.surface;
-					border-width: 1px;
-					border-color: ThemeTokens.border;
-
-					TouchArea {
-						width: parent.width;
-						height: parent.height;
-						clicked => { root.select-torrent(torrent.id); }
-					}
-
-					HorizontalBox {
-						padding: 8px;
-						Text { text: torrent.name; color: ThemeTokens.foreground; }
-						if (!root.compact-layout): Text { text: torrent.size-label; color: ThemeTokens.muted-foreground; width: 110px; }
-						Text { text: torrent.progress-label; color: ThemeTokens.muted-foreground; width: 100px; }
-						Text { text: torrent.state-label; color: ThemeTokens.muted-foreground; width: 150px; }
-						if (!root.narrow-layout): Text { text: torrent.seeds-label; color: ThemeTokens.muted-foreground; width: 70px; }
-						if (!root.narrow-layout): Text { text: torrent.peers-label; color: ThemeTokens.muted-foreground; width: 70px; }
-						if (!root.compact-layout): Text { text: torrent.download-rate-label; color: ThemeTokens.muted-foreground; width: 130px; }
-						if (!root.compact-layout): Text { text: torrent.upload-rate-label; color: ThemeTokens.muted-foreground; width: 130px; }
-						if (!root.compact-layout): Text { text: torrent.eta-label; color: ThemeTokens.muted-foreground; width: 100px; }
-						Button {
-							text: torrent.paused ? "Resume" : "Pause";
-							clicked => { root.execute-torrent-command(torrent.id, torrent.paused ? UiTorrentCommand.resume : UiTorrentCommand.pause); }
-						}
-						Button {
-							text: "Remove";
-							clicked => { root.remove-torrent(torrent.id); }
-						}
-						Button {
-							text: "Recheck";
-							clicked => { root.execute-torrent-command(torrent.id, UiTorrentCommand.force-recheck); }
-						}
-						Button { text: "Force start"; clicked => { root.execute-torrent-command(torrent.id, UiTorrentCommand.force-start); } }
-						Button { text: "Queue up"; clicked => { root.execute-torrent-command(torrent.id, UiTorrentCommand.queue-up); } }
-						Button { text: "Queue down"; clicked => { root.execute-torrent-command(torrent.id, UiTorrentCommand.queue-down); } }
-						Button { text: "Reannounce"; clicked => { root.execute-torrent-command(torrent.id, UiTorrentCommand.force-reannounce); } }
-						Button { text: "Copy magnet"; clicked => { root.copy-magnet(torrent.id); } }
-					}
-
-				}
-			}
-
-			if (root.torrent-rows.length == 0): Text {
-				text: root.startup-state == "Ready" ? "No torrents yet" : root.startup-state;
-				color: ThemeTokens.muted-foreground;
-				horizontal-alignment: center;
+			TorrentTable {
+				min-height: 180px;
+				available-width: root.main-content-width - 40px;
+				rows: root.torrent-rows;
+				selected-id: root.selected-torrent-id;
+				empty-message: root.startup-state == "Ready" ? "No torrents yet" : root.startup-state;
+				select(id) => { root.select-torrent(id); }
+				sort(value) => { root.sort-torrents(value); }
+				execute(id, command) => { root.execute-torrent-command(id, command); }
+				remove(id) => { root.remove-torrent(id); }
+				copy-magnet(id) => { root.copy-magnet(id); }
 			}
 
 			Rectangle {
-				height: 8px;
+				height: 28px;
 				background: ThemeTokens.border;
+				Button {
+					x: parent.width - self.width;
+					width: 104px;
+					text: root.details-collapsed ? "Expand details" : "Collapse";
+					clicked => { root.details-collapsed = !root.details-collapsed; }
+				}
 				TouchArea {
 					property <length> drag-start-height;
-					width: parent.width;
+					width: parent.width - 112px;
 					height: parent.height;
 					pointer-event(event) => {
 						if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down)
@@ -465,7 +397,7 @@ export component MainWindow inherits Window {
 					moved => {
 						if (self.pressed)
 						{
-							root.bottom-panel-height = clamp(round((self.drag-start-height - self.mouse-y + self.pressed-y) / 1px), 120, 1000);
+							root.bottom-panel-height = clamp(round((self.drag-start-height - self.mouse-y + self.pressed-y) / 1px), 120, root.maximum-details-height);
 						}
 					}
 					changed pressed => {
@@ -475,12 +407,14 @@ export component MainWindow inherits Window {
 			}
 
 			DetailsView {
-				height: root.bottom-panel-height * 1px;
+				height: root.details-collapsed ? 0px : min(root.bottom-panel-height * 1px, root.maximum-details-height * 1px);
+				visible: !root.details-collapsed;
 				selected-tab: root.selected-details-tab;
 				message: root.details-message;
 				name: root.selected-torrent-name;
 				state-label: root.selected-torrent-state;
 				progress-label: root.selected-torrent-progress;
+				progress: root.selected-torrent-progress-value;
 				size-label: root.selected-torrent-size;
 				download-rate-label: root.selected-torrent-down-rate;
 				upload-rate-label: root.selected-torrent-up-rate;
@@ -526,7 +460,7 @@ export component MainWindow inherits Window {
 					keys: @keys(Escape);
 					activated => { root.cancel-add(); }
 				}
-				VerticalBox {
+				ScrollView { VerticalBox {
 				padding: 20px;
 				Text { text: "Add torrent"; color: ThemeTokens.foreground; font-size: 22px; }
 				Text { text: root.add-dialog-message; color: ThemeTokens.warning; }
@@ -547,7 +481,7 @@ export component MainWindow inherits Window {
 					Button { text: "Add file"; clicked => { root.submit-add-file(root.add-file-path, root.add-save-path); } }
 					Button { text: "Cancel"; clicked => { root.cancel-add(); } }
 				}
-				}
+				} }
 			}
 		}
 
@@ -567,20 +501,25 @@ export component MainWindow inherits Window {
 					keys: @keys(Escape);
 					activated => { root.cancel-remove(); }
 				}
-				VerticalBox {
+				ScrollView { VerticalBox {
 				padding: 20px;
 				Text { text: "Remove torrent"; color: ThemeTokens.foreground; font-size: 22px; }
 				Text { text: "Remove '" + root.remove-dialog-name + "'?"; color: ThemeTokens.muted-foreground; }
-				HorizontalBox {
+				VerticalBox {
+					HorizontalBox {
 								Button { text: "Keep files"; clicked => { root.confirm-remove(RemovalMode.keep-files); } }
 								Button { text: "Delete data"; clicked => { root.confirm-remove(RemovalMode.delete-data); } }
 								Button { text: "Delete source"; clicked => { root.confirm-remove(RemovalMode.delete-source); } }
+					}
+					HorizontalBox {
 								Button { text: "Delete data + source"; clicked => { root.confirm-remove(RemovalMode.delete-data-and-source); } }
 					remove-dialog-cancel := Button { text: "Cancel"; clicked => { root.cancel-remove(); } }
+					}
 				}
-				}
+				} }
 			}
 		}
 	}
 	}
+	menu-bar := AppMenuBar { x: 0px; y: 0px; width: root.width; add-torrent => { root.add-torrent(); } add-magnet => { root.add-torrent(); } preferences => { root.preferences-tab(); } exit => { root.request-close(); } about => { root.show-about(); } }
 }

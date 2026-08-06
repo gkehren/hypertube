@@ -118,7 +118,7 @@ The portable bundle should contain the executable and the seed `config/` directo
 - Linux/macOS: use a C++20 compiler and the platform command from `README.md`; use `nproc` or `sysctl` only when available.
 - Windows: use the documented vcpkg toolchain and `cmake --build build --config Release`.
 - CMake minimum version is 3.21.
-- Release builds enable aggressive optimization (`-O3`, LTO, and platform-specific tuning). Use Debug for diagnosis and tests unless release behavior is specifically being validated.
+- Release builds enable optimization and LTO against the portable compiler baseline. Host-specific ISA tuning is opt-in through `HYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS` and must not be used for distributed packages. Use Debug for diagnosis and tests unless release behavior is specifically being validated.
 
 ## Architecture and ownership
 

@@ -11,7 +11,7 @@ SlintModelAdapter::SlintModelAdapter()
 TorrentRow SlintModelAdapter::toSlintRow(const Presentation::TorrentRowDto &row)
 {
 	TorrentRow result;
-	result.id = SlintUi::toSharedString(row.id);
+	result.id = SlintUi::toSharedTorrentId(row.id);
 	result.name = SlintUi::toSharedString(row.name);
 	result.state_label = SlintUi::toSharedString(row.stateLabel);
 	result.progress_label = SlintUi::toSharedString(row.progressLabel);
@@ -40,6 +40,7 @@ bool SlintModelAdapter::equal(const TorrentRow &left, const TorrentRow &right)
 
 void SlintModelAdapter::update(const std::vector<Presentation::TorrentRowDto> &rows)
 {
+	lastUpdateStats_ = {};
 	std::vector<TorrentRow> next;
 	next.reserve(rows.size());
 	for (const auto &row : rows)
@@ -60,6 +61,7 @@ void SlintModelAdapter::update(const std::vector<Presentation::TorrentRowDto> &r
 			{
 				model_->set_row_data(index, next[index]);
 				rows_[index] = next[index];
+				++lastUpdateStats_.changed;
 			}
 		return;
 	}
@@ -73,17 +75,22 @@ void SlintModelAdapter::update(const std::vector<Presentation::TorrentRowDto> &r
 		const auto index = rows_.size() - 1;
 		model_->erase(index);
 		rows_.erase(rows_.begin() + static_cast<std::ptrdiff_t>(index));
+		++lastUpdateStats_.removed;
 	}
 	while (rows_.size() < next.size())
 	{
 		const auto index = rows_.size();
 		model_->push_back(next[index]);
 		rows_.push_back(next[index]);
+		++lastUpdateStats_.inserted;
 	}
 	for (std::size_t index = 0; index < next.size(); ++index)
 	{
 		if (!equal(rows_[index], next[index]))
+		{
 			model_->set_row_data(index, next[index]);
+			++lastUpdateStats_.changed;
+		}
 		rows_[index] = next[index];
 	}
 

@@ -1,0 +1,73 @@
+import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "../theme.slint";
+import { TorrentRow } from "../torrent-types.slint";
+import { UiTorrentCommand } from "../enums.slint";
+import { TorrentProgress } from "torrent-progress.slint";
+import { TorrentStatusBadge } from "torrent-status-badge.slint";
+import { TorrentActionsMenu } from "torrent-actions-menu.slint";
+import { TorrentTableGeometry } from "torrent-table-geometry.slint";
+
+export component TorrentTableRow inherits Rectangle {
+	in property <TorrentRow> torrent;
+	in property <bool> selected: false;
+	in property <bool> compact: false;
+	in property <bool> narrow: false;
+	in property <length> progress-width;
+	in property <length> status-width;
+	private property <bool> hovered: false;
+	callback select(string);
+	callback execute(string, UiTorrentCommand);
+	callback remove(string);
+	callback copy-magnet(string);
+	height: root.narrow ? 88px : 48px;
+	background: root.selected || root.hovered ? ThemeTokens.surface-hover : ThemeTokens.surface;
+	border-width: root.selected ? 2px : 1px;
+	border-color: root.selected ? ThemeTokens.accent : root.torrent.error ? ThemeTokens.error : ThemeTokens.border;
+
+	if (!root.narrow): HorizontalBox {
+		padding: 6px;
+		spacing: 6px;
+		data-area := Rectangle {
+			HorizontalBox {
+				spacing: 6px;
+				Text { text: root.torrent.name; color: ThemeTokens.foreground; min-width: TorrentTableGeometry.minimum-name-width; horizontal-stretch: 1; wrap: no-wrap; overflow: elide; }
+				if (!root.compact): Text { text: root.torrent.size-label; color: ThemeTokens.muted-foreground; width: TorrentTableGeometry.size-width; wrap: no-wrap; overflow: elide; }
+				TorrentProgress { value: root.torrent.progress; label: root.torrent.progress-label; width: root.progress-width; }
+				TorrentStatusBadge { label: root.torrent.state-label; error: root.torrent.error; active: root.torrent.active; paused: root.torrent.paused; width: root.status-width; }
+				if (!root.compact): Text { text: root.torrent.seeds-label; color: ThemeTokens.muted-foreground; width: TorrentTableGeometry.count-width; }
+				if (!root.compact): Text { text: root.torrent.peers-label; color: ThemeTokens.muted-foreground; width: TorrentTableGeometry.count-width; }
+				Text { text: root.torrent.download-rate-label; color: ThemeTokens.muted-foreground; width: TorrentTableGeometry.rate-width; wrap: no-wrap; overflow: elide; }
+				if (!root.compact): Text { text: root.torrent.upload-rate-label; color: ThemeTokens.muted-foreground; width: TorrentTableGeometry.rate-width; wrap: no-wrap; overflow: elide; }
+				if (!root.compact): Text { text: root.torrent.eta-label; color: ThemeTokens.muted-foreground; width: TorrentTableGeometry.eta-width; wrap: no-wrap; overflow: elide; }
+			}
+			TouchArea {
+				clicked => { root.select(root.torrent.id); }
+				changed has-hover => { root.hovered = self.has-hover; }
+			}
+		}
+		Button { text: root.torrent.paused ? "Resume" : "Pause"; width: TorrentTableGeometry.quick-action-width; clicked => { root.execute(root.torrent.id, root.torrent.paused ? UiTorrentCommand.resume : UiTorrentCommand.pause); } }
+		TorrentActionsMenu { torrent-id: root.torrent.id; execute(id, command) => { root.execute(id, command); } remove(id) => { root.remove(id); } copy-magnet(id) => { root.copy-magnet(id); } }
+	}
+
+	if (root.narrow): Rectangle {
+		VerticalBox {
+			padding: 5px;
+			spacing: 4px;
+			HorizontalBox {
+				Text { text: root.torrent.name; color: ThemeTokens.foreground; wrap: no-wrap; overflow: elide; }
+				Button { text: root.torrent.paused ? "Resume" : "Pause"; width: TorrentTableGeometry.quick-action-width; clicked => { root.execute(root.torrent.id, root.torrent.paused ? UiTorrentCommand.resume : UiTorrentCommand.pause); } }
+				TorrentActionsMenu { torrent-id: root.torrent.id; execute(id, command) => { root.execute(id, command); } remove(id) => { root.remove(id); } copy-magnet(id) => { root.copy-magnet(id); } }
+			}
+			HorizontalBox {
+				TorrentProgress { value: root.torrent.progress; label: root.torrent.progress-label; }
+				TorrentStatusBadge { label: root.torrent.state-label; error: root.torrent.error; active: root.torrent.active; paused: root.torrent.paused; width: 120px; }
+			}
+		}
+		TouchArea {
+			width: parent.width - 118px;
+			height: parent.height;
+			clicked => { root.select(root.torrent.id); }
+			changed has-hover => { root.hovered = self.has-hover; }
+		}
+	}
+}

@@ -4,8 +4,10 @@
 #include "presentation/TorrentAddController.hpp"
 #include "presentation/UiFormatters.hpp"
 #include "SlintString.hpp"
+#include "utils/TorrentIdentity.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <charconv>
 #include <limits>
 #include <utility>
@@ -87,7 +89,13 @@ TorrentUiController::TorrentUiController(Presentation::TorrentListPresenter &pre
 
 void TorrentUiController::select(const std::string &id)
 {
+	if (!validateId(id))
+		return;
 	presenter_.setSelectedId(id);
+	const auto availability = presenter_.availabilityForId(id);
+	const auto message = Presentation::availabilityMessage(availability);
+	if (!message.empty())
+		window_.set_details_message(SlintUi::toSharedString(message));
 	if (resetDetails_)
 		resetDetails_();
 	refresh_();
@@ -95,6 +103,8 @@ void TorrentUiController::select(const std::string &id)
 
 void TorrentUiController::executeCommand(const std::string &id, UiTorrentCommand command)
 {
+	if (!validateId(id))
+		return;
 	bool valid = false;
 	const auto mapped = torrentCommand(command, valid);
 	if (!valid)
@@ -111,11 +121,8 @@ void TorrentUiController::executeCommand(const std::string &id, UiTorrentCommand
 
 void TorrentUiController::remove(const std::string &id)
 {
-	if (!presenter_.hashForId(id))
-	{
-		window_.set_startup_state(slint::SharedString("Torrent is no longer available"));
+	if (!validateId(id))
 		return;
-	}
 	pendingRemoveId_ = id;
 	std::string name = id;
 	for (const auto &row : presenter_.buildRows())
@@ -189,16 +196,32 @@ void TorrentUiController::copyMagnet(const std::string &id)
 		window_.set_startup_state(slint::SharedString("No torrent is selected"));
 		return;
 	}
+	if (!validateId(id))
+		return;
 	const auto hash = presenter_.hashForId(id);
 	if (!hash)
-	{
-		window_.set_startup_state(slint::SharedString("Torrent is no longer available"));
 		return;
-	}
 	presenter_.setSelectedId(id);
 	detailsPresenter_.setSelectedTorrent(hash);
 	const Result result = detailsPresenter_.copyMagnetUri();
 	window_.set_details_message(SlintUi::toSharedString(result ? "Magnet URI copied" : result.message));
+}
+
+bool TorrentUiController::validateId(const std::string &id, bool allowLoading)
+{
+	const auto availability = presenter_.availabilityForId(id);
+	if (availability.state == Presentation::TorrentAvailability::InvalidId)
+	{
+		Presentation::logInvalidTorrentId(id, presenter_.collectionRevision(), presenter_.registrySize());
+		assert(Utils::TorrentIdentity::isValid(id) && "Invalid torrent ID received from Slint");
+	}
+	const bool accepted = availability.state == Presentation::TorrentAvailability::Available
+		|| availability.state == Presentation::TorrentAvailability::MetadataPending
+		|| (allowLoading && availability.state == Presentation::TorrentAvailability::LoadingStatus)
+		|| availability.state == Presentation::TorrentAvailability::Error;
+	if (!accepted)
+		window_.set_startup_state(SlintUi::toSharedString(Presentation::availabilityMessage(availability)));
+	return accepted;
 }
 
 void TorrentUiController::setCategory(TorrentCategory category)

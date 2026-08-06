@@ -3,6 +3,8 @@
 #include "presentation/SearchPresenter.hpp"
 #include "presentation/TorrentListPresenter.hpp"
 #include "presentation/UiFormatters.hpp"
+#include "presentation/TorrentAvailability.hpp"
+#include "utils/TorrentIdentity.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -13,6 +15,52 @@
 
 namespace
 {
+template <typename Digest>
+Digest digestWithBinaryBytes()
+{
+	Digest digest;
+	for (std::size_t index = 0; index < digest.size(); ++index)
+		digest.data()[index] = static_cast<char>((index * 37 + 0xff) & 0xff);
+	digest.data()[0] = 0;
+	digest.data()[1] = static_cast<char>(0xff);
+	digest.data()[2] = static_cast<char>(0xc3);
+	digest.data()[3] = static_cast<char>(0x28);
+	return digest;
+}
+
+TEST(TorrentIdentityTest, EncodesBinaryV1V2AndHybridHashesAsCanonicalAscii)
+{
+	const auto v1 = digestWithBinaryBytes<lt::sha1_hash>();
+	const auto v2 = digestWithBinaryBytes<lt::sha256_hash>();
+	const std::string v1Id = Utils::TorrentIdentity::id(lt::info_hash_t(v1));
+	const std::string v2Id = Utils::TorrentIdentity::id(lt::info_hash_t(v2));
+	const std::string hybridId = Utils::TorrentIdentity::id(lt::info_hash_t(v1, v2));
+	EXPECT_EQ(v1Id.size(), 43U);
+	EXPECT_EQ(v2Id.size(), 67U);
+	EXPECT_EQ(hybridId.size(), 111U);
+	EXPECT_TRUE(v1Id.starts_with("v1:"));
+	EXPECT_TRUE(v2Id.starts_with("v2:"));
+	EXPECT_TRUE(hybridId.starts_with("v1:"));
+	EXPECT_NE(hybridId.find("|v2:"), std::string::npos);
+	EXPECT_TRUE(Utils::TorrentIdentity::isValid(v1Id));
+	EXPECT_TRUE(Utils::TorrentIdentity::isValid(v2Id));
+	EXPECT_TRUE(Utils::TorrentIdentity::isValid(hybridId));
+	EXPECT_TRUE(std::all_of(hybridId.begin(), hybridId.end(), [](unsigned char character)
+	{
+		return character >= 0x20 && character <= 0x7e;
+	}));
+}
+
+TEST(TorrentAvailabilityTest, MapsEveryStateToOneCentralMessage)
+{
+	using enum Presentation::TorrentAvailability;
+	EXPECT_EQ(Presentation::availabilityMessage({LoadingStatus, {}}), "Loading torrent status...");
+	EXPECT_EQ(Presentation::availabilityMessage({MetadataPending, {}}), "Waiting for torrent metadata...");
+	EXPECT_EQ(Presentation::availabilityMessage({Removed, {}}), "The selected torrent was removed.");
+	EXPECT_EQ(Presentation::availabilityMessage({InvalidId, {}}), "Internal torrent identifier error.");
+	EXPECT_EQ(Presentation::availabilityMessage({Error, "Tracker failed"}), "Tracker failed");
+}
+
 TEST(UiFormattersTest, FormatsSharedValues)
 {
 	EXPECT_EQ(Presentation::UiFormatters::formatBytes(1536), "1.5 KB");
@@ -115,11 +163,8 @@ TEST(TorrentListPresenterTest, KeepsSelectionIdentityWhileStatusesAreLoading)
 	ASSERT_TRUE(manager.addTorrent(torrentPath.string(), (testDirectory / "downloads").string()));
 	const auto hash = manager.getTorrentSnapshot().front().hash;
 	const std::string id = Presentation::TorrentListPresenter::idForHash(hash);
-	ASSERT_EQ(id.size(), 40U);
-	EXPECT_TRUE(std::all_of(id.begin(), id.end(), [](unsigned char character)
-	{
-		return std::isxdigit(character) != 0;
-	}));
+	ASSERT_EQ(id.size(), 43U);
+	EXPECT_TRUE(Utils::TorrentIdentity::isValid(id));
 
 	Presentation::TorrentListPresenter presenter(manager);
 	presenter.setSelectedId(id);
@@ -130,6 +175,44 @@ TEST(TorrentListPresenterTest, KeepsSelectionIdentityWhileStatusesAreLoading)
 	ASSERT_TRUE(selectedRow);
 	EXPECT_EQ(selectedRow->id, id);
 	EXPECT_FALSE(selectedRow->name.empty());
+
+	std::error_code error;
+	std::filesystem::remove_all(testDirectory, error);
+}
+
+TEST(TorrentListPresenterTest, SelectionSurvivesRefreshAndSortUntilTorrentIsRemoved)
+{
+	const auto testDirectory = std::filesystem::temp_directory_path()
+		/ ("hypertube-presenter-lifecycle-" + std::to_string(
+			std::chrono::steady_clock::now().time_since_epoch().count()));
+	std::filesystem::create_directories(testDirectory / "downloads");
+	const auto torrentPath = testDirectory / "fixture.torrent";
+	std::string content = "d4:infod6:lengthi1e4:name7:fixture12:piece lengthi16384e6:pieces20:";
+	content.append(20, '\0');
+	content += "ee";
+	{
+		std::ofstream file(torrentPath, std::ios::binary);
+		file.write(content.data(), static_cast<std::streamsize>(content.size()));
+	}
+	TorrentManager manager;
+	ASSERT_TRUE(manager.addTorrent(torrentPath.string(), (testDirectory / "downloads").string()));
+	Presentation::TorrentListPresenter presenter(manager);
+	const auto hash = manager.getTorrentSnapshot().front().hash;
+	const std::string id = Presentation::TorrentListPresenter::idForHash(hash);
+	presenter.setSelectedId(id);
+	manager.requestStatusRefresh();
+	EXPECT_TRUE(presenter.hashForId(id));
+	EXPECT_EQ(presenter.selectedId(), id);
+	presenter.setSort(Presentation::TorrentSortField::Name, false);
+	(void)presenter.buildRows();
+	EXPECT_TRUE(presenter.hashForId(id));
+	manager.requestStatusRefresh();
+	EXPECT_TRUE(presenter.hashForId(id));
+	EXPECT_NE(presenter.availabilityForId(id).state, Presentation::TorrentAvailability::Removed);
+	ASSERT_TRUE(manager.removeTorrent(hash, TorrentRemovalMode::KeepAllFiles));
+	EXPECT_EQ(presenter.availabilityForId(id).state, Presentation::TorrentAvailability::Removed);
+	EXPECT_EQ(Presentation::availabilityMessage(presenter.availabilityForId(id)),
+		"The selected torrent was removed.");
 
 	std::error_code error;
 	std::filesystem::remove_all(testDirectory, error);

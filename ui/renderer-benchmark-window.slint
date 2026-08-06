@@ -1,0 +1,13 @@
+import { SnapshotWindow } from "snapshot-window.slint";
+import { AppTab, Theme } from "enums.slint";
+
+export component RendererBenchmarkWindow inherits SnapshotWindow {
+	in-out property <length> benchmark-width: 1280px;
+	in-out property <length> benchmark-height: 760px;
+	in-out property <AppTab> benchmark-tab: AppTab.torrents;
+	in-out property <Theme> benchmark-theme: Theme.dark;
+	snapshot-width: root.benchmark-width;
+	snapshot-height: root.benchmark-height;
+	snapshot-tab: root.benchmark-tab;
+	snapshot-theme: root.benchmark-theme;
+}

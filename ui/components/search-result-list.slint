@@ -1,0 +1,30 @@
+import { ListView, VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "../theme.slint";
+import { SearchResultRow } from "../search-types.slint";
+import { SearchResultListRow } from "search-result-row.slint";
+
+export component SearchResultList inherits Rectangle {
+	in property <[SearchResultRow]> rows: [];
+	in property <bool> favorite-mode: false;
+	in property <string> empty-message: "No results";
+	private property <string> selected-id;
+	callback select(string);
+	callback toggle-favorite(string);
+	callback remove-favorite(string);
+	callback add(string);
+	VerticalBox {
+		ListView {
+			accessible-role: list;
+			accessible-label: root.favorite-mode ? "Favorite search results" : "Search results";
+			accessible-item-count: root.rows.length;
+			for result in root.rows: SearchResultListRow {
+				result: result; selected: result.id == root.selected-id; favorite-mode: root.favorite-mode;
+				select(id) => { root.selected-id = id; root.select(id); }
+				toggle-favorite(id) => { root.toggle-favorite(id); }
+				remove-favorite(id) => { root.remove-favorite(id); }
+				add(id) => { root.add(id); }
+			}
+		}
+		if (root.rows.length == 0): Text { text: root.empty-message; color: ThemeTokens.muted-foreground; horizontal-alignment: center; }
+	}
+}

@@ -12,6 +12,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(HYPERTUBE_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(HYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS
+    "Tune Release binaries for the build host (not suitable for distributed packages)" OFF)
+option(HYPERTUBE_ENABLE_SLINT_GPU_BENCHMARK
+    "Build the optional FemtoVG renderer and renderer comparison target" OFF)
 
 # Enable Position Independent Code (PIE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -134,7 +138,7 @@ endif()
 # local Qt installation cannot silently change the renderer.
 set(SLINT_FEATURE_BACKEND_QT OFF CACHE BOOL "" FORCE)
 set(SLINT_FEATURE_BACKEND_WINIT ON CACHE BOOL "" FORCE)
-set(SLINT_FEATURE_RENDERER_FEMTOVG OFF CACHE BOOL "" FORCE)
+set(SLINT_FEATURE_RENDERER_FEMTOVG ${HYPERTUBE_ENABLE_SLINT_GPU_BENCHMARK} CACHE BOOL "" FORCE)
 set(SLINT_FEATURE_RENDERER_SOFTWARE ON CACHE BOOL "" FORCE)
 FetchContent_Declare(
     Slint
@@ -246,7 +250,8 @@ target_link_libraries(hypertube_search PUBLIC
 # Toolkit-neutral presentation and controller layer.
 add_library(hypertube_presentation STATIC
     src/presentation/UiFormatters.cpp
-    src/presentation/TorrentListPresenter.cpp
+  src/presentation/TorrentListPresenter.cpp
+	  src/presentation/TorrentAvailability.cpp
     src/presentation/TorrentDetailsPresenter.cpp
     src/presentation/SearchPresenter.cpp
     src/presentation/LogsPresenter.cpp
@@ -267,11 +272,16 @@ target_link_libraries(hypertube_presentation PUBLIC
     LibtorrentRasterbar::torrent-rasterbar
 )
 
+if(NOT SLINT_STYLE)
+    set(SLINT_STYLE "fluent-dark" CACHE STRING "Slint widget style used by the application and previews" FORCE)
+endif()
+
 add_executable(hypertube
         src/main.cpp
         src/app/App.cpp
         src/ui/slint/SlintAppController.cpp
         src/ui/slint/SlintControllerFacades.cpp
+		src/ui/slint/SlintRefreshCoordinators.cpp
         src/ui/slint/SlintModelAdapter.cpp
         src/ui/slint/SearchModelAdapter.cpp
         src/ui/slint/DetailsModelAdapter.cpp
@@ -323,8 +333,17 @@ set(HYPERTUBE_SLINT_PREVIEW_SOURCES
     ui/previews/torrent-table-preview.slint
     ui/previews/search-preview.slint
     ui/previews/preferences-preview.slint
+    ui/previews/details-preview.slint
+    ui/previews/favorites-preview.slint
+    ui/previews/logs-preview.slint
+    ui/previews/add-torrent-dialog-preview.slint
+    ui/previews/remove-torrent-dialog-preview.slint
+    ui/previews/app-shell-preview.slint
 )
 set(HYPERTUBE_SLINT_PREVIEW_OUTPUTS)
+file(GLOB_RECURSE HYPERTUBE_SLINT_UI_DEPENDENCIES CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/ui/*.slint"
+)
 foreach(preview_source IN LISTS HYPERTUBE_SLINT_PREVIEW_SOURCES)
     get_filename_component(preview_name "${preview_source}" NAME_WE)
     set(preview_output "${CMAKE_CURRENT_BINARY_DIR}/${preview_name}.h")
@@ -332,12 +351,12 @@ foreach(preview_source IN LISTS HYPERTUBE_SLINT_PREVIEW_SOURCES)
         OUTPUT "${preview_output}"
         COMMAND $<TARGET_FILE:Slint::slint-compiler>
             -f cpp
+            --style "${SLINT_STYLE}"
             -I "${CMAKE_SOURCE_DIR}/ui"
             -o "${preview_output}"
             "${CMAKE_SOURCE_DIR}/${preview_source}"
         DEPENDS
-            "${CMAKE_SOURCE_DIR}/${preview_source}"
-            "${CMAKE_SOURCE_DIR}/ui/theme.slint"
+            ${HYPERTUBE_SLINT_UI_DEPENDENCIES}
         COMMENT "Checking Slint preview ${preview_name}"
         VERBATIM
     )
@@ -347,6 +366,55 @@ add_custom_target(slint-preview-check DEPENDS ${HYPERTUBE_SLINT_PREVIEW_OUTPUTS}
 add_test(
     NAME slint-preview-check
     COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target slint-preview-check --config $<CONFIG>
+)
+
+add_executable(slint-visual-snapshots tools/slint_visual_snapshots.cpp)
+target_link_libraries(slint-visual-snapshots PRIVATE Slint::Slint)
+slint_target_sources(slint-visual-snapshots ui/snapshot-window.slint)
+
+add_executable(slint-renderer-benchmark EXCLUDE_FROM_ALL tools/slint_renderer_benchmark.cpp)
+target_link_libraries(slint-renderer-benchmark PRIVATE Slint::Slint)
+if(WIN32)
+    target_link_libraries(slint-renderer-benchmark PRIVATE psapi)
+    target_compile_options(slint-renderer-benchmark PRIVATE /EHsc)
+endif()
+slint_target_sources(slint-renderer-benchmark ui/renderer-benchmark-window.slint)
+if(WIN32 AND TARGET slint_cpp-shared)
+    add_custom_command(TARGET slint-renderer-benchmark POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:slint_cpp-shared>"
+            "$<TARGET_FILE_DIR:slint-renderer-benchmark>"
+        VERBATIM
+    )
+endif()
+
+set(HYPERTUBE_RENDERER_REPORT_DIRECTORY "${CMAKE_BINARY_DIR}/renderer-reports")
+add_custom_target(slint-renderer-software-benchmark
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${HYPERTUBE_RENDERER_REPORT_DIRECTORY}"
+    COMMAND ${CMAKE_COMMAND} -E env SLINT_BACKEND=winit-software
+        $<TARGET_FILE:slint-renderer-benchmark>
+        "${HYPERTUBE_RENDERER_REPORT_DIRECTORY}/software.json" software
+    DEPENDS slint-renderer-benchmark
+    USES_TERMINAL
+    VERBATIM
+)
+if(HYPERTUBE_ENABLE_SLINT_GPU_BENCHMARK)
+    add_custom_target(slint-renderer-comparison
+        COMMAND ${CMAKE_COMMAND}
+            -DBENCHMARK_EXECUTABLE=$<TARGET_FILE:slint-renderer-benchmark>
+            -DOUTPUT_DIRECTORY=${HYPERTUBE_RENDERER_REPORT_DIRECTORY}
+            -P "${CMAKE_SOURCE_DIR}/cmake/CompareSlintRenderers.cmake"
+        DEPENDS slint-renderer-benchmark
+        USES_TERMINAL
+        VERBATIM
+    )
+endif()
+add_custom_target(slint-visual-snapshots-run
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/visual-artifacts"
+    COMMAND ${CMAKE_COMMAND} -E env SLINT_BACKEND=winit-software
+        $<TARGET_FILE:slint-visual-snapshots> "${CMAKE_BINARY_DIR}/visual-artifacts"
+    DEPENDS slint-visual-snapshots
+    USES_TERMINAL
 )
 
 file(COPY config DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
@@ -399,14 +467,16 @@ include(CPack)
 
 if(MSVC)
     target_compile_options(hypertube PRIVATE
-        $<$<CONFIG:Release>:/O2 /arch:AVX2 /GL /fp:fast>
+        $<$<CONFIG:Release>:/O2 /GL /fp:fast>
+        $<$<AND:$<CONFIG:Release>,$<BOOL:${HYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS}>>:/arch:AVX2>
     )
     target_link_options(hypertube PRIVATE
         $<$<CONFIG:Release>:/LTCG>
     )
 else()
     target_compile_options(hypertube PRIVATE
-        $<$<CONFIG:Release>:-O3 -march=native -flto -ffast-math>
+        $<$<CONFIG:Release>:-O3 -flto -ffast-math>
+        $<$<AND:$<CONFIG:Release>,$<BOOL:${HYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS}>>:-march=native>
     )
     target_link_options(hypertube PRIVATE
         $<$<CONFIG:Release>:-flto>

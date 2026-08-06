@@ -1,15 +1,30 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cstdio>
+#include <functional>
+
 #include "SearchModelAdapter.hpp"
 #include "SlintModelAdapter.hpp"
 #include "DetailsModelAdapter.hpp"
+#include "utils/TorrentIdentity.hpp"
 
 namespace
 {
+std::string testTorrentId(const std::string &seed)
+{
+	if (Utils::TorrentIdentity::isValid(seed))
+		return seed;
+	char suffix[17] {};
+	std::snprintf(suffix, sizeof(suffix), "%016llx",
+		static_cast<unsigned long long>(std::hash<std::string>{}(seed)));
+	return "v1:" + std::string(24, '0') + suffix;
+}
+
 Presentation::TorrentRowDto torrent(std::string id, std::string name)
 {
 	Presentation::TorrentRowDto row;
-	row.id = std::move(id);
+	row.id = testTorrentId(id);
 	row.name = std::move(name);
 	row.stateLabel = "Downloading";
 	row.progressLabel = "10%";
@@ -45,13 +60,28 @@ TEST(SlintModelAdapterTest, ReconcilesTorrentRowsByStableId)
 	ASSERT_EQ(model->row_count(), 2U);
 	ASSERT_TRUE(model->row_data(0).has_value());
 	ASSERT_TRUE(model->row_data(1).has_value());
-	EXPECT_EQ(stringValue(model->row_data(0)->id), "b");
+	EXPECT_EQ(stringValue(model->row_data(0)->id), testTorrentId("b"));
 	EXPECT_EQ(stringValue(model->row_data(0)->name), "Beta renamed");
-	EXPECT_EQ(stringValue(model->row_data(1)->id), "c");
+	EXPECT_EQ(stringValue(model->row_data(1)->id), testTorrentId("c"));
 
 	adapter.update({torrent("c", "Gamma")});
 	ASSERT_EQ(model->row_count(), 1U);
-	EXPECT_EQ(stringValue(model->row_data(0)->id), "c");
+	EXPECT_EQ(stringValue(model->row_data(0)->id), testTorrentId("c"));
+}
+
+TEST(SlintTorrentIdRoundTripTest, PreservesCanonicalHybridIdAcrossTheSlintModel)
+{
+	lt::sha1_hash v1;
+	lt::sha256_hash v2;
+	for (std::size_t index = 0; index < v1.size(); ++index) v1.data()[index] = static_cast<char>(index * 19);
+	for (std::size_t index = 0; index < v2.size(); ++index) v2.data()[index] = static_cast<char>(0xff - index * 7);
+	const std::string id = Utils::TorrentIdentity::id(lt::info_hash_t(v1, v2));
+	SlintModelAdapter adapter;
+	adapter.update({torrent(id, "Hybrid")});
+	const auto row = adapter.model()->row_data(0);
+	ASSERT_TRUE(row);
+	EXPECT_EQ(stringValue(row->id), id);
+	EXPECT_TRUE(Utils::TorrentIdentity::isValid(stringValue(row->id)));
 }
 
 TEST(SlintModelAdapterTest, ReplacesMalformedTorrentTextBeforeCrossingSlintBoundary)
@@ -94,11 +124,31 @@ TEST(SlintModelAdapterTest, HandlesTenThousandRowsAndAStableRefresh)
 		rows.push_back(torrent(std::to_string(index), "Torrent " + std::to_string(index)));
 	adapter.update(rows);
 	ASSERT_EQ(adapter.model()->row_count(), 10000U);
+	EXPECT_EQ(adapter.lastUpdateStats().inserted, 10000U);
+
+	adapter.update(rows);
+	EXPECT_EQ(adapter.lastUpdateStats().changed, 0U);
+	EXPECT_EQ(adapter.lastUpdateStats().inserted, 0U);
+	EXPECT_EQ(adapter.lastUpdateStats().removed, 0U);
 
 	rows[7777].name = "Changed";
 	adapter.update(rows);
 	ASSERT_EQ(adapter.model()->row_count(), 10000U);
 	EXPECT_EQ(stringValue(adapter.model()->row_data(7777)->name), "Changed");
+	EXPECT_EQ(adapter.lastUpdateStats().changed, 1U);
+
+	std::reverse(rows.begin(), rows.end());
+	adapter.update(rows);
+	EXPECT_EQ(adapter.lastUpdateStats().changed, 10000U);
+
+	for (int index = 10000; index < 10100; ++index)
+		rows.push_back(torrent(std::to_string(index), "Torrent " + std::to_string(index)));
+	adapter.update(rows);
+	EXPECT_EQ(adapter.lastUpdateStats().inserted, 100U);
+
+	rows.resize(10000);
+	adapter.update(rows);
+	EXPECT_EQ(adapter.lastUpdateStats().removed, 100U);
 }
 
 TEST(SlintModelAdapterTest, HandlesTenThousandSearchRows)

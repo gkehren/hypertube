@@ -1,69 +1,18 @@
-import { Button, HorizontalBox, ListView, VerticalBox } from "std-widgets.slint";
+import { VerticalBox } from "std-widgets.slint";
 import { ThemeTokens } from "../theme.slint";
-
-export struct PreviewTorrent {
-	name: string,
-	state: string,
-	progress: string,
-	size: string,
-	rates: string,
-	selected: bool,
-}
-
-component PreviewRow inherits Rectangle {
-	in property <string> name;
-	in property <string> state;
-	in property <string> progress;
-	in property <string> size;
-	in property <string> rates;
-	in property <bool> selected: false;
-
-	accessible-role: list-item;
-	accessible-label: root.name + ", " + root.state + ", " + root.progress;
-	background: root.selected ? ThemeTokens.surface-hover : ThemeTokens.surface;
-	border-width: 1px;
-	border-color: ThemeTokens.border;
-
-	HorizontalBox {
-		padding: 8px;
-		Text { text: root.name; color: ThemeTokens.foreground; }
-		Text { text: root.state; color: ThemeTokens.accent; width: 100px; }
-		Text { text: root.progress; color: ThemeTokens.foreground; width: 90px; }
-		Text { text: root.size; color: ThemeTokens.muted-foreground; width: 110px; }
-		Text { text: root.rates; color: ThemeTokens.muted-foreground; width: 180px; }
-		Button { text: "Pause"; }
-	}
-}
+import { TorrentRow } from "../torrent-types.slint";
+import { TorrentTable } from "../components/torrent-table.slint";
 
 export component TorrentTablePreview inherits Window {
-	in property <[PreviewTorrent]> rows: [
-		{ name: "Ubuntu 24.04 LTS amd64 desktop image", state: "Downloading", progress: "0.0%", size: "4.7 GiB", rates: "Down 12.4 MiB/s  Up 1.2 MiB/s", selected: false },
-		{ name: "日本語とUnicode 🚀 torrent name", state: "Seeding", progress: "100.0%", size: "980 MiB", rates: "Down 0 B/s  Up 3.1 MiB/s", selected: true },
-		{ name: "Paused with a very long name that must remain readable in a narrow window", state: "Paused", progress: "48.2%", size: "12.0 GiB", rates: "Down 0 B/s  Up 0 B/s", selected: false },
-		{ name: "Broken metadata", state: "Error", progress: "—", size: "Unknown", rates: "Down —  Up —", selected: false },
-		{ name: "Small completed file", state: "Completed", progress: "100.0%", size: "2 KiB", rates: "Down 0 B/s  Up 0 B/s", selected: false },
-		{ name: "Unknown ETA", state: "Downloading", progress: "72.5%", size: "2.0 GiB", rates: "Down 256 KiB/s  Up 0 B/s", selected: false },
+	in property <[TorrentRow]> rows: [
+		{ id: "v1:0000000000000000000000000000000000000001", name: "Ubuntu 24.04 LTS amd64 desktop image", state-label: "Downloading", progress-label: "42%", progress: 0.42, size-label: "4.7 GiB", download-rate-label: "12.4 MiB/s", upload-rate-label: "1.2 MiB/s", peers-label: "34", seeds-label: "120", eta-label: "6m", paused: false, error: false, active: true },
+		{ id: "v1:0000000000000000000000000000000000000002", name: "日本語と Unicode 🚀 — an exceptionally long torrent name that must be elided", state-label: "Seeding", progress-label: "100%", progress: 1, size-label: "980 MiB", download-rate-label: "0 B/s", upload-rate-label: "3.1 MiB/s", peers-label: "8", seeds-label: "52", eta-label: "—", paused: false, error: false, active: true },
+		{ id: "v1:0000000000000000000000000000000000000003", name: "Waiting for metadata", state-label: "Metadata", progress-label: "0%", progress: 0, size-label: "Unknown", download-rate-label: "—", upload-rate-label: "—", peers-label: "0", seeds-label: "0", eta-label: "—", paused: true, error: false, active: false },
 	];
 	title: "Hypertube torrent table preview";
-	preferred-width: 1100px;
-	preferred-height: 520px;
+	preferred-width: 1024px;
+	preferred-height: 600px;
 	background: ThemeTokens.background;
-
-	VerticalBox {
-		padding: 20px;
-		Text { text: "Torrent table preview"; color: ThemeTokens.foreground; font-size: 24px; }
-		ListView {
-			accessible-role: list;
-			accessible-label: "Torrent table preview";
-			accessible-item-count: root.rows.length;
-			for row in root.rows: PreviewRow {
-				name: row.name;
-				state: row.state;
-				progress: row.progress;
-				size: row.size;
-				rates: row.rates;
-				selected: row.selected;
-			}
-		}
-	}
+	Text { x: 16px; y: 16px; width: parent.width - 32px; height: 32px; text: "Production TorrentTable"; color: ThemeTokens.foreground; font-size: 24px; }
+	TorrentTable { x: 16px; y: 56px; width: parent.width - 32px; height: parent.height - 72px; rows: root.rows; selected-id: root.rows[1].id; available-width: root.width - 32px; }
 }

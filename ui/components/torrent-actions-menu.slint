@@ -1,0 +1,32 @@
+import { Button, VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "../theme.slint";
+import { UiTorrentCommand } from "../enums.slint";
+import { TorrentTableGeometry } from "torrent-table-geometry.slint";
+
+export component TorrentActionsMenu inherits Rectangle {
+	in property <string> torrent-id;
+	callback execute(string, UiTorrentCommand);
+	callback remove(string);
+	callback copy-magnet(string);
+	width: TorrentTableGeometry.overflow-action-width;
+	height: 32px;
+
+	Button { text: "…"; accessible-label: "More torrent actions"; clicked => { menu.show(); } }
+	menu := PopupWindow {
+		width: 180px;
+		height: 260px;
+		Rectangle {
+			background: ThemeTokens.surface;
+			VerticalBox {
+			padding: 6px;
+			Button { text: "Force start"; clicked => { root.execute(root.torrent-id, UiTorrentCommand.force-start); menu.close(); } }
+			Button { text: "Force recheck"; clicked => { root.execute(root.torrent-id, UiTorrentCommand.force-recheck); menu.close(); } }
+			Button { text: "Queue up"; clicked => { root.execute(root.torrent-id, UiTorrentCommand.queue-up); menu.close(); } }
+			Button { text: "Queue down"; clicked => { root.execute(root.torrent-id, UiTorrentCommand.queue-down); menu.close(); } }
+			Button { text: "Reannounce"; clicked => { root.execute(root.torrent-id, UiTorrentCommand.force-reannounce); menu.close(); } }
+			Button { text: "Copy magnet"; clicked => { root.copy-magnet(root.torrent-id); menu.close(); } }
+			Button { text: "Remove"; clicked => { root.remove(root.torrent-id); menu.close(); } }
+			}
+		}
+	}
+}

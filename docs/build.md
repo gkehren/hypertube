@@ -1,5 +1,10 @@
 # Build system
 
+The application and all previews use Slint's `fluent-dark` widget style by
+default. This keeps standard controls consistent with Hypertube's dark runtime
+themes. Pass `-DSLINT_STYLE=<style>` at configure time to test another style;
+the same cached value is used by preview compilation.
+
 Hypertube uses CMake 3.21 or newer and requires C++20. The project prefers
 system or package-manager dependencies and falls back to CMake `FetchContent`
 when a dependency is not found.
@@ -76,8 +81,36 @@ cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release
 cmake --build build-release -j2
 ```
 
-Non-MSVC release builds enable optimization, LTO, and platform-specific
-tuning. Use Debug for diagnosis and test failures.
+Release builds enable optimization and LTO but target the compiler's portable
+baseline ISA so packaged binaries can run on a different machine. Host-specific
+optimizations are development-only and must never be used for distributed
+packages:
+
+```sh
+cmake -S . -B build-native -DCMAKE_BUILD_TYPE=Release \
+  -DHYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS=ON
+```
+
+This opt-in currently enables `/arch:AVX2` with MSVC and `-march=native` with
+GCC or Clang. Use Debug for diagnosis and test failures.
+
+## Slint renderers
+
+The production build compiles and uses Slint's software renderer. FemtoVG is
+available only for an explicit comparison build, so enabling the benchmark
+cannot silently change release packaging:
+
+```sh
+cmake -S . -B build-renderers -DCMAKE_BUILD_TYPE=Release \
+  -DHYPERTUBE_ENABLE_SLINT_GPU_BENCHMARK=ON
+cmake --build build-renderers --target slint-renderer-comparison -j2
+```
+
+The comparison writes JSON reports under `build-renderers/renderer-reports`.
+It measures redraw-cycle latency, process CPU time, peak resident memory, and
+event-loop stability. Run it on representative hardware;
+headless CI exercises FemtoVG through Mesa and proves backend stability, but is
+not evidence that a hardware GPU is faster on end-user systems.
 
 ## Offline configure
 

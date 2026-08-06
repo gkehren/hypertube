@@ -1,0 +1,30 @@
+import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "../theme.slint";
+import { SearchResultRow } from "../search-types.slint";
+
+export component SearchResultListRow inherits Rectangle {
+	in property <SearchResultRow> result;
+	in property <bool> selected: false;
+	in property <bool> favorite-mode: false;
+	callback select(string);
+	callback toggle-favorite(string);
+	callback remove-favorite(string);
+	callback add(string);
+	height: root.width < 720px ? 92px : 62px;
+	background: root.selected ? ThemeTokens.surface-hover : ThemeTokens.surface;
+	border-width: root.selected ? 2px : 1px;
+	border-color: root.selected ? ThemeTokens.accent : ThemeTokens.border;
+	HorizontalBox {
+		padding: 8px;
+		spacing: 8px;
+		data-area := Rectangle {
+			VerticalBox {
+				Text { text: root.result.name; color: ThemeTokens.foreground; wrap: no-wrap; overflow: elide; }
+				Text { text: root.result.size-label + "  •  S " + root.result.seeders-label + " / L " + root.result.leechers-label + "  •  " + root.result.category + "  •  " + root.result.published-label; color: ThemeTokens.muted-foreground; wrap: no-wrap; overflow: elide; }
+			}
+			TouchArea { clicked => { root.select(root.result.id); } }
+		}
+		Button { text: root.favorite-mode ? "Remove" : root.result.favorite ? "Unfavorite" : "Favorite"; clicked => { if (root.favorite-mode) { root.remove-favorite(root.result.id); } else { root.toggle-favorite(root.result.id); } } }
+		Button { text: "Add"; clicked => { root.add(root.result.id); } }
+	}
+}

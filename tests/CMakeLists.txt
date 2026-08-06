@@ -1,8 +1,9 @@
 include(FetchContent)
 FetchContent_Declare(
   googletest
-  URL https://github.com/google/googletest/archive/refs/heads/main.zip
-  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+  GIT_REPOSITORY https://github.com/google/googletest.git
+  GIT_TAG v1.15.2
+  GIT_SHALLOW TRUE
 )
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
@@ -41,6 +42,34 @@ add_executable(slint_model_tests
     "${CMAKE_SOURCE_DIR}/src/ui/slint/SearchModelAdapter.cpp"
     "${CMAKE_SOURCE_DIR}/src/ui/slint/DetailsModelAdapter.cpp"
 )
+
+add_executable(slint_controller_tests
+	test_slint_controller.cpp
+	"${CMAKE_SOURCE_DIR}/src/ui/slint/SlintRefreshCoordinators.cpp"
+	"${CMAKE_SOURCE_DIR}/src/ui/slint/SlintModelAdapter.cpp"
+	"${CMAKE_SOURCE_DIR}/src/ui/slint/SearchModelAdapter.cpp"
+	"${CMAKE_SOURCE_DIR}/src/ui/slint/DetailsModelAdapter.cpp"
+	"${CMAKE_SOURCE_DIR}/src/ui/slint/LogModelAdapter.cpp"
+)
+
+target_include_directories(slint_controller_tests PRIVATE
+	"${CMAKE_SOURCE_DIR}/include"
+	"${CMAKE_SOURCE_DIR}/include/app"
+	"${CMAKE_SOURCE_DIR}/include/ui/slint"
+	"${CMAKE_BINARY_DIR}"
+)
+
+target_link_libraries(slint_controller_tests PRIVATE
+	gtest_main
+	hypertube_presentation
+	hypertube_search
+	hypertube_torrent
+	hypertube_utils
+	Slint::Slint
+)
+
+add_dependencies(slint_controller_tests hypertube)
+slint_target_sources(slint_controller_tests "${CMAKE_SOURCE_DIR}/ui/main-window.slint")
 
 target_include_directories(slint_model_tests PRIVATE
     "${CMAKE_SOURCE_DIR}/include"
@@ -121,6 +150,7 @@ if(WIN32)
 	copy_windows_test_runtime(search_tests)
 	copy_windows_test_runtime(torrent_tests)
 	copy_windows_test_runtime(slint_model_tests)
+	copy_windows_test_runtime(slint_controller_tests)
 	if(TARGET slint_cpp-shared)
 		add_custom_command(TARGET slint_model_tests POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -129,6 +159,14 @@ if(WIN32)
 			VERBATIM
 		)
     endif()
+	if(TARGET slint_cpp-shared)
+		add_custom_command(TARGET slint_controller_tests POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+				"$<TARGET_FILE:slint_cpp-shared>"
+				"$<TARGET_FILE_DIR:slint_controller_tests>"
+			VERBATIM
+		)
+	endif()
 endif()
 
 include(GoogleTest)
@@ -137,3 +175,4 @@ gtest_discover_tests(config_tests)
 gtest_discover_tests(search_tests)
 gtest_discover_tests(torrent_tests)
 gtest_discover_tests(slint_model_tests)
+gtest_discover_tests(slint_controller_tests)
