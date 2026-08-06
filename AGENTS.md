@@ -4,7 +4,12 @@
 
 This file is the operating guide for AI agents working in the Hypertube repository. It applies to the whole repository unless a more specific `AGENTS.md` is added in a subdirectory.
 
-Hypertube is a cross-platform C++20 BitTorrent desktop client. It uses Dear ImGui during the UI migration, libtorrent for torrent operations, cURL for search HTTP requests, and nlohmann/json for persisted configuration. The project is moving from a functional demo toward a reliable daily-use application, so correctness, recoverability, responsiveness, and inspectable behavior take priority over superficial feature breadth.
+Hypertube is a cross-platform C++20 BitTorrent desktop client. It uses Slint
+for the interface, libtorrent for torrent operations, cURL for search HTTP
+requests, and nlohmann/json for persisted configuration. The project is moving
+from a functional demo toward a reliable daily-use application, so correctness,
+recoverability, responsiveness, and inspectable behavior take priority over
+superficial feature breadth.
 
 Read this file together with `README.md` and the existing code before changing behavior. Keep the README and this file consistent when build, runtime, configuration, or packaging behavior changes.
 
@@ -13,7 +18,7 @@ Read this file together with `README.md` and the existing code before changing b
 ```text
 include/                 Public headers, grouped by subsystem
   app/                   Application orchestration and services
-  ui/                    Dear ImGui views, dialogs, and UI coordination
+  ui/slint/              Slint controllers and model adapters
   utils/                 Paths, logging, string and system helpers
 src/                     Implementations matching include/
   app/App.cpp            Application lifetime and startup/shutdown flow
@@ -28,9 +33,9 @@ CMakeLists.txt           Dependency discovery, targets, tests, and packaging
 README.md                User-facing features, configuration, and build guide
 ```
 
-The migration build produces `hypertube-slint` and the transitional
-`hypertube-imgui` frontend. The test targets are `unit_tests`, `config_tests`,
-and `search_tests`. `tests/benchmark_favorites.cpp` is a benchmark source and
+The build produces the single `hypertube` Slint frontend. The test targets are
+`unit_tests`, `config_tests`, `search_tests`, `torrent_tests`, and
+`slint_model_tests`. `tests/benchmark_favorites.cpp` is a benchmark source and
 is not automatically included in the normal test suite unless the build
 configuration is extended.
 
@@ -119,21 +124,22 @@ The portable bundle should contain the executable and the seed `config/` directo
 
 ### Application lifecycle
 
-`src/main.cpp` initializes and cleans up cURL globally for the transitional
-ImGui frontend. `src/main_slint.cpp` uses the same toolkit-neutral `App` with
-Slint. `App` creates runtime directories, initializes logging, loads persisted
-torrent/settings state, owns the service objects, and waits for asynchronous
-persistence before shutdown. `ImGuiApp` owns only the legacy GLFW/OpenGL loop.
+`src/main.cpp` initializes and cleans up cURL globally, uses the toolkit-neutral
+`App` with Slint, and waits for asynchronous persistence before shutdown. `App`
+creates runtime directories, initializes logging, loads persisted torrent and
+settings state, and owns the service objects.
 
-Do not initialize or clean up cURL once per request. Do not destroy the GLFW window or services while worker callbacks can still use them.
+Do not initialize or clean up cURL once per request. Do not destroy the Slint
+window or services while worker callbacks can still use them.
 
 ### UI
 
-`UIManager` coordinates Dear ImGui views. `TorrentTableUI`, `TorrentDetailsUI`, `SearchUI`, `LogsUI`, `ModalDialogs`, and `Theme` are UI-layer code. Rendering runs on the UI/main thread.
+`SlintAppController` coordinates the Slint views and presentation controllers.
+Rendering and UI mutation run on the UI/main thread.
 
 - Never perform blocking HTTP, filesystem recovery, or expensive libtorrent work directly inside a render path.
 - Pass immutable snapshots or copied values to rendering code.
-- Keep ImGui calls on the rendering thread.
+- Keep Slint callbacks and model mutations on the UI thread.
 - Any worker-to-UI callback must have a clear lifetime policy and must not access destroyed UI state.
 - Preserve user feedback for loading, empty, filtered, cancelled, and failed states.
 - When changing a visible action, update the corresponding success/failure feedback and diagnostics behavior.

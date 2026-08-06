@@ -1078,7 +1078,7 @@ void ConfigManager::applyDefaultConfig()
 
 	// Use platform-appropriate default download path
 	// Note: This is just a fallback default. The actual download path
-	// is typically managed by UIManager::setDefaultSavePath()
+	// is typically managed by the application preferences controller.
 	std::string default_path;
 #ifdef _WIN32
 	const char* user_profile = std::getenv("USERPROFILE");

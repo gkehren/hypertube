@@ -24,12 +24,9 @@ Reconfigure the same build directory first. If its cache points to an obsolete p
 
 ## The application does not open a window
 
-Run `hypertube-slint` from a terminal and inspect its stderr first. For the
-transitional `hypertube-imgui` frontend, inspect GLFW/OpenGL output. Check:
+Run `hypertube` from a terminal and inspect its stderr first. Check:
 
-- graphics drivers and OpenGL support;
 - display/session environment;
-- platform-specific GLFW runtime libraries;
 - whether another process or window manager issue prevents window creation.
 
 The application logs startup failures to stderr before the normal logger is available.
@@ -48,7 +45,7 @@ stored torrent or preference data.
 Check the active path mode first:
 
 ```sh
-HYPERTUBE_PORTABLE=1 ./build/hypertube-slint
+HYPERTUBE_PORTABLE=1 ./build/hypertube
 ```
 
 Then inspect the corresponding `settings.json`, `torrents.json`, and `.bak` files. The application tries the primary file and then the backup when the primary is missing, malformed, or schema-invalid. Preserve both candidates before editing them.

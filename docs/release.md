@@ -1,15 +1,23 @@
 # Build and release
 
-This document describes the release workflow that exists today and separates it from the automation that is still planned.
+This document describes the release workflow that exists today and separates it
+from automation that is still planned.
 
 ## Current release facts
 
 - The project version used by CPack is currently `0.1.0` in `CMakeLists.txt`.
 - The configured package generator is ZIP.
-- The installable runtime component contains both `hypertube-slint`, the
-  current bootstrap frontend, and `hypertube-imgui`, the transitional frontend,
-  plus the seed `config/` directory.
-- There is currently no repository CI workflow, release tag policy, checksum generation, or automated publication workflow.
+- The installable runtime component contains `hypertube`, its required runtime
+  libraries, and the seed `config/` directory.
+- There is currently no repository release publication workflow.
+
+## Licensing and notices
+
+The repository does not currently contain a project license or third-party
+notice file. Before publishing a binary, choose the applicable Slint license
+regime, add the project license and required third-party notices, and record
+that decision in the release materials. Until this gate is complete, builds
+and packages are for local development and testing only.
 
 ## Prepare a release build
 
@@ -19,11 +27,7 @@ cmake --build build-release -j2
 ctest --test-dir build-release --output-on-failure
 ```
 
-For concurrency, persistence, or parser changes, validate the Debug sanitizer configuration as described in [Testing](testing.md).
-
 ## Create a portable runtime directory
-
-Use the runtime component so dependency install rules are not included:
 
 ```sh
 cmake --install build-release \
@@ -36,13 +40,13 @@ The resulting layout should be:
 
 ```text
 dist/hypertube/
-├── hypertube-slint
-├── hypertube-imgui
+├── hypertube
 └── config/
     └── settings.json
 ```
 
-Runtime data and logs are created under `data/` when the bundle is first run. Do not place a user's `torrents.json` in the release artifact.
+Runtime data and logs are created under `data/` when the bundle first runs. Do
+not place a user's `torrents.json` in the release artifact.
 
 ## Generate the ZIP package
 
@@ -50,14 +54,8 @@ Runtime data and logs are created under `data/` when the bundle is first run. Do
 cpack --config build-release/CPackConfig.cmake -G ZIP
 ```
 
-Inspect the archive before publication:
-
-```sh
-unzip -l Hypertube-0.1.0-Linux.zip
-```
-
-The exact archive name is generator- and platform-dependent. Confirm that it
-contains both intended executables and only the seed configuration files.
+Inspect the archive before publication and confirm that it contains the
+executable, required runtime libraries, and only seed configuration files.
 
 ## Manual release checklist
 
@@ -71,10 +69,4 @@ contains both intended executables and only the seed configuration files.
 - [ ] Run the packaged executable in portable mode.
 - [ ] Verify startup, torrent add, search, persistence, and diagnostics.
 - [ ] Record platform, compiler, dependency, and test results.
-- [ ] Create a release note describing user-visible changes and known limitations.
-
-## Future release automation
-
-The intended future workflow is to add CI jobs that build and test supported Linux, macOS, and Windows configurations, create reproducible runtime artifacts, generate checksums, and publish artifacts only after all required checks pass. Signing keys and credentials must remain outside the repository and CI logs.
-
-Until that automation exists, do not describe a build as cross-platform released merely because the CMake conditionals exist. A platform is release-supported only after its build and runtime smoke test are recorded.
+- [ ] Resolve licensing and third-party notice requirements before publication.

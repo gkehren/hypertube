@@ -21,7 +21,6 @@ add_executable(unit_tests
 target_include_directories(unit_tests PRIVATE
 	"${CMAKE_SOURCE_DIR}/include"
 	"${CMAKE_SOURCE_DIR}/include/app"
-	"${CMAKE_SOURCE_DIR}/include/ui"
 )
 
 add_executable(config_tests
@@ -36,33 +35,31 @@ add_executable(torrent_tests
 	test_torrent_manager.cpp
 )
 
-if(HYPERTUBE_BUILD_SLINT)
-    add_executable(slint_model_tests
-        test_slint_model_adapter.cpp
-        "${CMAKE_SOURCE_DIR}/src/ui/slint/SlintModelAdapter.cpp"
-        "${CMAKE_SOURCE_DIR}/src/ui/slint/SearchModelAdapter.cpp"
-        "${CMAKE_SOURCE_DIR}/src/ui/slint/DetailsModelAdapter.cpp"
-    )
+add_executable(slint_model_tests
+    test_slint_model_adapter.cpp
+    "${CMAKE_SOURCE_DIR}/src/ui/slint/SlintModelAdapter.cpp"
+    "${CMAKE_SOURCE_DIR}/src/ui/slint/SearchModelAdapter.cpp"
+    "${CMAKE_SOURCE_DIR}/src/ui/slint/DetailsModelAdapter.cpp"
+)
 
-    target_include_directories(slint_model_tests PRIVATE
-        "${CMAKE_SOURCE_DIR}/include"
-        "${CMAKE_SOURCE_DIR}/include/ui/slint"
-        "${CMAKE_BINARY_DIR}"
-    )
+target_include_directories(slint_model_tests PRIVATE
+    "${CMAKE_SOURCE_DIR}/include"
+    "${CMAKE_SOURCE_DIR}/include/ui/slint"
+    "${CMAKE_BINARY_DIR}"
+)
 
-    target_link_libraries(slint_model_tests
-        PRIVATE
-        gtest_main
-        hypertube_utils
-        Slint::Slint
-    )
+target_link_libraries(slint_model_tests
+    PRIVATE
+    gtest_main
+    hypertube_utils
+    Slint::Slint
+)
 
-    if(TARGET PkgConfig::HYPERTUBE_FONTCONFIG)
-        target_link_libraries(slint_model_tests PRIVATE PkgConfig::HYPERTUBE_FONTCONFIG)
-    endif()
-
-    add_dependencies(slint_model_tests hypertube-slint)
+if(TARGET PkgConfig::HYPERTUBE_FONTCONFIG)
+    target_link_libraries(slint_model_tests PRIVATE PkgConfig::HYPERTUBE_FONTCONFIG)
 endif()
+
+add_dependencies(slint_model_tests hypertube)
 
 target_include_directories(config_tests PRIVATE
     "${CMAKE_SOURCE_DIR}/include"
@@ -123,16 +120,14 @@ if(WIN32)
 	copy_windows_test_runtime(config_tests)
 	copy_windows_test_runtime(search_tests)
 	copy_windows_test_runtime(torrent_tests)
-    if(HYPERTUBE_BUILD_SLINT)
-        copy_windows_test_runtime(slint_model_tests)
-        if(TARGET slint_cpp-shared)
-            add_custom_command(TARGET slint_model_tests POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "$<TARGET_FILE:slint_cpp-shared>"
-                    "$<TARGET_FILE_DIR:slint_model_tests>"
-                VERBATIM
-            )
-        endif()
+	copy_windows_test_runtime(slint_model_tests)
+	if(TARGET slint_cpp-shared)
+		add_custom_command(TARGET slint_model_tests POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+				"$<TARGET_FILE:slint_cpp-shared>"
+				"$<TARGET_FILE_DIR:slint_model_tests>"
+			VERBATIM
+		)
     endif()
 endif()
 
@@ -141,6 +136,4 @@ gtest_discover_tests(unit_tests)
 gtest_discover_tests(config_tests)
 gtest_discover_tests(search_tests)
 gtest_discover_tests(torrent_tests)
-if(HYPERTUBE_BUILD_SLINT)
-    gtest_discover_tests(slint_model_tests)
-endif()
+gtest_discover_tests(slint_model_tests)
