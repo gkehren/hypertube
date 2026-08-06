@@ -1,5 +1,6 @@
 #include "presentation/TorrentListPresenter.hpp"
 
+#include "utils/TorrentIdentity.hpp"
 #include "presentation/UiFormatters.hpp"
 
 #include <algorithm>
@@ -14,11 +15,12 @@ namespace
 {
 std::string torrentId(const lt::info_hash_t &hash)
 {
-	if (hash.has_v1())
-		return hash.v1.to_string();
-	if (hash.has_v2())
-		return hash.v2.to_string();
-	return {};
+	return Utils::TorrentIdentity::id(hash);
+}
+
+bool matchesTorrentId(const lt::info_hash_t &hash, const std::string &id)
+{
+	return Utils::TorrentIdentity::matches(hash, id);
 }
 
 bool lessOrEqual(const Presentation::TorrentRowDto &left, const Presentation::TorrentRowDto &right,
@@ -100,8 +102,14 @@ std::vector<TorrentRowDto> TorrentListPresenter::buildUnfilteredRows()
 		const auto id = torrentId(torrent.hash);
 		if (id.empty())
 			continue;
-		auto status = statusCache ? statusCache->find(torrent.hash) : statusCache->end();
-		if (!statusCache || status == statusCache->end())
+		// Keep the identity index independent from the status snapshot. Status
+		// loading is asynchronous and must not make a live torrent unavailable
+		// for selection or commands.
+		hashesById_.emplace(id, torrent.hash);
+		if (!statusCache)
+			continue;
+		auto status = statusCache->find(torrent.hash);
+		if (status == statusCache->end())
 			continue;
 
 		const auto &value = status->second;
@@ -145,11 +153,14 @@ std::vector<TorrentRowDto> TorrentListPresenter::buildUnfilteredRows()
 		}
 		row.etaLabel = UiFormatters::formatEta(row.etaSeconds);
 
-		hashesById_.emplace(row.id, torrent.hash);
 		rows.push_back(std::move(row));
 	}
 
-	if (!selectedId_.empty() && hashesById_.find(selectedId_) == hashesById_.end())
+	if (!selectedId_.empty() && hashesById_.find(selectedId_) == hashesById_.end()
+		&& std::none_of(torrents.begin(), torrents.end(), [this](const ManagedTorrent &torrent)
+		{
+			return matchesTorrentId(torrent.hash, selectedId_);
+		}))
 		selectedId_.clear();
 	return rows;
 }
@@ -230,6 +241,34 @@ std::optional<TorrentRowDto> TorrentListPresenter::findRowById(const std::string
 		if (row.id == id)
 			return row;
 	}
+
+	// Status refreshes are asynchronous. A live magnet may briefly be absent
+	// from the latest status snapshot, but it must remain selectable.
+	for (const auto &torrent : torrentManager.getTorrentSnapshot())
+	{
+		if (!torrent.handle.is_valid() || !matchesTorrentId(torrent.hash, id))
+			continue;
+		hashesById_[id] = torrent.hash;
+		TorrentRowDto row;
+		row.id = id;
+		try
+		{
+			row.name = torrent.handle.status().name;
+		}
+		catch (const std::exception &)
+		{
+			row.name = "Loading torrent...";
+		}
+		row.stateLabel = "Loading";
+		row.progressLabel = UiFormatters::formatProgress(0.0f);
+		row.sizeLabel = UiFormatters::formatBytes(0);
+		row.downloadRateLabel = UiFormatters::formatRate(0);
+		row.uploadRateLabel = UiFormatters::formatRate(0);
+		row.peersLabel = UiFormatters::formatCount(0);
+		row.seedsLabel = UiFormatters::formatCount(0);
+		row.etaLabel = UiFormatters::formatEta(-1);
+		return row;
+	}
 	return std::nullopt;
 }
 
@@ -263,9 +302,12 @@ std::vector<CategoryDto> TorrentListPresenter::buildCategories()
 std::optional<lt::info_hash_t> TorrentListPresenter::hashForId(const std::string &id) const
 {
 	const auto found = hashesById_.find(id);
-	if (found == hashesById_.end())
-		return std::nullopt;
-	return found->second;
+	if (found != hashesById_.end())
+		return found->second;
+	for (const auto &torrent : torrentManager.getTorrentSnapshot())
+		if (torrent.handle.is_valid() && matchesTorrentId(torrent.hash, id))
+			return torrent.hash;
+	return std::nullopt;
 }
 
 Result TorrentListPresenter::executeCommand(const std::string &id, TorrentCommand command)

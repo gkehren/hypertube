@@ -8,6 +8,8 @@
 #include <filesystem>
 #include <fstream>
 #include <thread>
+#include <algorithm>
+#include <cctype>
 
 namespace
 {
@@ -89,6 +91,45 @@ TEST(TorrentListPresenterTest, ResolvesSelectionOutsideTheVisibleFilter)
 	ASSERT_TRUE(resolved);
 	EXPECT_EQ(resolved->id, id);
 	EXPECT_EQ(resolved->name, "fixture");
+
+	std::error_code error;
+	std::filesystem::remove_all(testDirectory, error);
+}
+
+TEST(TorrentListPresenterTest, KeepsSelectionIdentityWhileStatusesAreLoading)
+{
+	const auto testDirectory = std::filesystem::temp_directory_path()
+		/ ("hypertube-presenter-loading-" + std::to_string(
+			std::chrono::steady_clock::now().time_since_epoch().count()));
+	std::filesystem::create_directories(testDirectory / "downloads");
+	const auto torrentPath = testDirectory / "fixture.torrent";
+	std::string content = "d4:infod6:lengthi1e4:name7:fixture12:piece lengthi16384e6:pieces20:";
+	content.append(20, '\0');
+	content += "ee";
+	{
+		std::ofstream file(torrentPath, std::ios::binary);
+		file.write(content.data(), static_cast<std::streamsize>(content.size()));
+	}
+
+	TorrentManager manager;
+	ASSERT_TRUE(manager.addTorrent(torrentPath.string(), (testDirectory / "downloads").string()));
+	const auto hash = manager.getTorrentSnapshot().front().hash;
+	const std::string id = Presentation::TorrentListPresenter::idForHash(hash);
+	ASSERT_EQ(id.size(), 40U);
+	EXPECT_TRUE(std::all_of(id.begin(), id.end(), [](unsigned char character)
+	{
+		return std::isxdigit(character) != 0;
+	}));
+
+	Presentation::TorrentListPresenter presenter(manager);
+	presenter.setSelectedId(id);
+	EXPECT_TRUE(presenter.buildRows().empty());
+	EXPECT_EQ(presenter.selectedId(), id);
+	EXPECT_TRUE(presenter.hashForId(id).has_value());
+	const auto selectedRow = presenter.findRowById(id);
+	ASSERT_TRUE(selectedRow);
+	EXPECT_EQ(selectedRow->id, id);
+	EXPECT_FALSE(selectedRow->name.empty());
 
 	std::error_code error;
 	std::filesystem::remove_all(testDirectory, error);

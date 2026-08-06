@@ -1,6 +1,7 @@
 #include "presentation/TorrentDetailsPresenter.hpp"
 
 #include "presentation/UiFormatters.hpp"
+#include "utils/TorrentIdentity.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -40,7 +41,7 @@ std::optional<TorrentGeneralDetailsDto> TorrentDetailsPresenter::buildGeneral() 
 		return std::nullopt;
 
 	TorrentGeneralDetailsDto details;
-	details.id = selectedTorrent_->has_v1() ? selectedTorrent_->v1.to_string() : selectedTorrent_->v2.to_string();
+	details.id = Utils::TorrentIdentity::id(*selectedTorrent_);
 	details.name = status->name;
 	details.stateLabel = UiFormatters::torrentStateToString(
 		static_cast<int>(status->state),

@@ -4,6 +4,7 @@
 #include "Logger.hpp"
 #include "StringUtils.hpp"
 #include "SystemUtils.hpp"
+#include "utils/TorrentIdentity.hpp"
 #include <iostream>
 #include <algorithm>
 #include <filesystem>
@@ -23,11 +24,8 @@ void markStatusCacheStale(std::mutex &cacheMutex, std::chrono::steady_clock::tim
 
 std::string hashForLog(const lt::info_hash_t &hash)
 {
-	if (hash.has_v1())
-		return hash.v1.to_string();
-	if (hash.has_v2())
-		return hash.v2.to_string();
-	return "unknown";
+	const auto id = Utils::TorrentIdentity::id(hash);
+	return id.empty() ? "unknown" : id;
 }
 
 Result validateAddPaths(std::string &savePath, const std::string *torrentPath = nullptr)
@@ -432,6 +430,7 @@ void TorrentManager::refreshStatusCache()
 {
 	auto newCache = std::make_shared<std::unordered_map<lt::info_hash_t, lt::torrent_status>>();
 	const auto torrentsSnapshot = getTorrentSnapshot();
+	bool complete = true;
 
 	// Refresh all torrent statuses
 	for (const auto &torrent : torrentsSnapshot)
@@ -444,6 +443,7 @@ void TorrentManager::refreshStatusCache()
 			}
 			catch (const std::exception &e)
 			{
+				complete = false;
 				Utils::Logger::warning("torrent", "Status refresh skipped a torrent: " + std::string(e.what()));
 			}
 		}
@@ -451,9 +451,27 @@ void TorrentManager::refreshStatusCache()
 
 	{
 		std::lock_guard<std::mutex> lock(cacheMutex);
+		// Keep the last known status for a torrent when libtorrent temporarily
+		// refuses to return a status. Replacing the whole cache with a partial
+		// snapshot makes existing selections disappear from the UI during a
+		// transient refresh failure.
+		if (!complete && statusCache)
+		{
+			for (const auto &torrent : torrentsSnapshot)
+			{
+				if (newCache->find(torrent.hash) != newCache->end())
+					continue;
+				const auto previous = statusCache->find(torrent.hash);
+				if (previous != statusCache->end())
+					(*newCache)[torrent.hash] = previous->second;
+			}
+		}
 		statusCache = std::move(newCache);
 		++statusRevision;
-		lastCacheRefresh = std::chrono::steady_clock::now();
+		// A partial refresh remains stale so the next UI refresh retries it
+		// immediately instead of waiting for the normal interval.
+		lastCacheRefresh = complete ? std::chrono::steady_clock::now()
+			: std::chrono::steady_clock::time_point{};
 	}
 }
 
