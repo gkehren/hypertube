@@ -1,0 +1,37 @@
+name: Renderer Benchmarks
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * *'
+
+concurrency:
+  group: hypertube-benchmarks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libtorrent-rasterbar-dev libcurl4-openssl-dev libfontconfig1-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libx11-dev libxi-dev libxrandr-dev libxinerama-dev libxcursor-dev libgl1-mesa-dev nlohmann-json3-dev ninja-build xvfb
+
+    - name: Configure CMake
+      run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DHYPERTUBE_ENABLE_SLINT_GPU_BENCHMARK=ON
+
+    - name: Build
+      run: cmake --build build --target slint-renderer-comparison --parallel 2
+
+    - name: Compare Slint renderers
+      run: xvfb-run -a cmake --build build --target slint-renderer-comparison -j2
+
+    - name: Upload renderer benchmark reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: slint-renderer-reports
+        path: build/renderer-reports/*.json
