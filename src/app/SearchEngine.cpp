@@ -170,6 +170,7 @@ SearchEngine::SearchEngine()
 	  searching(false),
 	  cancelRequested(false)
 {
+	workerThread_ = std::thread(&SearchEngine::workerLoop, this);
 }
 
 SearchEngine::~SearchEngine()
@@ -181,14 +182,80 @@ void SearchEngine::shutdown()
 {
 	shuttingDown = true;
 	cancelRequested = true;
-	std::thread threadToJoin;
 	{
-		std::lock_guard<std::mutex> lock(threadMutex);
-		threadToJoin = std::move(searchThread);
+		std::lock_guard<std::mutex> lock(queueMutex_);
+		stopWorker_ = true;
 	}
-	if (threadToJoin.joinable())
+	queueCv_.notify_all();
+	if (workerThread_.joinable())
 	{
-		threadToJoin.join();
+		workerThread_.join();
+	}
+	cleanupCurlHandle();
+}
+
+void SearchEngine::cleanupCurlHandle()
+{
+	std::lock_guard<std::mutex> lock(curlMutex_);
+	if (curlHandle_)
+	{
+		curl_easy_cleanup(static_cast<CURL *>(curlHandle_));
+		curlHandle_ = nullptr;
+	}
+}
+
+void SearchEngine::workerLoop()
+{
+	while (true)
+	{
+		SearchTask task;
+		{
+			std::unique_lock<std::mutex> lock(queueMutex_);
+			queueCv_.wait(lock, [this] { return stopWorker_ || hasWork_; });
+			if (!hasWork_ && stopWorker_)
+				break;
+			task = std::move(pendingTask_);
+			hasWork_ = false;
+		}
+
+		SearchResponse response;
+		Result result = Result::Failure("Unknown error");
+
+		try
+		{
+			if (cancelRequested.load())
+			{
+				result = Result::Failure("Search cancelled", ResultCode::Cancelled);
+			}
+			else
+			{
+				Result httpResult = performSearch(task.query, response);
+				if (cancelRequested.load())
+					result = Result::Failure("Search cancelled", ResultCode::Cancelled);
+				else
+				{
+					result = httpResult;
+					if (result)
+						addToSearchHistory(task.query.query);
+				}
+			}
+		}
+		catch (const std::exception &e)
+		{
+			result = Result::Failure("Search failed: " + std::string(e.what()));
+			Utils::Logger::error("search", result.message);
+		}
+		catch (...)
+		{
+			result = Result::Failure("Search failed with an unknown error");
+			Utils::Logger::error("search", result.message);
+		}
+
+		{
+			std::lock_guard<std::mutex> lock(completionMutex);
+			completedSearch = CompletedSearch{task.requestId, std::move(result), std::move(response)};
+		}
+		finishSearch();
 	}
 }
 
@@ -411,10 +478,19 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 		configuredProxyPassword = proxyPassword;
 	}
 	retries = std::max(retries, 1);
-	CURL *curl = curl_easy_init();
+
+	std::lock_guard<std::mutex> lock(curlMutex_);
+	CURL *curl = static_cast<CURL *>(curlHandle_);
 	if (!curl)
 	{
-		return Result::Failure("Failed to initialize cURL");
+		curl = curl_easy_init();
+		if (!curl)
+			return Result::Failure("Failed to initialize cURL");
+		curlHandle_ = curl;
+	}
+	else
+	{
+		curl_easy_reset(curl);
 	}
 
 	CURLcode res = CURLE_OK;
@@ -458,7 +534,6 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 		// Check if operation was cancelled
 		if (res == CURLE_ABORTED_BY_CALLBACK)
 		{
-			curl_easy_cleanup(curl);
 			return Result::Failure("Search cancelled by user", ResultCode::Cancelled);
 		}
 
@@ -468,18 +543,15 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 
 			if (lastResponseCode == 200)
 			{
-				curl_easy_cleanup(curl);
 				return Result::Success();
 			}
 			if (lastResponseCode == 401 || lastResponseCode == 403)
 			{
-				curl_easy_cleanup(curl);
 				return Result::Failure("HTTP Error: " + std::to_string(lastResponseCode), ResultCode::Unauthorized);
 			}
 			const bool transientHttpError = lastResponseCode == 429 || lastResponseCode >= 500;
 			if (!transientHttpError || attempt == retries - 1)
 			{
-				curl_easy_cleanup(curl);
 				if (lastResponseCode == 429)
 					return Result::Failure("HTTP Error: 429", ResultCode::RateLimited, true);
 				return Result::Failure("HTTP Error: " + std::to_string(lastResponseCode), ResultCode::Network, transientHttpError);
@@ -495,7 +567,6 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 			{
 				if (cancelRequested.load())
 				{
-					curl_easy_cleanup(curl);
 					return Result::Failure("Search cancelled by user", ResultCode::Cancelled);
 				}
 				std::this_thread::sleep_for(std::chrono::milliseconds(25));
@@ -506,7 +577,6 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 	std::string error_msg = lastResponseCode != 0
 		? "HTTP Error: " + std::to_string(lastResponseCode)
 		: "cURL Error: " + std::string(curl_easy_strerror(res));
-	curl_easy_cleanup(curl);
 	return Result::Failure(error_msg, ResultCode::Network, true);
 }
 
@@ -1039,7 +1109,7 @@ void SearchEngine::cancelCurrentSearch()
 
 bool SearchEngine::tryStartSearch()
 {
-	std::lock_guard<std::mutex> lock(searchMutex);
+	std::lock_guard<std::mutex> lock(queueMutex_);
 	if (searching.load())
 		return false;
 	searching = true;
@@ -1061,70 +1131,13 @@ Result SearchEngine::startSearch(const SearchQuery &query, uint64_t &requestId)
 	if (!tryStartSearch())
 		return Result::Failure("Search already in progress", ResultCode::Busy);
 
-	std::thread previousThread;
-	{
-		std::lock_guard<std::mutex> lock(threadMutex);
-		previousThread = std::move(searchThread);
-	}
-	if (previousThread.joinable())
-		previousThread.join();
-
 	requestId = nextRequestId.fetch_add(1);
-	const uint64_t workerRequestId = requestId;
-	std::thread worker;
-	try
 	{
-		worker = std::thread([this, query, workerRequestId]()
-	{
-		SearchResponse response;
-		Result result = Result::Failure("Unknown error");
-
-		try
-		{
-			if (cancelRequested.load())
-			{
-				result = Result::Failure("Search cancelled", ResultCode::Cancelled);
-			}
-			else
-			{
-				Result httpResult = performSearch(query, response);
-				if (cancelRequested.load())
-					result = Result::Failure("Search cancelled", ResultCode::Cancelled);
-				else
-				{
-					result = httpResult;
-					if (result)
-						addToSearchHistory(query.query);
-				}
-			}
-		}
-		catch (const std::exception &e)
-		{
-			result = Result::Failure("Search failed: " + std::string(e.what()));
-			Utils::Logger::error("search", result.message);
-		}
-		catch (...)
-		{
-			result = Result::Failure("Search failed with an unknown error");
-			Utils::Logger::error("search", result.message);
-		}
-
-		{
-			std::lock_guard<std::mutex> lock(completionMutex);
-			completedSearch = CompletedSearch{workerRequestId, std::move(result), std::move(response)};
-		}
-		finishSearch();
-	});
+		std::lock_guard<std::mutex> lock(queueMutex_);
+		pendingTask_ = SearchTask{query, requestId};
+		hasWork_ = true;
 	}
-	catch (const std::exception &e)
-	{
-		finishSearch();
-		return Result::Failure("Failed to start search worker: " + std::string(e.what()), ResultCode::Internal);
-	}
-	{
-		std::lock_guard<std::mutex> lock(threadMutex);
-		searchThread = std::move(worker);
-	}
+	queueCv_.notify_one();
 	return Result::Success();
 }
 
