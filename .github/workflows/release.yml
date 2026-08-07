@@ -1,0 +1,120 @@
+name: Release Automation
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: hypertube-release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build Release Artifact (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: hypertube-linux-x64.zip
+            sha_name: hypertube-linux-x64.zip.sha256
+          - os: macos-latest
+            artifact_name: hypertube-macos-x64.zip
+            sha_name: hypertube-macos-x64.zip.sha256
+          - os: windows-latest
+            artifact_name: hypertube-windows-x64.zip
+            sha_name: hypertube-windows-x64.zip.sha256
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Linux dependencies
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libtorrent-rasterbar-dev libcurl4-openssl-dev libfontconfig1-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libx11-dev libxi-dev libxrandr-dev libxinerama-dev libxcursor-dev libgl1-mesa-dev nlohmann-json3-dev ninja-build
+
+    - name: Install macOS dependencies
+      if: runner.os == 'macOS'
+      run: brew install boost libtorrent-rasterbar curl nlohmann-json ninja pkg-config
+
+    - name: Install Windows dependencies
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: vcpkg install libtorrent curl nlohmann-json --triplet x64-windows
+
+    - name: Configure CMake (Linux/macOS)
+      if: runner.os != 'Windows'
+      run: cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release -DHYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS=OFF
+
+    - name: Configure CMake (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DHYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS=OFF -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+    - name: Build Release
+      run: cmake --build build-release --config Release --parallel 2
+
+    - name: Run Tests
+      run: ctest --test-dir build-release -C Release --output-on-failure
+
+    - name: Package with CPack
+      run: cpack --config build-release/CPackConfig.cmake -G ZIP
+
+    - name: Rename and Hash (POSIX)
+      if: runner.os != 'Windows'
+      run: |
+        cp build-release/Hypertube-*.zip ${{ matrix.artifact_name }}
+        sha256sum ${{ matrix.artifact_name }} > ${{ matrix.sha_name }}
+
+    - name: Rename and Hash (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $pkg = Get-ChildItem -Path build-release -Filter "Hypertube-*.zip" | Select-Object -First 1
+        Copy-Item $pkg.FullName -Destination "${{ matrix.artifact_name }}"
+        $hash = (Get-FileHash -Path "${{ matrix.artifact_name }}" -Algorithm SHA256).Hash.ToLower()
+        "$hash  ${{ matrix.artifact_name }}" | Out-File -FilePath "${{ matrix.sha_name }}" -Encoding ascii
+
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-${{ matrix.os }}
+        path: |
+          ${{ matrix.artifact_name }}
+          ${{ matrix.sha_name }}
+
+  publish-release:
+    name: Publish Release and Checksums
+    needs: build-release
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: dist-artifacts
+
+    - name: Combine checksums and prepare release files
+      run: |
+        mkdir release-files
+        find dist-artifacts -type f \( -name "*.zip" -o -name "*.sha256" \) -exec cp {} release-files/ \;
+        cd release-files
+        cat *.sha256 > SHA256SUMS.txt
+        cat SHA256SUMS.txt
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          release-files/*.zip
+          release-files/SHA256SUMS.txt
+        draft: false
+        prerelease: false
+        generate_release_notes: true

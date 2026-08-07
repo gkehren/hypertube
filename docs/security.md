@@ -55,6 +55,6 @@ Stored secrets are scoped to the `Hypertube` service and separate account names.
 - BitTorrent traffic and downloaded content are not made anonymous by Hypertube.
 - A proxy improves routing control but does not by itself guarantee anonymity or prevent all metadata leakage.
 - A valid HTTPS connection does not make third-party torrent metadata trustworthy.
-- The current release workflow does not yet provide automated artifact signing or checksums.
+- Automated multiplatform releases generate and publish cryptographic SHA256 checksums (`SHA256SUMS.txt`) for all release archives.
 
 Security fixes must include a regression test or a reproducible validation case and must update this document when the protection or limitation changes.

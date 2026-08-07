@@ -5,11 +5,11 @@ from automation that is still planned.
 
 ## Current release facts
 
-- The project version used by CPack is currently `0.1.0` in `CMakeLists.txt`.
-- The configured package generator is ZIP.
-- The installable runtime component contains `hypertube`, its required runtime
-  libraries, and the seed `config/` directory.
-- There is currently no repository release publication workflow.
+- The project version used by CPack is configured in `CMakeLists.txt`.
+- The configured package generator is ZIP across Linux, macOS, and Windows.
+- The installable runtime component contains `hypertube`, its required runtime libraries, and the seed `config/` directory.
+- Automated multiplatform releases are published via GitHub Actions (`.github/workflows/release.yml`) on tag pushes matching `v*` or manual dispatch.
+- Every release publishes SHA256 checksums (`SHA256SUMS.txt`) alongside cross-platform release archives.
 
 ## Licensing and notices
 
