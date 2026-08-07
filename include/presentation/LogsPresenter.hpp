@@ -2,7 +2,6 @@
 
 #include "Logger.hpp"
 #include "presentation/UiDtos.hpp"
-#include <libtorrent/alert.hpp>
 
 #include <cstddef>
 #include <string>
@@ -33,7 +32,6 @@ private:
 	bool showWarnings_ = true;
 	bool showErrors_ = true;
 
-	void processAlert(lt::alert *alert);
 	void addLogEntry(const std::string &category, const std::string &message, Utils::LogLevel level);
 };
 } // namespace Presentation

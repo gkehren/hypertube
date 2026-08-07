@@ -187,7 +187,6 @@ public:
 
 	// Event draining methods (replaces raw pollAlerts)
 	std::vector<TorrentEvent> drainEvents();
-	std::vector<lt::alert *> pollAlerts();
 
 private:
 	lt::session session;

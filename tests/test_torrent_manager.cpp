@@ -208,3 +208,31 @@ TEST_F(TorrentManagerTest, PublishesAStableStatusRevisionBetweenRefreshes)
 	std::this_thread::sleep_for(std::chrono::milliseconds(50));
 	EXPECT_EQ(manager.getStatusRevision(), refreshed);
 }
+
+TEST_F(TorrentManagerTest, EventDrainingDoesNotInterfereWithPersistenceAlerts)
+{
+	TorrentManager manager;
+	const auto torrentPath = writeTorrentFile();
+	const auto downloadPath = testDirectory / "downloads";
+	ASSERT_TRUE(manager.addTorrent(torrentPath.string(), downloadPath.string()));
+
+	std::atomic<bool> stopDrain{false};
+	std::thread drainWorker([&manager, &stopDrain] {
+		while (!stopDrain.load())
+		{
+			auto events = manager.drainEvents();
+			(void)events;
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+	});
+
+	std::vector<ManagedTorrent> snapshot;
+	Result persistenceResult = manager.getPersistenceSnapshot(snapshot, std::chrono::seconds(2));
+	stopDrain.store(true);
+	if (drainWorker.joinable())
+		drainWorker.join();
+
+	ASSERT_TRUE(persistenceResult);
+	ASSERT_EQ(snapshot.size(), 1u);
+	EXPECT_FALSE(snapshot.front().resumeData.empty());
+}
