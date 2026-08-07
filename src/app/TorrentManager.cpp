@@ -459,6 +459,35 @@ Result TorrentManager::getPersistenceSnapshot(std::vector<ManagedTorrent> &snaps
 	return Result::Success();
 }
 
+PersistedTorrent TorrentManager::toPersistedTorrent(const ManagedTorrent &torrent) const
+{
+	PersistedTorrent pt;
+	pt.torrentFilePath = torrent.torrentFilePath;
+	pt.resumeData = torrent.resumeData;
+	if (torrent.handle.is_valid())
+	{
+		try
+		{
+			pt.magnetUri = lt::make_magnet_uri(torrent.handle);
+			lt::torrent_status status = torrent.handle.status(lt::torrent_handle::query_save_path | lt::torrent_handle::query_name);
+			pt.savePath = status.save_path;
+		}
+		catch (const std::exception &) {}
+	}
+	return pt;
+}
+
+std::vector<PersistedTorrent> TorrentManager::toPersistedTorrents(const std::vector<ManagedTorrent> &torrents) const
+{
+	std::vector<PersistedTorrent> result;
+	result.reserve(torrents.size());
+	for (const auto &torrent : torrents)
+	{
+		result.push_back(toPersistedTorrent(torrent));
+	}
+	return result;
+}
+
 Result TorrentManager::requestPersistenceSnapshot()
 {
 	std::lock_guard<std::mutex> lock(asyncPersistenceMutex_);
@@ -475,7 +504,7 @@ Result TorrentManager::requestPersistenceSnapshot()
 		PersistenceSnapshotResult result;
 		result.success = static_cast<bool>(res);
 		if (result.success)
-			result.torrents = std::move(snapshot);
+			result.torrents = toPersistedTorrents(snapshot);
 		else
 			result.errorMessage = res.message;
 		return result;

@@ -518,3 +518,27 @@ TEST_F(ConfigManagerTest, ConcurrentUpdatesRemainValidJson)
 	EXPECT_NO_THROW(std::ifstream(configPath) >> saved);
 	EXPECT_TRUE(saved.contains("settings"));
 }
+
+TEST_F(ConfigManagerTest, PersistedTorrentSerialization)
+{
+	ConfigManager manager;
+	const std::string torrentPath = (testDir / "torrents.json").string();
+
+	PersistedTorrent torrent1{
+		"magnet:?xt=urn:btih:1234567890abcdef1234567890abcdef12345678",
+		"/tmp/downloads",
+		"/tmp/fixture.torrent",
+		{'a', 'b', 'c', 'd'}
+	};
+
+	manager.saveTorrents({torrent1});
+	manager.waitForAsyncOperations();
+
+	std::vector<TorrentConfigData> loaded;
+	ASSERT_TRUE(manager.loadTorrents(torrentPath, loaded));
+	ASSERT_EQ(loaded.size(), 1u);
+	EXPECT_EQ(loaded[0].magnetUri, torrent1.magnetUri);
+	EXPECT_EQ(loaded[0].savePath, torrent1.savePath);
+	EXPECT_EQ(loaded[0].torrentFilePath, torrent1.torrentFilePath);
+	EXPECT_EQ(loaded[0].resumeData, torrent1.resumeData);
+}

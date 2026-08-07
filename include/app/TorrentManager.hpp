@@ -21,6 +21,7 @@
 #include <deque>
 #include <array>
 
+#include "PersistedTorrent.hpp"
 #include "Logger.hpp"
 #include <future>
 
@@ -58,7 +59,7 @@ struct ManagedTorrent
 struct PersistenceSnapshotResult
 {
 	bool success = false;
-	std::vector<ManagedTorrent> torrents;
+	std::vector<PersistedTorrent> torrents;
 	std::string errorMessage;
 };
 
@@ -151,6 +152,8 @@ public:
 	std::vector<ManagedTorrent> getTorrentSnapshot() const;
 	std::uint64_t getTorrentCollectionRevision() const { return torrentCollectionRevision.load(); }
 	Result getPersistenceSnapshot(std::vector<ManagedTorrent> &snapshot, std::chrono::milliseconds timeout = std::chrono::seconds(5));
+	PersistedTorrent toPersistedTorrent(const ManagedTorrent &torrent) const;
+	std::vector<PersistedTorrent> toPersistedTorrents(const std::vector<ManagedTorrent> &torrents) const;
 
 	// Speed limit methods
 	void setDownloadSpeedLimit(int bytesPerSecond); // 0 means unlimited

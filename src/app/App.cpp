@@ -96,7 +96,7 @@ void App::shutdown()
 	Result resumeResult = torrentManager_.getPersistenceSnapshot(persistenceSnapshot);
 	if (!resumeResult)
 		Utils::Logger::warning("torrent", resumeResult.message);
-	torrentsConfigManager_.saveTorrents(persistenceSnapshot);
+	torrentsConfigManager_.saveTorrents(torrentManager_.toPersistedTorrents(persistenceSnapshot));
 
 	// Save favorites and search history
 	searchEngine_.saveFavoritesAndHistory(settingsConfigManager_);

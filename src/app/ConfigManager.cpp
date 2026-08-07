@@ -444,7 +444,7 @@ Result ConfigManager::commitPreferences(const PreferencesSettings &settings)
 	return Result::Success();
 }
 
-void ConfigManager::saveTorrents(const std::vector<ManagedTorrent> &torrents)
+void ConfigManager::saveTorrents(const std::vector<PersistedTorrent> &torrents)
 {
 	json torrentsJson;
 	std::unordered_map<std::string, std::string> previousResumeData;
@@ -461,21 +461,15 @@ void ConfigManager::saveTorrents(const std::vector<ManagedTorrent> &torrents)
 	}
 	for (const auto &torrent : torrents)
 	{
-		const auto &hash = torrent.hash;
-		const auto &handle = torrent.handle;
-		lt::torrent_status status = handle.status(lt::torrent_handle::query_save_path | lt::torrent_handle::query_name);
-		std::string magnetUri = lt::make_magnet_uri(handle);
-		std::string savePath = status.save_path;
-
 		json torrentEntry = {
-			{"magnet_uri", magnetUri},
-			{"save_path", savePath}};
+			{"magnet_uri", torrent.magnetUri},
+			{"save_path", torrent.savePath}};
 
 		if (!torrent.torrentFilePath.empty())
 			torrentEntry["torrent_path"] = torrent.torrentFilePath;
 		if (!torrent.resumeData.empty())
 			torrentEntry["resume_data"] = encodeHex(torrent.resumeData);
-		else if (auto previous = previousResumeData.find(magnetUri); previous != previousResumeData.end())
+		else if (auto previous = previousResumeData.find(torrent.magnetUri); previous != previousResumeData.end())
 			torrentEntry["resume_data"] = previous->second;
 
 		torrentsJson.push_back(torrentEntry);
