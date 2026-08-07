@@ -153,10 +153,15 @@ std::vector<SearchResultDto> SearchPresenter::buildResultRows(bool favorites)
 		favoritesRevision_ = searchEngine.getFavoritesRevision();
 	}
 	const auto &source = favorites ? favorites_ : results_;
+	const auto favoriteHashes = favorites ? std::unordered_set<std::string>{} : searchEngine.getFavoriteHashesSet();
+
 	std::vector<SearchResultDto> rows;
 	rows.reserve(source.size());
 	for (const auto &result : source)
-		rows.push_back(toDto(result, favorites || searchEngine.isFavorite(result.infoHash)));
+	{
+		const bool isFav = favorites || (favoriteHashes.find(result.infoHash) != favoriteHashes.end());
+		rows.push_back(toDto(result, isFav));
+	}
 	return rows;
 }
 

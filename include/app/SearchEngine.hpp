@@ -100,6 +100,7 @@ public:
 	std::vector<TorrentSearchResult> getFavorites() const;
 	uint64_t getFavoritesRevision() const { return favoritesRevision; }
 	bool isFavorite(const std::string &infoHash) const;
+	std::unordered_set<std::string> getFavoriteHashesSet() const;
 
 	// Persistence
 	void saveFavoritesAndHistory(class ConfigManager &configManager);

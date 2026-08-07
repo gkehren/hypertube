@@ -17,9 +17,15 @@
 extern char **environ;
 #endif
 
+#include <unordered_map>
+#include <mutex>
+#include <thread>
+
 namespace
 {
 constexpr const char *serviceName = "Hypertube";
+std::unordered_map<std::string, Utils::CredentialStore::CredentialStatus> g_statusCache;
+std::mutex g_cacheMutex;
 }
 
 namespace Utils::CredentialStore
@@ -265,14 +271,41 @@ CredentialLoadResult load(const std::string &account)
 	while (!secret.empty() && (secret.back() == '\n' || secret.back() == '\r'))
 		secret.pop_back();
 
-	return secret.empty() ? CredentialLoadResult{CredentialStatus::Missing, ""}
-						  : CredentialLoadResult{CredentialStatus::Stored, std::move(secret)};
+	const CredentialLoadResult finalResult = secret.empty() ? CredentialLoadResult{CredentialStatus::Missing, ""}
+														  : CredentialLoadResult{CredentialStatus::Stored, std::move(secret)};
+	{
+		std::lock_guard<std::mutex> lock(g_cacheMutex);
+		g_statusCache[account] = finalResult.status;
+	}
+	return finalResult;
 #endif
+}
+
+CredentialStatus cachedStatus(const std::string &account)
+{
+	std::lock_guard<std::mutex> lock(g_cacheMutex);
+	auto it = g_statusCache.find(account);
+	if (it != g_statusCache.end())
+		return it->second;
+	return CredentialStatus::Missing;
 }
 
 bool hasStoredCredential(const std::string &account)
 {
-	return load(account).status == CredentialStatus::Stored;
+	return cachedStatus(account) == CredentialStatus::Stored;
+}
+
+void asyncRefreshStatus(const std::vector<std::string> &accounts, std::function<void()> onComplete)
+{
+	std::thread worker([accounts, onComplete = std::move(onComplete)]() {
+		for (const auto &account : accounts)
+		{
+			load(account);
+		}
+		if (onComplete)
+			onComplete();
+	});
+	worker.detach();
 }
 
 }

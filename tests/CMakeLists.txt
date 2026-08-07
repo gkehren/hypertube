@@ -87,6 +87,7 @@ target_link_libraries(slint_model_tests
 
 if(TARGET PkgConfig::HYPERTUBE_FONTCONFIG)
     target_link_libraries(slint_model_tests PRIVATE PkgConfig::HYPERTUBE_FONTCONFIG)
+    target_link_libraries(slint_controller_tests PRIVATE PkgConfig::HYPERTUBE_FONTCONFIG)
 endif()
 
 add_dependencies(slint_model_tests hypertube)
@@ -175,5 +176,5 @@ gtest_discover_tests(unit_tests)
 gtest_discover_tests(config_tests)
 gtest_discover_tests(search_tests)
 gtest_discover_tests(torrent_tests)
-gtest_discover_tests(slint_model_tests)
-gtest_discover_tests(slint_controller_tests)
+gtest_discover_tests(slint_model_tests DISCOVERY_TIMEOUT 30)
+gtest_discover_tests(slint_controller_tests DISCOVERY_TIMEOUT 30)

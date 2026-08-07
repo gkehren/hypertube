@@ -438,3 +438,39 @@ TEST_F(SearchEngineTest, ValidatesPreferencesWithoutMutatingRuntimeState) {
 	EXPECT_FALSE(SearchEngine::validateProxyConfig(true, "http", "localhost", 70000).success);
 	EXPECT_TRUE(SearchEngine::validateProxyConfig(false, "socks5", "", 1080).success);
 }
+
+TEST_F(SearchEngineTest, TorznabXmlParsesCdataAndCustomNamespaces) {
+	const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+	<rss version="2.0" xmlns:t="http://torznab.com/schemas/2015/feed">
+	<channel>
+		<item>
+			<title><![CDATA[Ubuntu 24.04 LTS Desktop]]></title>
+			<guid>1111222233334444555566667777888899990000</guid>
+			<size>4294967296</size>
+			<category>Linux/OS</category>
+			<t:attr name="seeders" value="50"/>
+			<t:attr name="peers" value="10"/>
+			<t:attr name="infohash" value="1111222233334444555566667777888899990000"/>
+		</item>
+	</channel>
+	</rss>)";
+
+	SearchResponse response;
+	ASSERT_TRUE(parseTorznab(xml, response));
+	ASSERT_EQ(response.torrents.size(), 1u);
+	EXPECT_EQ(response.torrents[0].name, "Ubuntu 24.04 LTS Desktop");
+	EXPECT_EQ(response.torrents[0].infoHash, "1111222233334444555566667777888899990000");
+	EXPECT_EQ(response.torrents[0].seeders, 50);
+	EXPECT_EQ(response.torrents[0].leechers, 10);
+}
+
+TEST_F(SearchEngineTest, GetFavoriteHashesSetReturnsSnapshot) {
+	TorrentSearchResult t1;
+	t1.name = "Test Torrent 1";
+	t1.infoHash = "0000000000000000000000000000000000000001";
+	engine.addToFavorites(t1);
+
+	const auto favSet = engine.getFavoriteHashesSet();
+	EXPECT_EQ(favSet.size(), 1u);
+	EXPECT_EQ(favSet.count("0000000000000000000000000000000000000001"), 1u);
+}

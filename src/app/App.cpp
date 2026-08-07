@@ -7,15 +7,18 @@
 
 App::App() = default;
 
-void App::initialize()
+Result App::initialize()
 {
 	if (initialized_)
-		return;
+		return Result::Success();
 
 	Result dirResult = Utils::AppPaths::ensureDirectories();
 	Utils::Logger::initialize(Utils::AppPaths::logFilePath());
 	if (!dirResult)
+	{
 		Utils::Logger::error("app", "Failed to create application directories: " + dirResult.message);
+		return dirResult;
+	}
 	Utils::Logger::info("app", "Starting Hypertube");
 	initialized_ = true;
 
@@ -79,6 +82,7 @@ void App::initialize()
 
 	// Load favorites and search history
 	searchEngine_.loadFavoritesAndHistory(settingsConfigManager_);
+	return Result::Success();
 }
 
 App::~App()

@@ -71,3 +71,19 @@ TEST_F(LoggerTest, FormatAndExportDiagnostics)
 	std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 	EXPECT_EQ(content, formatted);
 }
+
+TEST_F(LoggerTest, RedactsSensitiveDataInDiagnosticsReport)
+{
+	const auto logPath = testDir / "redact.log";
+	Utils::Logger::initialize(logPath);
+	Utils::Logger::clearRecent();
+
+	Utils::Logger::info("network", "Request url https://indexer.local/api?api_key=secretkey12345&q=linux");
+	Utils::Logger::error("proxy", "Connect failed for user admin pass=supersecretpass123");
+
+	std::string report = Utils::Logger::formatDiagnostics();
+	EXPECT_EQ(report.find("secretkey12345"), std::string::npos);
+	EXPECT_EQ(report.find("supersecretpass123"), std::string::npos);
+	EXPECT_NE(report.find("api_key=[REDACTED]"), std::string::npos);
+	EXPECT_NE(report.find("pass=[REDACTED]"), std::string::npos);
+}

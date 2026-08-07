@@ -50,6 +50,7 @@ export component MainWindow inherits Window {
 	callback set-speed-limits(string, string);
 	callback set-sequential(bool);
 	callback clear-logs();
+	callback export-diagnostics();
 	callback change-theme(Theme);
 	callback toggle-sidebar();
 	callback browse-preference-directory();
@@ -287,6 +288,7 @@ export component MainWindow inherits Window {
 			rows: root.log-rows;
 			state-message: root.logs-state-message;
 			clear-logs => { root.clear-logs(); }
+			export-diagnostics => { root.export-diagnostics(); }
 			show-debug: root.log-show-debug;
 			show-info: root.log-show-info;
 			show-warning: root.log-show-warning;

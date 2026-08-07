@@ -1,7 +1,9 @@
 #pragma once
 
 #include "Result.hpp"
+#include <functional>
 #include <string>
+#include <vector>
 
 namespace Utils::CredentialStore
 {
@@ -25,4 +27,6 @@ namespace Utils::CredentialStore
 	Result erase(const std::string &account);
 	CredentialLoadResult load(const std::string &account);
 	bool hasStoredCredential(const std::string &account);
+	CredentialStatus cachedStatus(const std::string &account);
+	void asyncRefreshStatus(const std::vector<std::string> &accounts, std::function<void()> onComplete = {});
 }

@@ -13,6 +13,7 @@ export component LogsView inherits Rectangle {
 	in property <bool> auto-scroll: true;
 	in property <length> available-width: 1280px;
 	callback clear-logs();
+	callback export-diagnostics();
 	callback set-log-filter(LogLevel, bool);
 	callback toggle-autoscroll(bool);
 
@@ -35,6 +36,7 @@ export component LogsView inherits Rectangle {
 			Rectangle { height: 36px; width: 90px; border-width: root.show-warning ? 2px : 1px; border-color: root.show-warning ? ThemeTokens.accent : ThemeTokens.border; Button { text: "Warning"; clicked => { root.set-log-filter(LogLevel.warning, !root.show-warning); } } }
 			Rectangle { height: 36px; width: 70px; border-width: root.show-error ? 2px : 1px; border-color: root.show-error ? ThemeTokens.accent : ThemeTokens.border; Button { text: "Error"; clicked => { root.set-log-filter(LogLevel.error, !root.show-error); } } }
 			Button { text: root.auto-scroll ? "Autoscroll on" : "Autoscroll off"; clicked => { root.toggle-autoscroll(!root.auto-scroll); } }
+			Button { text: "Export Report"; clicked => { root.export-diagnostics(); } }
 			Button { text: "Clear"; clicked => { root.clear-logs(); } }
 		}
 		if (root.available-width < 720px): VerticalBox {
@@ -42,6 +44,7 @@ export component LogsView inherits Rectangle {
 				Text { text: "Diagnostics"; color: ThemeTokens.foreground; font-size: 24px; }
 				Rectangle { }
 				Button { text: root.auto-scroll ? "Autoscroll on" : "Autoscroll off"; clicked => { root.toggle-autoscroll(!root.auto-scroll); } }
+				Button { text: "Export Report"; clicked => { root.export-diagnostics(); } }
 				Button { text: "Clear"; clicked => { root.clear-logs(); } }
 			}
 			HorizontalBox {

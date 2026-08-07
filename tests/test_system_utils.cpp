@@ -77,6 +77,32 @@ TEST(AppPathsTest, StablePortableRootAndDirectoryCreation)
 	Utils::AppPaths::resetPortableCache();
 }
 
+TEST(AppPathsTest, PortableModeUsesExecutableDirectoryWhenCwdDiffers)
+{
+	Utils::AppPaths::resetPortableCache();
+	const auto tempExeDir = std::filesystem::temp_directory_path() / "hypertube_test_exedir";
+	const auto tempCwd = std::filesystem::temp_directory_path() / "hypertube_test_cwd";
+	std::filesystem::create_directories(tempExeDir);
+	std::filesystem::create_directories(tempCwd);
+
+	const auto marker = tempExeDir / "portable.mode";
+	std::ofstream(marker) << "";
+
+	Utils::AppPaths::setOverrideExecutableDirectory(tempExeDir);
+	const auto originalCwd = std::filesystem::current_path();
+	std::filesystem::current_path(tempCwd);
+
+	EXPECT_TRUE(Utils::AppPaths::isPortable());
+	EXPECT_EQ(Utils::AppPaths::configDirectory(), tempExeDir / "config");
+	EXPECT_EQ(Utils::AppPaths::dataDirectory(), tempExeDir / "data");
+
+	std::filesystem::current_path(originalCwd);
+	std::error_code ec;
+	std::filesystem::remove_all(tempExeDir, ec);
+	std::filesystem::remove_all(tempCwd, ec);
+	Utils::AppPaths::resetPortableCache();
+}
+
 TEST(AppPathsTest, EnsureDirectoriesReturnsSuccess)
 {
 	const auto res = Utils::AppPaths::ensureDirectories();

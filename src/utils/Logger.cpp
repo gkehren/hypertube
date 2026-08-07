@@ -50,6 +50,28 @@ std::string timestamp()
 	output << std::put_time(&localTime, "%Y-%m-%d %H:%M:%S");
 	return output.str();
 }
+std::string redactSensitiveData(const std::string &input)
+{
+	std::string text = input;
+	static const std::vector<std::string> keys = { "password=", "api_key=", "secret=", "token=", "apikey=", "pass=" };
+	for (const auto &key : keys)
+	{
+		std::size_t pos = 0;
+		while ((pos = text.find(key, pos)) != std::string::npos)
+		{
+			std::size_t valStart = pos + key.length();
+			std::size_t valEnd = text.find_first_of("& \r\n", valStart);
+			if (valEnd == std::string::npos)
+				valEnd = text.length();
+			if (valEnd > valStart)
+			{
+				text.replace(valStart, valEnd - valStart, "[REDACTED]");
+			}
+			pos = valStart + 10;
+		}
+	}
+	return text;
+}
 } // namespace
 
 namespace Utils
@@ -97,6 +119,7 @@ void Logger::rotateLogsIfNeededUnlocked()
 		auto newFile = g_logPath.string() + "." + std::to_string(i);
 		if (std::filesystem::exists(oldFile, error))
 		{
+			std::filesystem::remove(newFile, error);
 			std::filesystem::rename(oldFile, newFile, error);
 		}
 	}
@@ -104,6 +127,7 @@ void Logger::rotateLogsIfNeededUnlocked()
 	if (g_maxBackupFiles > 0)
 	{
 		auto firstBackup = g_logPath.string() + ".1";
+		std::filesystem::remove(firstBackup, error);
 		std::filesystem::rename(g_logPath, firstBackup, error);
 	}
 	else
@@ -206,7 +230,7 @@ std::string Logger::formatDiagnostics()
 #else
 		localtime_r(&time, &localTime);
 #endif
-		ss << std::put_time(&localTime, "%Y-%m-%d %H:%M:%S") << " [" << levelName(rec.level) << "] [" << rec.category << "] " << rec.message << "\n";
+		ss << std::put_time(&localTime, "%Y-%m-%d %H:%M:%S") << " [" << levelName(rec.level) << "] [" << rec.category << "] " << redactSensitiveData(rec.message) << "\n";
 	}
 	return ss.str();
 }

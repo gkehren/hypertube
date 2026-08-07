@@ -909,18 +909,22 @@ Result SearchEngine::parseTorznabResponse(const std::string &response, SearchRes
 
 		const std::string guidVal = item.child_value("guid");
 
-		for (const pugi::xml_node attr : item.children("torznab:attr"))
+		for (pugi::xml_node child = item.first_child(); child; child = child.next_sibling())
 		{
-			const std::string attrName = attr.attribute("name").as_string();
-			const std::string attrVal = attr.attribute("value").as_string();
-			if (attrName == "infohash")
-				result.infoHash = attrVal;
-			else if (attrName == "magneturl" && result.magnetUri.empty())
-				result.magnetUri = attrVal;
-			else if (attrName == "seeders")
-				result.seeders = static_cast<int>(std::min<long long>(parseNonNegative(attrVal), INT_MAX));
-			else if (attrName == "peers")
-				result.leechers = static_cast<int>(std::min<long long>(parseNonNegative(attrVal), INT_MAX));
+			std::string_view name(child.name());
+			if (name == "attr" || name.ends_with(":attr"))
+			{
+				const std::string attrName = child.attribute("name").as_string();
+				const std::string attrVal = child.attribute("value").as_string();
+				if (attrName == "infohash")
+					result.infoHash = attrVal;
+				else if (attrName == "magneturl" && result.magnetUri.empty())
+					result.magnetUri = attrVal;
+				else if (attrName == "seeders")
+					result.seeders = static_cast<int>(std::min<long long>(parseNonNegative(attrVal), INT_MAX));
+				else if (attrName == "peers")
+					result.leechers = static_cast<int>(std::min<long long>(parseNonNegative(attrVal), INT_MAX));
+			}
 		}
 
 		if (result.infoHash.empty() && !result.magnetUri.empty())
@@ -941,7 +945,7 @@ Result SearchEngine::parseTorznabResponse(const std::string &response, SearchRes
 		searchResponse.torrents.push_back(std::move(result));
 	}
 
-	const pugi::xml_node responseNode = doc.select_node("//torznab:response|//newznab:response").node();
+	const pugi::xml_node responseNode = doc.select_node("//*[local-name()='response']").node();
 	if (responseNode)
 	{
 		const long long offset = parseNonNegative(responseNode.attribute("offset").as_string());
@@ -1031,6 +1035,12 @@ bool SearchEngine::isFavorite(const std::string &infoHash) const
 {
 	std::lock_guard<std::mutex> lock(favoritesMutex);
 	return favoriteHashes.find(infoHash) != favoriteHashes.end();
+}
+
+std::unordered_set<std::string> SearchEngine::getFavoriteHashesSet() const
+{
+	std::lock_guard<std::mutex> lock(favoritesMutex);
+	return favoriteHashes;
 }
 
 void SearchEngine::saveFavoritesAndHistory(ConfigManager &configManager)
@@ -1143,17 +1153,18 @@ Result SearchEngine::startSearch(const SearchQuery &query, uint64_t &requestId)
 {
 	if (query.query.empty())
 		return Result::Failure("Search query cannot be empty", ResultCode::InvalidInput);
-	if (shuttingDown.load())
+
+	std::lock_guard<std::mutex> lock(queueMutex_);
+	if (shuttingDown.load() || stopWorker_)
 		return Result::Failure("Search service is shutting down", ResultCode::Unavailable);
-	if (!tryStartSearch())
+	if (searching.load())
 		return Result::Failure("Search already in progress", ResultCode::Busy);
 
+	searching = true;
+	cancelRequested = false;
 	requestId = nextRequestId.fetch_add(1);
-	{
-		std::lock_guard<std::mutex> lock(queueMutex_);
-		pendingTask_ = SearchTask{query, requestId};
-		hasWork_ = true;
-	}
+	pendingTask_ = SearchTask{query, requestId};
+	hasWork_ = true;
 	queueCv_.notify_one();
 	return Result::Success();
 }

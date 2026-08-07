@@ -111,6 +111,7 @@ void SlintAppController::bind()
 	});
 	window->on_set_sequential([this](bool enabled) { detailsUiController_->setSequential(enabled); });
 	window->on_clear_logs([this] { appShellController_->clearLogs(); });
+	window->on_export_diagnostics([this] { appShellController_->exportDiagnostics(); });
 	window->on_set_log_filter([this](LogLevel level, bool enabled) { appShellController_->setLogFilter(level, enabled); });
 	window->on_toggle_log_autoscroll([this](bool enabled) { appShellController_->setLogAutoscroll(enabled); });
 	window->on_change_theme([this](Theme theme) { preferencesUiController_->changeTheme(theme); });
@@ -204,6 +205,11 @@ void SlintAppController::start()
 	window->set_remove_dialog_open(false);
 	window->set_search_query(slint::SharedString());
 	started = true;
+	Utils::CredentialStore::asyncRefreshStatus({"torznab_api_key", "proxy_password"}, [this]() {
+		slint::invoke_from_event_loop([this]() {
+			refreshCredentialIndicators();
+		});
+	});
 	app.torrentManager().requestStatusRefresh();
 	searchRefreshCoordinator_->forceRefresh();
 	refresh();

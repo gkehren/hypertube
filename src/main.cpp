@@ -17,7 +17,13 @@ int main()
 	try
 	{
 		App app;
-		app.initialize();
+		Result initResult = app.initialize();
+		if (!initResult)
+		{
+			std::cerr << "Fatal initialization error: " << initResult.message << std::endl;
+			curl_global_cleanup();
+			return 1;
+		}
 		int controllerExitCode = 0;
 		{
 			auto window = MainWindow::create();
