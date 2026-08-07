@@ -30,13 +30,13 @@ void App::initialize()
 		settingsConfigManager_.getEnableDHT(),
 		settingsConfigManager_.getEnableUPnP(),
 		settingsConfigManager_.getEnableNATPMP());
-	const std::optional<std::string> storedProxyPassword = Utils::CredentialStore::load("proxy_password");
+	const auto proxyCred = Utils::CredentialStore::load("proxy_password");
 	const bool proxyEnabled = settingsConfigManager_.getProxyEnabled();
 	const std::string proxyType = settingsConfigManager_.getProxyType();
 	const std::string proxyHost = settingsConfigManager_.getProxyHost();
 	const int proxyPort = settingsConfigManager_.getProxyPort();
 	const std::string proxyUsername = settingsConfigManager_.getProxyUsername();
-	const std::string proxyPassword = storedProxyPassword.value_or("");
+	const std::string proxyPassword = proxyCred.secret;
 	torrentManager_.setProxyConfig(proxyHost, proxyPort, proxyUsername, proxyPassword,
 		proxyEnabled ? (proxyType == "http" ? 2 : 1) : 0);
 	Result searchProxyResult = searchEngine_.setProxyConfig(
@@ -45,9 +45,9 @@ void App::initialize()
 		Utils::Logger::warning("search", "Proxy configuration was ignored: " + searchProxyResult.message);
 	if (settingsConfigManager_.getTorznabEnabled())
 	{
-		std::optional<std::string> storedApiKey = Utils::CredentialStore::load("torznab_api_key");
+		const auto apiKeyCred = Utils::CredentialStore::load("torznab_api_key");
 		const char *environmentApiKey = std::getenv("HYPERTUBE_TORZNAB_API_KEY");
-		const std::string apiKey = storedApiKey.value_or(environmentApiKey ? environmentApiKey : "");
+		const std::string apiKey = apiKeyCred.hasSecret() ? apiKeyCred.secret : (environmentApiKey ? environmentApiKey : "");
 		Result providerResult = searchEngine_.configureTorznabProvider(
 			settingsConfigManager_.getTorznabUrl(), apiKey);
 		if (providerResult)

@@ -43,9 +43,10 @@ Atomic persistence protects against interruption, process crashes, and partial w
 
 ## Credential stores
 
-- Windows uses Credential Manager generic credentials.
-- macOS uses Keychain generic passwords.
-- Linux invokes `secret-tool` directly without a shell and sends secrets over standard input. An unlocked Secret Service-compatible keyring is required.
+- Windows uses Credential Manager generic credentials (`CredReadA`, `CredWriteA`, `CredDeleteA`).
+- macOS uses Keychain Services (`SecItemCopyMatching`, `SecItemAdd`, `SecItemUpdate`, `SecItemDelete`).
+- Linux invokes `secret-tool` via direct binary execution (`posix_spawnp`) without a shell and sends secrets over standard input. An unlocked Secret Service-compatible keyring is required.
+- Access operations report typed status (`Stored`, `Missing`, `Unavailable`, `PermissionDenied`) and run off the UI event loop thread.
 
 Stored secrets are scoped to the `Hypertube` service and separate account names. They are not included in portable bundles or configuration backups.
 

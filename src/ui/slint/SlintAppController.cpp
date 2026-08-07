@@ -188,14 +188,14 @@ void SlintAppController::start()
 	window->set_preference_enable_natpmp(currentPreferences.enableNatPmp);
 	window->set_preference_torznab_enabled(currentPreferences.torznabEnabled);
 	window->set_preference_torznab_url(SlintUi::toSharedString(currentPreferences.torznabUrl));
-	window->set_preference_torznab_secret_stored(Utils::CredentialStore::load("torznab_api_key").has_value());
+	window->set_preference_torznab_secret_stored(Utils::CredentialStore::hasStoredCredential("torznab_api_key"));
 	window->set_preference_torznab_secret(slint::SharedString());
 	window->set_preference_proxy_enabled(currentPreferences.proxyEnabled);
 	window->set_preference_proxy_type(SlintUi::toSharedString(currentPreferences.proxyType));
 	window->set_preference_proxy_host(SlintUi::toSharedString(currentPreferences.proxyHost));
 	window->set_preference_proxy_port(SlintUi::toSharedString(std::to_string(currentPreferences.proxyPort)));
 	window->set_preference_proxy_username(SlintUi::toSharedString(currentPreferences.proxyUsername));
-	window->set_preference_proxy_secret_stored(Utils::CredentialStore::load("proxy_password").has_value());
+	window->set_preference_proxy_secret_stored(Utils::CredentialStore::hasStoredCredential("proxy_password"));
 	window->set_preference_proxy_secret(slint::SharedString());
 	window->set_preference_clear_torznab_secret(false);
 	window->set_preference_clear_proxy_secret(false);
@@ -275,9 +275,9 @@ void SlintAppController::refresh()
 void SlintAppController::refreshCredentialIndicators()
 {
 	window->set_preference_torznab_secret_stored(
-		Utils::CredentialStore::load("torznab_api_key").has_value());
+		Utils::CredentialStore::hasStoredCredential("torznab_api_key"));
 	window->set_preference_proxy_secret_stored(
-		Utils::CredentialStore::load("proxy_password").has_value());
+		Utils::CredentialStore::hasStoredCredential("proxy_password"));
 }
 
 void SlintAppController::autosave()

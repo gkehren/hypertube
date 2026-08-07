@@ -69,8 +69,10 @@ Result PreferencesController::beginSave(const PreferencesSettings &settings,
 	}
 
 	previousPreferences_ = configManager.getPreferencesSettings();
-	previousTorznabCredential_ = credentialStore.load("torznab_api_key");
-	previousProxyCredential_ = credentialStore.load("proxy_password");
+	const auto torznabLoad = credentialStore.load("torznab_api_key");
+	previousTorznabCredential_ = torznabLoad.hasSecret() ? std::optional<std::string>(torznabLoad.secret) : std::nullopt;
+	const auto proxyLoad = credentialStore.load("proxy_password");
+	previousProxyCredential_ = proxyLoad.hasSecret() ? std::optional<std::string>(proxyLoad.secret) : std::nullopt;
 	torznabCredentialChanged_ = false;
 	proxyCredentialChanged_ = false;
 
@@ -243,7 +245,7 @@ Result PreferencesController::applyRuntime(const PreferencesSettings &settings)
 	torrentManager.setUploadSpeedLimit(settings.uploadSpeedLimit);
 	torrentManager.configureDiscovery(settings.enableDht, settings.enableUpnp, settings.enableNatPmp);
 
-	const std::string proxyPassword = credentialStore.load("proxy_password").value_or("");
+	const std::string proxyPassword = credentialStore.load("proxy_password").secret;
 	torrentManager.setProxyConfig(settings.proxyHost, settings.proxyPort, settings.proxyUsername, proxyPassword,
 		settings.proxyEnabled ? (settings.proxyType == "http" ? 2 : 1) : 0);
 	const Result searchProxy = searchEngine.setProxyConfig(settings.proxyEnabled, settings.proxyType,
@@ -253,7 +255,7 @@ Result PreferencesController::applyRuntime(const PreferencesSettings &settings)
 
 	if (settings.torznabEnabled)
 	{
-		const std::string apiKey = credentialStore.load("torznab_api_key").value_or("");
+		const std::string apiKey = credentialStore.load("torznab_api_key").secret;
 		const Result provider = searchEngine.configureTorznabProvider(settings.torznabUrl, apiKey);
 		if (!provider)
 			return provider;

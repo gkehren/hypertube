@@ -11,6 +11,8 @@
 class TorrentManager;
 class SearchEngine;
 
+#include "CredentialStore.hpp"
+
 namespace Presentation
 {
 class PreferencesController
@@ -21,7 +23,7 @@ public:
 	{
 		std::function<Result(const std::string &, const std::string &)> store;
 		std::function<Result(const std::string &)> erase;
-		std::function<std::optional<std::string>(const std::string &)> load;
+		std::function<Utils::CredentialStore::CredentialLoadResult(const std::string &)> load;
 	};
 	enum class SaveKind
 	{
