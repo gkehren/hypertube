@@ -201,17 +201,18 @@ private:
 	// Alert pump & persistence synchronization
 	mutable std::mutex alertMutex_;
 	std::condition_variable alertCv_;
-	std::thread alertWorker_;
 	std::atomic<bool> stopAlertWorker_{false};
 	std::vector<TorrentEvent> eventsQueue_;
 	std::unordered_map<lt::info_hash_t, std::vector<char>> resumeDataStore_;
 	std::unordered_set<lt::info_hash_t> pendingResumeHashes_;
+	std::thread alertWorker_;
 	void alertWorkerLoop();
 
 	// Async persistence task
 	mutable std::mutex asyncPersistenceMutex_;
 	std::future<PersistenceSnapshotResult> asyncPersistenceFuture_;
 	bool asyncPersistencePending_{false};
+	std::atomic<bool> shuttingDown_{false};
 
 	// Status cache
 	mutable std::mutex cacheMutex;
@@ -219,11 +220,11 @@ private:
 	std::uint64_t statusRevision = 0;
 	std::chrono::steady_clock::time_point lastCacheRefresh;
 	int cacheRefreshIntervalMs = 250; // Default 250ms
-	std::thread statusWorker;
 	std::mutex statusWorkerMutex;
 	std::condition_variable statusWorkerCv;
 	std::atomic<bool> stopStatusWorker{false};
 	std::atomic<bool> statusRefreshPending{false};
+	std::thread statusWorker;
 	void statusWorkerLoop();
 
 	struct DetailRequest
@@ -238,8 +239,8 @@ private:
 	std::array<std::unordered_map<lt::info_hash_t, std::shared_ptr<const TorrentDetailsSnapshot>>, 3> detailCache;
 	std::array<std::unordered_map<lt::info_hash_t, std::uint64_t>, 3> detailRevisions;
 	std::array<std::unordered_map<lt::info_hash_t, std::chrono::steady_clock::time_point>, 3> detailLastRefresh;
-	std::thread detailWorker;
 	std::atomic<bool> stopDetailWorker{false};
+	std::thread detailWorker;
 	void detailWorkerLoop();
 	std::shared_ptr<TorrentDetailsSnapshot> collectDetails(const DetailRequest &request);
 };

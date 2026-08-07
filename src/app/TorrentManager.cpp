@@ -413,6 +413,9 @@ std::vector<ManagedTorrent> TorrentManager::getTorrentSnapshot() const
 
 Result TorrentManager::getPersistenceSnapshot(std::vector<ManagedTorrent> &snapshot, std::chrono::milliseconds timeout)
 {
+	if (shuttingDown_.load())
+		return Result::Failure("Torrent manager is shutting down", ResultCode::Unavailable);
+
 	std::lock_guard<std::mutex> operationLock(operationMutex);
 	snapshot = getTorrentSnapshot();
 
@@ -459,6 +462,9 @@ Result TorrentManager::getPersistenceSnapshot(std::vector<ManagedTorrent> &snaps
 Result TorrentManager::requestPersistenceSnapshot()
 {
 	std::lock_guard<std::mutex> lock(asyncPersistenceMutex_);
+	if (shuttingDown_.load())
+		return Result::Failure("Torrent manager is shutting down", ResultCode::Unavailable);
+
 	if (asyncPersistencePending_)
 		return Result::Failure("Persistence snapshot is already in progress", ResultCode::Busy, true);
 
@@ -945,18 +951,25 @@ void TorrentManager::setProxyConfig(const std::string &hostname, int port, const
 	session.apply_settings(settings);
 }
 TorrentManager::TorrentManager()
-	: alertWorker_(&TorrentManager::alertWorkerLoop, this),
-	  statusWorker(&TorrentManager::statusWorkerLoop, this),
-	  detailWorker(&TorrentManager::detailWorkerLoop, this)
 {
+	alertWorker_ = std::thread(&TorrentManager::alertWorkerLoop, this);
+	statusWorker = std::thread(&TorrentManager::statusWorkerLoop, this);
+	detailWorker = std::thread(&TorrentManager::detailWorkerLoop, this);
 }
 
 TorrentManager::~TorrentManager()
 {
-	stopAlertWorker_ = true;
-	alertCv_.notify_all();
-	if (alertWorker_.joinable())
-		alertWorker_.join();
+	shuttingDown_.store(true);
+
+	stopStatusWorker = true;
+	statusWorkerCv.notify_all();
+	if (statusWorker.joinable())
+		statusWorker.join();
+
+	stopDetailWorker = true;
+	detailCv.notify_all();
+	if (detailWorker.joinable())
+		detailWorker.join();
 
 	{
 		std::lock_guard<std::mutex> lock(asyncPersistenceMutex_);
@@ -964,12 +977,8 @@ TorrentManager::~TorrentManager()
 			asyncPersistenceFuture_.wait();
 	}
 
-	stopDetailWorker = true;
-	detailCv.notify_all();
-	if (detailWorker.joinable())
-		detailWorker.join();
-	stopStatusWorker = true;
-	statusWorkerCv.notify_all();
-	if (statusWorker.joinable())
-		statusWorker.join();
+	stopAlertWorker_ = true;
+	alertCv_.notify_all();
+	if (alertWorker_.joinable())
+		alertWorker_.join();
 }

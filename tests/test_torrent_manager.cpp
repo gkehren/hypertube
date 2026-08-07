@@ -5,16 +5,35 @@
 
 #include <filesystem>
 #include <fstream>
+#include <random>
+#include <stdexcept>
 #include <thread>
 
 namespace
 {
+std::filesystem::path makeUniqueTestDirectory()
+{
+	const auto base = std::filesystem::temp_directory_path();
+	std::random_device random;
+
+	for (int attempt = 0; attempt < 100; ++attempt)
+	{
+		const auto candidate = base / ("hypertube-torrent-test-" +
+			std::to_string(random()) + "-" + std::to_string(random()));
+		std::error_code error;
+		if (std::filesystem::create_directory(candidate, error))
+			return candidate;
+	}
+
+	throw std::runtime_error("Unable to create unique torrent test directory");
+}
+
 class TorrentManagerTest : public ::testing::Test
 {
 protected:
 	void SetUp() override
 	{
-		testDirectory = std::filesystem::temp_directory_path() / ("hypertube-torrent-test-" + std::to_string(testCounter++));
+		testDirectory = makeUniqueTestDirectory();
 		std::filesystem::create_directories(testDirectory / "downloads");
 	}
 
@@ -36,7 +55,6 @@ protected:
 	}
 
 	std::filesystem::path testDirectory;
-	static inline int testCounter = 0;
 };
 }
 
