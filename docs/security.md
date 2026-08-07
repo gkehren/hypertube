@@ -39,7 +39,7 @@ Adding a provider requires:
 
 Validate paths before filesystem or OS integration operations. Do not concatenate untrusted values into shell commands. Prefer direct platform APIs or existing validated `SystemUtils` helpers.
 
-Atomic persistence protects against interruption and partial writes, but it is not encryption. Users who need confidentiality must protect their profile or portable directory using operating-system controls.
+Atomic persistence protects against interruption, process crashes, and partial writes by using unique temporary files on the destination filesystem, flushing OS file buffers (`fsync`/`fdatasync`/`FlushFileBuffers`), syncing directory metadata, maintaining `.bak` recovery candidates, and executing atomic replacement. However, it is not encryption. Users who need confidentiality must protect their profile or portable directory using operating-system controls.
 
 ## Credential stores
 

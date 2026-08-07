@@ -161,6 +161,7 @@ endif()
 # Create the utils library
 add_library(hypertube_utils STATIC
     src/utils/AppPaths.cpp
+    src/utils/FileUtils.cpp
     src/utils/Logger.cpp
     src/utils/StringUtils.cpp
     src/utils/SystemUtils.cpp

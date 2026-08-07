@@ -2,6 +2,7 @@
 #include "SearchEngine.hpp"
 #include "AppPaths.hpp"
 #include "Logger.hpp"
+#include "FileUtils.hpp"
 #include <fstream>
 #include <iostream>
 #include <cstdlib>
@@ -68,62 +69,7 @@ void applyMissingDefaults(json &target, const json &defaults)
 
 bool writeJsonAtomically(const std::string &path, const json &data, std::string &errorMessage)
 {
-	const std::filesystem::path target(path);
-	std::error_code error;
-	if (!target.parent_path().empty())
-		std::filesystem::create_directories(target.parent_path(), error);
-	if (error)
-	{
-		errorMessage = "Unable to create configuration directory: " + error.message();
-		return false;
-	}
-
-	const std::filesystem::path temporary = target.string() + ".tmp";
-	{
-		std::ofstream file(temporary, std::ios::trunc);
-		if (!file.is_open())
-		{
-			errorMessage = "Unable to open temporary configuration file";
-			return false;
-		}
-		file << data.dump(4) << '\n';
-		file.flush();
-		if (!file.good())
-		{
-			errorMessage = "Unable to flush temporary configuration file";
-			std::filesystem::remove(temporary, error);
-			return false;
-		}
-	}
-
-	if (std::filesystem::exists(target, error))
-	{
-		const std::filesystem::path backup = target.string() + ".bak";
-		std::filesystem::copy_file(target, backup, std::filesystem::copy_options::overwrite_existing, error);
-		if (error)
-		{
-			errorMessage = "Unable to create configuration backup: " + error.message();
-			std::filesystem::remove(temporary, error);
-			return false;
-		}
-	}
-
-	std::filesystem::rename(temporary, target, error);
-	if (error)
-	{
-		// Windows does not replace an existing file with rename(). The backup
-		// above makes this fallback recoverable while preserving the same API.
-		std::filesystem::remove(target, error);
-		error.clear();
-		std::filesystem::rename(temporary, target, error);
-	}
-	if (error)
-	{
-		errorMessage = "Unable to replace configuration file: " + error.message();
-		std::filesystem::remove(temporary, error);
-		return false;
-	}
-	return true;
+	return Utils::FileUtils::durableWriteFile(path, data.dump(4) + "\n", errorMessage);
 }
 
 void applyPreferencesToJson(json &config, const PreferencesSettings &settings)

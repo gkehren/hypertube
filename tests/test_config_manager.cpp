@@ -542,3 +542,28 @@ TEST_F(ConfigManagerTest, PersistedTorrentSerialization)
 	EXPECT_EQ(loaded[0].torrentFilePath, torrent1.torrentFilePath);
 	EXPECT_EQ(loaded[0].resumeData, torrent1.resumeData);
 }
+
+#include "FileUtils.hpp"
+
+TEST_F(ConfigManagerTest, DurableWriteFileFlushesAndCreatesBackup)
+{
+	const auto target = testDir / "durable.txt";
+	std::string error;
+	ASSERT_TRUE(Utils::FileUtils::durableWriteFile(target, "initial content", error));
+
+	std::ifstream file1(target);
+	std::string read1((std::istreambuf_iterator<char>(file1)), std::istreambuf_iterator<char>());
+	EXPECT_EQ(read1, "initial content");
+
+	ASSERT_TRUE(Utils::FileUtils::durableWriteFile(target, "updated content", error));
+
+	std::ifstream file2(target);
+	std::string read2((std::istreambuf_iterator<char>(file2)), std::istreambuf_iterator<char>());
+	EXPECT_EQ(read2, "updated content");
+
+	const auto backup = target.string() + ".bak";
+	EXPECT_TRUE(fs::exists(backup));
+	std::ifstream backupFile(backup);
+	std::string backupRead((std::istreambuf_iterator<char>(backupFile)), std::istreambuf_iterator<char>());
+	EXPECT_EQ(backupRead, "initial content");
+}
