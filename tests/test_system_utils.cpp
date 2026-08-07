@@ -52,6 +52,37 @@ TEST(AppPathsTest, PreservesWindowsAbsolutePaths)
 }
 #endif
 
+TEST(AppPathsTest, StablePortableRootAndDirectoryCreation)
+{
+	Utils::AppPaths::resetPortableCache();
+	const auto cwd = std::filesystem::current_path();
+	const auto marker = cwd / "portable.mode";
+	std::ofstream(marker) << "";
+
+	EXPECT_TRUE(Utils::AppPaths::isPortable());
+	const auto configDir = Utils::AppPaths::configDirectory();
+	EXPECT_EQ(configDir, cwd / "config");
+
+	const auto tempSubdir = cwd / "temp_subdir_test";
+	std::filesystem::create_directories(tempSubdir);
+	std::filesystem::current_path(tempSubdir);
+
+	EXPECT_TRUE(Utils::AppPaths::isPortable());
+	EXPECT_EQ(Utils::AppPaths::configDirectory(), cwd / "config");
+
+	std::filesystem::current_path(cwd);
+	std::error_code ec;
+	std::filesystem::remove(marker, ec);
+	std::filesystem::remove_all(tempSubdir, ec);
+	Utils::AppPaths::resetPortableCache();
+}
+
+TEST(AppPathsTest, EnsureDirectoriesReturnsSuccess)
+{
+	const auto res = Utils::AppPaths::ensureDirectories();
+	EXPECT_TRUE(res);
+}
+
 TEST(SystemOpenerTest, RejectsMissingPathsBeforeQueueing)
 {
 	Utils::SystemUtils::SystemOpener opener;

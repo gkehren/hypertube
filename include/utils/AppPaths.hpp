@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Result.hpp"
 #include <filesystem>
 
 namespace Utils
@@ -23,6 +24,7 @@ public:
 	static std::filesystem::path torrentsConfigPath();
 	static std::filesystem::path settingsConfigPath();
 	static std::filesystem::path logFilePath();
-	static void ensureDirectories();
+	static Result ensureDirectories();
+	static void resetPortableCache();
 };
 } // namespace Utils

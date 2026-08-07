@@ -12,8 +12,10 @@ void App::initialize()
 	if (initialized_)
 		return;
 
-	Utils::AppPaths::ensureDirectories();
+	Result dirResult = Utils::AppPaths::ensureDirectories();
 	Utils::Logger::initialize(Utils::AppPaths::logFilePath());
+	if (!dirResult)
+		Utils::Logger::error("app", "Failed to create application directories: " + dirResult.message);
 	Utils::Logger::info("app", "Starting Hypertube");
 	initialized_ = true;
 
