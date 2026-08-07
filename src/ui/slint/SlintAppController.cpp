@@ -221,16 +221,6 @@ Result SlintAppController::stop()
 	autosaveTimer.stop();
 	started = false;
 
-	std::vector<ManagedTorrent> finalSnapshot;
-	if (app.torrentManager().getPersistenceSnapshot(finalSnapshot, std::chrono::seconds(3)))
-	{
-		app.torrentsConfigManager().saveTorrents(finalSnapshot);
-	}
-	else
-	{
-		app.torrentsConfigManager().saveTorrents(app.torrentManager().getTorrentSnapshot());
-	}
-
 	Result result = uiStateController.flush();
 	const Result preferences = preferencesController.waitForSave();
 	if (!preferences)
