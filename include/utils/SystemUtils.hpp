@@ -45,10 +45,10 @@ namespace Utils {
             std::condition_variable condition;
             std::deque<Request> requests;
             std::deque<OpenOperationResult> results;
-            std::thread worker;
             bool stopping = false;
             std::uint64_t nextId = 1;
             Executor executor;
+            std::thread worker;
 
             Result enqueue(OpenOperationKind kind, const std::string &path, std::uint64_t *id);
             Result execute(const Request &request);
