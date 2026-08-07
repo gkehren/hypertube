@@ -106,4 +106,35 @@ TEST(SystemUtilsTest, LegacyHelpersValidatePaths)
 	EXPECT_EQ(Utils::SystemUtils::openFilePreview("/path/that/does/not/exist").code, ResultCode::NotFound);
 }
 
+TEST(SystemOpenerTest, ConstructionDestructionStress)
+{
+	for (int i = 0; i < 100; ++i)
+	{
+		Utils::SystemUtils::SystemOpener opener(16, [](Utils::SystemUtils::OpenOperationKind, const std::string &) {
+			return Result::Success();
+		});
+	}
+}
+
+TEST(SystemOpenerTest, DestroysCleanlyWithPendingWork)
+{
+	const auto tempFile = std::filesystem::temp_directory_path() / "hypertube-pending-test.txt";
+	std::ofstream(tempFile) << "content";
+
+	{
+		Utils::SystemUtils::SystemOpener opener(16, [](Utils::SystemUtils::OpenOperationKind, const std::string &) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(20));
+			return Result::Success();
+		});
+
+		for (int i = 0; i < 5; ++i)
+		{
+			EXPECT_TRUE(opener.enqueuePreview(tempFile.string()));
+		}
+	}
+
+	std::error_code error;
+	std::filesystem::remove(tempFile, error);
+}
+
 } // namespace

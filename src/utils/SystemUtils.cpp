@@ -44,20 +44,18 @@ namespace Utils {
                     return Result::Failure("The operating system could not open the requested path", ResultCode::Unavailable, true);
                 return Result::Success();
 #elif defined(__APPLE__) || defined(__linux__)
-                pid_t pid = fork();
-                if (pid == 0) {
 #ifdef __APPLE__
-                    const char* cmd = "open";
+                const char* cmd = "open";
 #else
-                    const char* cmd = "xdg-open";
+                const char* cmd = "xdg-open";
 #endif
-                    execlp(cmd, cmd, path.c_str(), (char*)NULL);
-                    _exit(127);
-                }
-                if (pid < 0)
+                char *const argv[] = {const_cast<char *>(cmd), const_cast<char *>(path.c_str()), nullptr};
+                pid_t pid = -1;
+                const int status = posix_spawnp(&pid, cmd, nullptr, nullptr, argv, environ);
+                if (status != 0)
                     return Result::Failure("Unable to launch the operating system opener", ResultCode::Unavailable, true);
-                int status = 0;
-                if (waitpid(pid, &status, 0) < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
+                int waitStatus = 0;
+                if (waitpid(pid, &waitStatus, 0) < 0 || !WIFEXITED(waitStatus) || WEXITSTATUS(waitStatus) != 0)
                     return Result::Failure("The operating system opener failed", ResultCode::Unavailable, true);
                 return Result::Success();
 #else
@@ -118,8 +116,9 @@ namespace Utils {
         }
 
         SystemOpener::SystemOpener(std::size_t pendingLimit, Executor processExecutor)
-            : maxPending(std::max<std::size_t>(1, pendingLimit)), executor(std::move(processExecutor)),
-              worker(&SystemOpener::workerLoop, this) {}
+            : maxPending(std::max<std::size_t>(1, pendingLimit)), executor(std::move(processExecutor)) {
+            worker = std::thread(&SystemOpener::workerLoop, this);
+        }
 
         SystemOpener::~SystemOpener() {
             {
