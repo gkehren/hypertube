@@ -4,6 +4,7 @@
 #include "Logger.hpp"
 #include <curl/curl.h>
 #include <nlohmann/json.hpp>
+#include <pugixml.hpp>
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -870,36 +871,58 @@ Result SearchEngine::parseTorznabResponse(const std::string &response, SearchRes
 	searchResponse = SearchResponse{};
 	if (response.empty())
 		return Result::Failure("Torznab returned an empty response", ResultCode::Parse);
-	if (response.find("<error") != std::string::npos)
+
+	pugi::xml_document doc;
+	const pugi::xml_parse_result parseResult = doc.load_string(response.c_str());
+	if (!parseResult)
+		return Result::Failure("Malformed Torznab item", ResultCode::Parse);
+
+	const pugi::xml_node errorNode = doc.select_node("//error").node();
+	if (errorNode)
 	{
-		const auto errorPosition = response.find("<error");
-		const auto errorEnd = response.find('>', errorPosition);
-		const std::string element = errorEnd == std::string::npos ? std::string{} : response.substr(errorPosition, errorEnd - errorPosition + 1);
-		const std::string description = xmlAttribute(element, "description");
+		const std::string description = errorNode.attribute("description").as_string();
 		return Result::Failure(description.empty() ? "Torznab provider returned an error" : description, ResultCode::Unavailable);
 	}
 
 	std::unordered_set<std::string> seen;
-	std::size_t position = 0;
-	while (searchResponse.torrents.size() < 500 && (position = response.find("<item", position)) != std::string::npos)
+	const pugi::xpath_node_set items = doc.select_nodes("//item");
+	for (const auto &xpathItem : items)
 	{
-		const auto itemStart = response.find('>', position);
-		const auto itemEnd = response.find("</item>", itemStart);
-		if (itemStart == std::string::npos || itemEnd == std::string::npos)
-			return Result::Failure("Malformed Torznab item", ResultCode::Parse);
-		const std::string item = response.substr(itemStart + 1, itemEnd - itemStart - 1);
-		position = itemEnd + 7;
+		if (searchResponse.torrents.size() >= 500)
+			break;
 
+		const pugi::xml_node item = xpathItem.node();
 		TorrentSearchResult result;
-		result.name = xmlTagValue(item, "title");
-		result.infoHash = torznabAttribute(item, "infohash");
-		result.magnetUri = torznabAttribute(item, "magneturl");
-		if (result.magnetUri.empty())
+		result.name = item.child_value("title");
+		result.dateUploaded = item.child_value("pubDate");
+		result.category = item.child_value("category");
+		if (result.category.empty())
+			result.category = "General";
+
+		const std::string link = item.child_value("link");
+		if (link.rfind("magnet:?", 0) == 0)
+			result.magnetUri = link;
+
+		const std::string sizeVal = item.child_value("size");
+		if (!sizeVal.empty())
+			result.sizeBytes = static_cast<std::size_t>(parseNonNegative(sizeVal));
+
+		const std::string guidVal = item.child_value("guid");
+
+		for (const pugi::xml_node attr : item.children("torznab:attr"))
 		{
-			const std::string link = xmlTagValue(item, "link");
-			if (link.rfind("magnet:?", 0) == 0)
-				result.magnetUri = link;
+			const std::string attrName = attr.attribute("name").as_string();
+			const std::string attrVal = attr.attribute("value").as_string();
+			if (attrName == "infohash")
+				result.infoHash = attrVal;
+			else if (attrName == "magneturl" && result.magnetUri.empty())
+				result.magnetUri = attrVal;
+			else if (attrName == "seeders")
+				result.seeders = static_cast<int>(std::min<long long>(parseNonNegative(attrVal), INT_MAX));
+			else if (attrName == "peers")
+				result.leechers = static_cast<int>(std::min<long long>(parseNonNegative(attrVal), INT_MAX));
 		}
+
 		if (result.infoHash.empty() && !result.magnetUri.empty())
 		{
 			const auto hashPosition = result.magnetUri.find("btih:");
@@ -907,34 +930,28 @@ Result SearchEngine::parseTorznabResponse(const std::string &response, SearchRes
 				result.infoHash = result.magnetUri.substr(hashPosition + 5, 40);
 		}
 		if (result.infoHash.empty())
-			result.infoHash = xmlTagValue(item, "guid");
+			result.infoHash = guidVal;
+
 		if (result.name.empty() || !normalizeInfoHash(result.infoHash) || !seen.insert(result.infoHash).second)
 			continue;
+
 		if (result.magnetUri.empty())
 			result.magnetUri = Utils::formatMagnetUri(result.infoHash, result.name);
 
-		result.sizeBytes = static_cast<std::size_t>(parseNonNegative(xmlTagValue(item, "size")));
-		result.seeders = static_cast<int>(std::min<long long>(parseNonNegative(torznabAttribute(item, "seeders")), INT_MAX));
-		result.leechers = static_cast<int>(std::min<long long>(parseNonNegative(torznabAttribute(item, "peers")), INT_MAX));
-		result.category = xmlTagValue(item, "category");
-		if (result.category.empty())
-			result.category = "General";
-		result.dateUploaded = xmlTagValue(item, "pubDate");
 		searchResponse.torrents.push_back(std::move(result));
 	}
 
-	const auto responsePosition = response.find("newznab:response");
-	if (responsePosition != std::string::npos)
+	const pugi::xml_node responseNode = doc.select_node("//torznab:response|//newznab:response").node();
+	if (responseNode)
 	{
-		const auto responseEnd = response.find('>', responsePosition);
-		const std::string element = responseEnd == std::string::npos ? std::string{} : response.substr(responsePosition, responseEnd - responsePosition + 1);
-		const long long offset = parseNonNegative(xmlAttribute(element, "offset"));
-		const long long total = parseNonNegative(xmlAttribute(element, "total"));
+		const long long offset = parseNonNegative(responseNode.attribute("offset").as_string());
+		const long long total = parseNonNegative(responseNode.attribute("total").as_string());
 		const long long next = offset + static_cast<long long>(searchResponse.torrents.size());
 		searchResponse.hasMore = next < total;
 		if (searchResponse.hasMore)
 			searchResponse.nextToken = std::to_string(next);
 	}
+
 	return Result::Success();
 }
 

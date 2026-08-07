@@ -134,6 +134,20 @@ else()
     endif()
 endif()
 
+# pugixml dependency
+find_package(pugixml QUIET)
+if(NOT pugixml_FOUND AND NOT TARGET pugixml::pugixml AND NOT TARGET pugixml)
+    FetchContent_Declare(
+        pugixml
+        GIT_REPOSITORY https://github.com/zeux/pugixml.git
+        GIT_TAG v1.14
+    )
+    FetchContent_MakeAvailable(pugixml)
+    if(TARGET pugixml AND NOT TARGET pugixml::pugixml)
+        add_library(pugixml::pugixml ALIAS pugixml)
+    endif()
+endif()
+
 # 8. Slint dependency. Keep the version and backend choices explicit so a
 # local Qt installation cannot silently change the renderer.
 set(SLINT_FEATURE_BACKEND_QT OFF CACHE BOOL "" FORCE)
@@ -246,6 +260,7 @@ target_link_libraries(hypertube_search PUBLIC
     hypertube_utils
     nlohmann_json::nlohmann_json
     CURL::libcurl
+    pugixml::pugixml
 )
 
 # Toolkit-neutral presentation and controller layer.
