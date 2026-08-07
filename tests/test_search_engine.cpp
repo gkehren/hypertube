@@ -31,6 +31,7 @@ protected:
     std::string buildSearchUrl(const SearchQuery& query) {
         return engine.buildSearchUrl(query);
     }
+
 };
 
 TEST_F(SearchEngineTest, ParseValidArrayResponse) {
@@ -437,4 +438,139 @@ TEST_F(SearchEngineTest, ValidatesPreferencesWithoutMutatingRuntimeState) {
 	EXPECT_FALSE(SearchEngine::validateProxyConfig(true, "socks5", "", 1080).success);
 	EXPECT_FALSE(SearchEngine::validateProxyConfig(true, "http", "localhost", 70000).success);
 	EXPECT_TRUE(SearchEngine::validateProxyConfig(false, "socks5", "", 1080).success);
+}
+
+TEST_F(SearchEngineTest, TorznabXmlParsesCdataAndCustomNamespaces) {
+	const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+	<rss version="2.0" xmlns:t="http://torznab.com/schemas/2015/feed">
+	<channel>
+		<item>
+			<title><![CDATA[Ubuntu 24.04 LTS Desktop]]></title>
+			<guid>1111222233334444555566667777888899990000</guid>
+			<size>4294967296</size>
+			<category>Linux/OS</category>
+			<t:attr name="seeders" value="50"/>
+			<t:attr name="peers" value="10"/>
+			<t:attr name="infohash" value="1111222233334444555566667777888899990000"/>
+		</item>
+	</channel>
+	</rss>)";
+
+	SearchResponse response;
+	ASSERT_TRUE(parseTorznab(xml, response));
+	ASSERT_EQ(response.torrents.size(), 1u);
+	EXPECT_EQ(response.torrents[0].name, "Ubuntu 24.04 LTS Desktop");
+	EXPECT_EQ(response.torrents[0].infoHash, "1111222233334444555566667777888899990000");
+	EXPECT_EQ(response.torrents[0].seeders, 50);
+	EXPECT_EQ(response.torrents[0].leechers, 10);
+}
+
+TEST_F(SearchEngineTest, GetFavoriteHashesSetReturnsSnapshot) {
+	TorrentSearchResult t1;
+	t1.name = "Test Torrent 1";
+	t1.infoHash = "0000000000000000000000000000000000000001";
+	engine.addToFavorites(t1);
+
+	const auto favSet = engine.getFavoriteHashesSet();
+	EXPECT_EQ(favSet.size(), 1u);
+	EXPECT_EQ(favSet.count("0000000000000000000000000000000000000001"), 1u);
+}
+
+TEST_F(SearchEngineTest, TorznabPaginationAdvancesBasedOnConsumedItemsNotOnlyValidResults) {
+	const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+	<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+	<channel>
+		<torznab:response offset="100" total="200"/>
+		<item>
+			<title>Valid Item 1</title>
+			<guid>1111222233334444555566667777888899990001</guid>
+		</item>
+		<item>
+			<title>Malformed Item Without InfoHash Or Guid</title>
+		</item>
+		<item>
+			<title>Valid Item 2</title>
+			<guid>1111222233334444555566667777888899990002</guid>
+		</item>
+	</channel>
+	</rss>)";
+
+	SearchResponse response;
+	ASSERT_TRUE(parseTorznab(xml, response));
+	EXPECT_EQ(response.torrents.size(), 2u);
+	EXPECT_TRUE(response.hasMore);
+	EXPECT_EQ(response.nextToken, "103");
+}
+
+TEST_F(SearchEngineTest, TorznabPaginationTerminatesIfAllItemsInBatchAreMalformed) {
+	const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
+	<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+	<channel>
+		<torznab:response offset="100" total="200"/>
+		<item>
+			<title>Invalid 1</title>
+		</item>
+		<item>
+			<title>Invalid 2</title>
+		</item>
+	</channel>
+	</rss>)";
+
+	SearchResponse response;
+	ASSERT_TRUE(parseTorznab(xml, response));
+	EXPECT_EQ(response.torrents.size(), 0u);
+	EXPECT_EQ(response.nextToken, "102");
+}
+
+TEST_F(SearchEngineTest, SearchCancelSearchAgainShutdownSequence) {
+	std::mutex mutex;
+	std::condition_variable callsCv;
+	int calls = 0;
+	ASSERT_TRUE(engine.registerSearchProvider(
+		"restart-fixture",
+		[&](const SearchQuery &, SearchResponse &, const std::function<bool()> &cancelled) {
+			{
+				std::lock_guard<std::mutex> lock(mutex);
+				++calls;
+			}
+			callsCv.notify_all();
+			while (!cancelled())
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			return Result::Failure("cancelled", ResultCode::Cancelled);
+		}));
+	ASSERT_TRUE(engine.setActiveSearchProvider("restart-fixture"));
+
+	uint64_t firstRequest = 0;
+	ASSERT_TRUE(engine.startSearch(SearchQuery("first"), firstRequest));
+	{
+		std::unique_lock<std::mutex> lock(mutex);
+		ASSERT_TRUE(callsCv.wait_for(lock, std::chrono::seconds(2), [&] { return calls == 1; }));
+	}
+	engine.cancelCurrentSearch();
+
+	std::optional<CompletedSearch> firstCompletion;
+	for (int i = 0; i < 400 && !firstCompletion; ++i)
+	{
+		firstCompletion = engine.takeCompletedSearch();
+		if (!firstCompletion)
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+	}
+	ASSERT_TRUE(firstCompletion.has_value());
+	EXPECT_EQ(firstCompletion->requestId, firstRequest);
+	EXPECT_EQ(firstCompletion->result.code, ResultCode::Cancelled);
+	EXPECT_FALSE(engine.isSearching());
+
+	uint64_t secondRequest = 0;
+	ASSERT_TRUE(engine.startSearch(SearchQuery("second"), secondRequest));
+	{
+		std::unique_lock<std::mutex> lock(mutex);
+		ASSERT_TRUE(callsCv.wait_for(lock, std::chrono::seconds(2), [&] { return calls == 2; }));
+	}
+	engine.shutdown();
+
+	EXPECT_FALSE(engine.isSearching());
+	auto secondCompletion = engine.takeCompletedSearch();
+	ASSERT_TRUE(secondCompletion.has_value());
+	EXPECT_EQ(secondCompletion->requestId, secondRequest);
+	EXPECT_EQ(secondCompletion->result.code, ResultCode::Cancelled);
 }

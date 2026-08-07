@@ -134,6 +134,20 @@ else()
     endif()
 endif()
 
+# pugixml dependency
+find_package(pugixml QUIET)
+if(NOT pugixml_FOUND AND NOT TARGET pugixml::pugixml AND NOT TARGET pugixml)
+    FetchContent_Declare(
+        pugixml
+        GIT_REPOSITORY https://github.com/zeux/pugixml.git
+        GIT_TAG v1.14
+    )
+    FetchContent_MakeAvailable(pugixml)
+    if(TARGET pugixml AND NOT TARGET pugixml::pugixml)
+        add_library(pugixml::pugixml ALIAS pugixml)
+    endif()
+endif()
+
 # 8. Slint dependency. Keep the version and backend choices explicit so a
 # local Qt installation cannot silently change the renderer.
 set(SLINT_FEATURE_BACKEND_QT OFF CACHE BOOL "" FORCE)
@@ -161,6 +175,7 @@ endif()
 # Create the utils library
 add_library(hypertube_utils STATIC
     src/utils/AppPaths.cpp
+    src/utils/FileUtils.cpp
     src/utils/Logger.cpp
     src/utils/StringUtils.cpp
     src/utils/SystemUtils.cpp
@@ -245,6 +260,7 @@ target_link_libraries(hypertube_search PUBLIC
     hypertube_utils
     nlohmann_json::nlohmann_json
     CURL::libcurl
+    pugixml::pugixml
 )
 
 # Toolkit-neutral presentation and controller layer.
@@ -311,7 +327,23 @@ add_executable(hypertube
     endif()
 
     if(WIN32)
-        target_link_libraries(hypertube PRIVATE ole32)
+        target_link_libraries(hypertube PRIVATE ole32 imm32)
+    elseif(APPLE)
+        find_library(APPKIT_FRAMEWORK AppKit REQUIRED)
+        find_library(COREGRAPHICS_FRAMEWORK CoreGraphics REQUIRED)
+        find_library(CORETEXT_FRAMEWORK CoreText REQUIRED)
+        find_library(COREVIDEO_FRAMEWORK CoreVideo REQUIRED)
+        find_library(CORESERVICES_FRAMEWORK CoreServices REQUIRED)
+        find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
+        set(HYPERTUBE_APPLE_FRAMEWORKS
+            ${APPKIT_FRAMEWORK}
+            ${COREGRAPHICS_FRAMEWORK}
+            ${CORETEXT_FRAMEWORK}
+            ${COREVIDEO_FRAMEWORK}
+            ${CORESERVICES_FRAMEWORK}
+            ${FOUNDATION_FRAMEWORK}
+        )
+        target_link_libraries(hypertube PRIVATE ${HYPERTUBE_APPLE_FRAMEWORKS})
     endif()
 
     slint_target_sources(hypertube
@@ -371,9 +403,19 @@ add_test(
 add_executable(slint-visual-snapshots tools/slint_visual_snapshots.cpp)
 target_link_libraries(slint-visual-snapshots PRIVATE Slint::Slint)
 slint_target_sources(slint-visual-snapshots ui/snapshot-window.slint)
+if(WIN32)
+    target_link_libraries(slint-visual-snapshots PRIVATE imm32)
+elseif(APPLE)
+    target_link_libraries(slint-visual-snapshots PRIVATE ${HYPERTUBE_APPLE_FRAMEWORKS})
+endif()
 
 add_executable(slint-renderer-benchmark EXCLUDE_FROM_ALL tools/slint_renderer_benchmark.cpp)
 target_link_libraries(slint-renderer-benchmark PRIVATE Slint::Slint)
+if(WIN32)
+    target_link_libraries(slint-renderer-benchmark PRIVATE imm32)
+elseif(APPLE)
+    target_link_libraries(slint-renderer-benchmark PRIVATE ${HYPERTUBE_APPLE_FRAMEWORKS})
+endif()
 if(WIN32)
     target_link_libraries(slint-renderer-benchmark PRIVATE psapi)
     target_compile_options(slint-renderer-benchmark PRIVATE /EHsc)

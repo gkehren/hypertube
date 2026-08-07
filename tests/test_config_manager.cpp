@@ -5,6 +5,7 @@
 #include <thread>
 #include <atomic>
 #include "../include/app/ConfigManager.hpp"
+#include "AppPaths.hpp"
 
 namespace fs = std::filesystem;
 
@@ -517,4 +518,82 @@ TEST_F(ConfigManagerTest, ConcurrentUpdatesRemainValidJson)
 	json saved;
 	EXPECT_NO_THROW(std::ifstream(configPath) >> saved);
 	EXPECT_TRUE(saved.contains("settings"));
+}
+
+TEST_F(ConfigManagerTest, PersistedTorrentSerialization)
+{
+	Utils::AppPaths::setOverrideExecutableDirectory(testDir);
+	const auto marker = testDir / "portable.mode";
+	std::ofstream(marker) << "";
+
+	ConfigManager writer;
+	PersistedTorrent torrent1{
+		"magnet:?xt=urn:btih:1234567890abcdef1234567890abcdef12345678",
+		"/tmp/downloads",
+		"/tmp/fixture.torrent",
+		{'a', 'b', 'c', 'd'}
+	};
+
+	writer.saveTorrents({torrent1});
+	writer.waitForAsyncOperations();
+
+	ConfigManager reader;
+	std::vector<TorrentConfigData> loaded;
+	const std::string torrentPath = Utils::AppPaths::torrentsConfigPath().string();
+	ASSERT_TRUE(reader.loadTorrents(torrentPath, loaded));
+	ASSERT_EQ(loaded.size(), 1u);
+	EXPECT_EQ(loaded[0].magnetUri, torrent1.magnetUri);
+	EXPECT_EQ(loaded[0].savePath, torrent1.savePath);
+	EXPECT_EQ(loaded[0].torrentFilePath, torrent1.torrentFilePath);
+	EXPECT_EQ(loaded[0].resumeData, torrent1.resumeData);
+
+	std::error_code ec;
+	std::filesystem::remove(marker, ec);
+	Utils::AppPaths::resetPortableCache();
+}
+
+#include "FileUtils.hpp"
+
+TEST_F(ConfigManagerTest, DurableWriteFileFlushesAndCreatesBackup)
+{
+	const auto target = testDir / "durable.txt";
+	std::string error;
+	ASSERT_TRUE(Utils::FileUtils::durableWriteFile(target, "initial content", error));
+
+	{
+		std::ifstream file1(target);
+		std::string read1((std::istreambuf_iterator<char>(file1)), std::istreambuf_iterator<char>());
+		EXPECT_EQ(read1, "initial content");
+	}
+
+	ASSERT_TRUE(Utils::FileUtils::durableWriteFile(target, "updated content", error));
+
+	std::ifstream file2(target);
+	std::string read2((std::istreambuf_iterator<char>(file2)), std::istreambuf_iterator<char>());
+	EXPECT_EQ(read2, "updated content");
+
+	const auto backup = target.string() + ".bak";
+	EXPECT_TRUE(fs::exists(backup));
+	std::ifstream backupFile(backup);
+	std::string backupRead((std::istreambuf_iterator<char>(backupFile)), std::istreambuf_iterator<char>());
+	EXPECT_EQ(backupRead, "initial content");
+}
+
+TEST_F(ConfigManagerTest, DurableWriteFileBackupRecoveryOnTargetCorruption)
+{
+	const auto target = testDir / "recovery.json";
+	std::string error;
+	ASSERT_TRUE(Utils::FileUtils::durableWriteFile(target, R"({"version": 2, "torrents": []})", error));
+	ASSERT_TRUE(Utils::FileUtils::durableWriteFile(target, R"({"version": 2, "torrents": [{"magnet_uri": "magnet:?xt=urn:btih:abc"}]})", error));
+
+	// Corrupt target file to test backup recovery fallback
+	{
+		std::ofstream corrupt(target, std::ios::trunc);
+		corrupt << "{invalid json";
+	}
+
+	ConfigManager manager;
+	std::vector<TorrentConfigData> loaded;
+	ASSERT_TRUE(manager.loadTorrents(target.string(), loaded));
+	EXPECT_EQ(loaded.size(), 0u);
 }

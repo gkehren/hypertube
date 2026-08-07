@@ -56,6 +56,12 @@ SlintAppController::SlintAppController(App &app, slint::ComponentHandle<MainWind
 	notificationController_ = std::make_unique<SlintUi::NotificationController>(app.systemOpener(), torrentPresenter, *window);
 }
 
+SlintAppController::~SlintAppController()
+{
+	if (isAlive_)
+		*isAlive_ = false;
+}
+
 void SlintAppController::bind()
 {
 	window->on_request_close([] {
@@ -111,6 +117,7 @@ void SlintAppController::bind()
 	});
 	window->on_set_sequential([this](bool enabled) { detailsUiController_->setSequential(enabled); });
 	window->on_clear_logs([this] { appShellController_->clearLogs(); });
+	window->on_export_diagnostics([this] { appShellController_->exportDiagnostics(); });
 	window->on_set_log_filter([this](LogLevel level, bool enabled) { appShellController_->setLogFilter(level, enabled); });
 	window->on_toggle_log_autoscroll([this](bool enabled) { appShellController_->setLogAutoscroll(enabled); });
 	window->on_change_theme([this](Theme theme) { preferencesUiController_->changeTheme(theme); });
@@ -188,14 +195,14 @@ void SlintAppController::start()
 	window->set_preference_enable_natpmp(currentPreferences.enableNatPmp);
 	window->set_preference_torznab_enabled(currentPreferences.torznabEnabled);
 	window->set_preference_torznab_url(SlintUi::toSharedString(currentPreferences.torznabUrl));
-	window->set_preference_torznab_secret_stored(Utils::CredentialStore::load("torznab_api_key").has_value());
+	window->set_preference_torznab_secret_stored(Utils::CredentialStore::hasStoredCredential("torznab_api_key"));
 	window->set_preference_torznab_secret(slint::SharedString());
 	window->set_preference_proxy_enabled(currentPreferences.proxyEnabled);
 	window->set_preference_proxy_type(SlintUi::toSharedString(currentPreferences.proxyType));
 	window->set_preference_proxy_host(SlintUi::toSharedString(currentPreferences.proxyHost));
 	window->set_preference_proxy_port(SlintUi::toSharedString(std::to_string(currentPreferences.proxyPort)));
 	window->set_preference_proxy_username(SlintUi::toSharedString(currentPreferences.proxyUsername));
-	window->set_preference_proxy_secret_stored(Utils::CredentialStore::load("proxy_password").has_value());
+	window->set_preference_proxy_secret_stored(Utils::CredentialStore::hasStoredCredential("proxy_password"));
 	window->set_preference_proxy_secret(slint::SharedString());
 	window->set_preference_clear_torznab_secret(false);
 	window->set_preference_clear_proxy_secret(false);
@@ -204,6 +211,16 @@ void SlintAppController::start()
 	window->set_remove_dialog_open(false);
 	window->set_search_query(slint::SharedString());
 	started = true;
+	std::weak_ptr<bool> weakAlive = isAlive_;
+	Utils::CredentialStore::asyncRefreshStatus({"torznab_api_key", "proxy_password"}, [this, weakAlive]() {
+		slint::invoke_from_event_loop([this, weakAlive]() {
+			if (auto alive = weakAlive.lock())
+			{
+				if (*alive && started)
+					refreshCredentialIndicators();
+			}
+		});
+	});
 	app.torrentManager().requestStatusRefresh();
 	searchRefreshCoordinator_->forceRefresh();
 	refresh();
@@ -220,16 +237,6 @@ Result SlintAppController::stop()
 	refreshTimer.stop();
 	autosaveTimer.stop();
 	started = false;
-
-	std::vector<ManagedTorrent> finalSnapshot;
-	if (app.torrentManager().getPersistenceSnapshot(finalSnapshot, std::chrono::seconds(3)))
-	{
-		app.torrentsConfigManager().saveTorrents(finalSnapshot);
-	}
-	else
-	{
-		app.torrentsConfigManager().saveTorrents(app.torrentManager().getTorrentSnapshot());
-	}
 
 	Result result = uiStateController.flush();
 	const Result preferences = preferencesController.waitForSave();
@@ -285,9 +292,9 @@ void SlintAppController::refresh()
 void SlintAppController::refreshCredentialIndicators()
 {
 	window->set_preference_torznab_secret_stored(
-		Utils::CredentialStore::load("torznab_api_key").has_value());
+		Utils::CredentialStore::hasStoredCredential("torznab_api_key"));
 	window->set_preference_proxy_secret_stored(
-		Utils::CredentialStore::load("proxy_password").has_value());
+		Utils::CredentialStore::hasStoredCredential("proxy_password"));
 }
 
 void SlintAppController::autosave()

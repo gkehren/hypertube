@@ -7,13 +7,18 @@
 
 App::App() = default;
 
-void App::initialize()
+Result App::initialize()
 {
 	if (initialized_)
-		return;
+		return Result::Success();
 
-	Utils::AppPaths::ensureDirectories();
+	Result dirResult = Utils::AppPaths::ensureDirectories();
 	Utils::Logger::initialize(Utils::AppPaths::logFilePath());
+	if (!dirResult)
+	{
+		Utils::Logger::error("app", "Failed to create application directories: " + dirResult.message);
+		return dirResult;
+	}
 	Utils::Logger::info("app", "Starting Hypertube");
 	initialized_ = true;
 
@@ -30,13 +35,13 @@ void App::initialize()
 		settingsConfigManager_.getEnableDHT(),
 		settingsConfigManager_.getEnableUPnP(),
 		settingsConfigManager_.getEnableNATPMP());
-	const std::optional<std::string> storedProxyPassword = Utils::CredentialStore::load("proxy_password");
+	const auto proxyCred = Utils::CredentialStore::load("proxy_password");
 	const bool proxyEnabled = settingsConfigManager_.getProxyEnabled();
 	const std::string proxyType = settingsConfigManager_.getProxyType();
 	const std::string proxyHost = settingsConfigManager_.getProxyHost();
 	const int proxyPort = settingsConfigManager_.getProxyPort();
 	const std::string proxyUsername = settingsConfigManager_.getProxyUsername();
-	const std::string proxyPassword = storedProxyPassword.value_or("");
+	const std::string proxyPassword = proxyCred.secret;
 	torrentManager_.setProxyConfig(proxyHost, proxyPort, proxyUsername, proxyPassword,
 		proxyEnabled ? (proxyType == "http" ? 2 : 1) : 0);
 	Result searchProxyResult = searchEngine_.setProxyConfig(
@@ -45,9 +50,9 @@ void App::initialize()
 		Utils::Logger::warning("search", "Proxy configuration was ignored: " + searchProxyResult.message);
 	if (settingsConfigManager_.getTorznabEnabled())
 	{
-		std::optional<std::string> storedApiKey = Utils::CredentialStore::load("torznab_api_key");
+		const auto apiKeyCred = Utils::CredentialStore::load("torznab_api_key");
 		const char *environmentApiKey = std::getenv("HYPERTUBE_TORZNAB_API_KEY");
-		const std::string apiKey = storedApiKey.value_or(environmentApiKey ? environmentApiKey : "");
+		const std::string apiKey = apiKeyCred.hasSecret() ? apiKeyCred.secret : (environmentApiKey ? environmentApiKey : "");
 		Result providerResult = searchEngine_.configureTorznabProvider(
 			settingsConfigManager_.getTorznabUrl(), apiKey);
 		if (providerResult)
@@ -77,6 +82,7 @@ void App::initialize()
 
 	// Load favorites and search history
 	searchEngine_.loadFavoritesAndHistory(settingsConfigManager_);
+	return Result::Success();
 }
 
 App::~App()
@@ -86,6 +92,7 @@ App::~App()
 
 void App::shutdown()
 {
+	Utils::CredentialStore::shutdown();
 	if (!initialized_)
 		return;
 	initialized_ = false;
@@ -96,7 +103,7 @@ void App::shutdown()
 	Result resumeResult = torrentManager_.getPersistenceSnapshot(persistenceSnapshot);
 	if (!resumeResult)
 		Utils::Logger::warning("torrent", resumeResult.message);
-	torrentsConfigManager_.saveTorrents(persistenceSnapshot);
+	torrentsConfigManager_.saveTorrents(torrentManager_.toPersistedTorrents(persistenceSnapshot));
 
 	// Save favorites and search history
 	searchEngine_.saveFavoritesAndHistory(settingsConfigManager_);

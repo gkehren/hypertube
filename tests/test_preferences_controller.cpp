@@ -37,9 +37,11 @@ Presentation::PreferencesController::CredentialStoreOps fakeStore(std::map<std::
 			values.erase(account);
 			return Result::Success();
 		},
-		[&values](const std::string &account) -> std::optional<std::string> {
+		[&values](const std::string &account) -> Utils::CredentialStore::CredentialLoadResult {
 			const auto found = values.find(account);
-			return found == values.end() ? std::nullopt : std::optional<std::string>(found->second);
+			return found == values.end()
+				? Utils::CredentialStore::CredentialLoadResult{Utils::CredentialStore::CredentialStatus::Missing, ""}
+				: Utils::CredentialStore::CredentialLoadResult{Utils::CredentialStore::CredentialStatus::Stored, found->second};
 		}};
 }
 
@@ -141,9 +143,11 @@ TEST(PreferencesControllerTest, NoSecretMutationDoesNotTouchCredentialStore)
 			secrets.erase(account);
 			return Result::Success();
 		},
-		[&secrets](const std::string &account) -> std::optional<std::string> {
+		[&secrets](const std::string &account) -> Utils::CredentialStore::CredentialLoadResult {
 			const auto found = secrets.find(account);
-			return found == secrets.end() ? std::nullopt : std::optional<std::string>(found->second);
+			return found == secrets.end()
+				? Utils::CredentialStore::CredentialLoadResult{Utils::CredentialStore::CredentialStatus::Missing, ""}
+				: Utils::CredentialStore::CredentialLoadResult{Utils::CredentialStore::CredentialStatus::Stored, found->second};
 		}
 	};
 	TorrentManager torrentManager;
