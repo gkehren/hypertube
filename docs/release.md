@@ -1,13 +1,19 @@
 # Build and release
 
-This document describes the release workflow that exists today and separates it from the automation that is still planned.
+This document describes the release workflow that exists today and separates it
+from automation that is still planned.
 
 ## Current release facts
 
 - The project version used by CPack is currently `0.1.0` in `CMakeLists.txt`.
 - The configured package generator is ZIP.
-- The installable runtime component contains the `hypertube` executable and seed `config/` directory.
-- There is currently no repository CI workflow, release tag policy, checksum generation, or automated publication workflow.
+- The installable runtime component contains `hypertube`, its required runtime
+  libraries, and the seed `config/` directory.
+- There is currently no repository release publication workflow.
+
+## Licensing and notices
+
+The repository includes [LICENSE](../LICENSE) (GNU General Public License v3.0) and [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) detailing third-party dependency licenses. Distribution packages automatically bundle these notice files. For additional information, see [docs/licensing.md](licensing.md).
 
 ## Prepare a release build
 
@@ -17,11 +23,11 @@ cmake --build build-release -j2
 ctest --test-dir build-release --output-on-failure
 ```
 
-For concurrency, persistence, or parser changes, validate the Debug sanitizer configuration as described in [Testing](testing.md).
+Do not enable `HYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS` for this build. The
+default Release configuration deliberately omits `/arch:AVX2` and
+`-march=native` so the artifact is not tied to the packaging host's CPU.
 
 ## Create a portable runtime directory
-
-Use the runtime component so dependency install rules are not included:
 
 ```sh
 cmake --install build-release \
@@ -39,7 +45,8 @@ dist/hypertube/
     └── settings.json
 ```
 
-Runtime data and logs are created under `data/` when the bundle is first run. Do not place a user's `torrents.json` in the release artifact.
+Runtime data and logs are created under `data/` when the bundle first runs. Do
+not place a user's `torrents.json` in the release artifact.
 
 ## Generate the ZIP package
 
@@ -47,13 +54,8 @@ Runtime data and logs are created under `data/` when the bundle is first run. Do
 cpack --config build-release/CPackConfig.cmake -G ZIP
 ```
 
-Inspect the archive before publication:
-
-```sh
-unzip -l Hypertube-0.1.0-Linux.zip
-```
-
-The exact archive name is generator- and platform-dependent. Confirm that it contains only the executable and intended seed configuration files.
+Inspect the archive before publication and confirm that it contains the
+executable, required runtime libraries, and only seed configuration files.
 
 ## Manual release checklist
 
@@ -61,16 +63,12 @@ The exact archive name is generator- and platform-dependent. Confirm that it con
 - [ ] Update [Features and status](features.md) for changed capabilities.
 - [ ] Update [Configuration and data](configuration.md) for schema changes.
 - [ ] Run a clean Release configure and build.
+- [ ] Confirm `HYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS=OFF` in the release cache.
 - [ ] Run CTest and relevant sanitizer tests.
+- [ ] Review recent software/FemtoVG reports before changing the production renderer.
 - [ ] Validate the non-root `runtime` install.
 - [ ] Inspect the ZIP contents.
 - [ ] Run the packaged executable in portable mode.
 - [ ] Verify startup, torrent add, search, persistence, and diagnostics.
 - [ ] Record platform, compiler, dependency, and test results.
-- [ ] Create a release note describing user-visible changes and known limitations.
-
-## Future release automation
-
-The intended future workflow is to add CI jobs that build and test supported Linux, macOS, and Windows configurations, create reproducible runtime artifacts, generate checksums, and publish artifacts only after all required checks pass. Signing keys and credentials must remain outside the repository and CI logs.
-
-Until that automation exists, do not describe a build as cross-platform released merely because the CMake conditionals exist. A platform is release-supported only after its build and runtime smoke test are recorded.
+- [ ] Resolve licensing and third-party notice requirements before publication.

@@ -24,14 +24,21 @@ Reconfigure the same build directory first. If its cache points to an obsolete p
 
 ## The application does not open a window
 
-Run the executable from a terminal and inspect GLFW/OpenGL output. Check:
+Run `hypertube` from a terminal and inspect its stderr first. Check:
 
-- graphics drivers and OpenGL support;
 - display/session environment;
-- platform-specific GLFW runtime libraries;
 - whether another process or window manager issue prevents window creation.
 
 The application logs startup failures to stderr before the normal logger is available.
+
+## A native picker does not open
+
+The Slint frontend uses the platform picker boundary for `.torrent` files and
+directories. Linux tries `zenity` and then `kdialog`; macOS uses the system
+script bridge; Windows uses the native file-open dialog. If the picker is not
+installed, unavailable in the current desktop session, or cancelled, enter
+the path manually in the same dialog and continue. This does not change the
+stored torrent or preference data.
 
 ## Settings or torrents are missing after restart
 

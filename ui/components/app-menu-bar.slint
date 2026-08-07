@@ -1,0 +1,18 @@
+import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "../theme.slint";
+
+export component AppMenuBar inherits Rectangle {
+	callback add-torrent(); callback add-magnet(); callback preferences(); callback exit(); callback about();
+	height: 36px;
+	z: 10;
+	background: ThemeTokens.surface;
+	HorizontalBox {
+		width: parent.width;
+		height: parent.height;
+		alignment: start;
+		Button { text: "File"; width: 64px; clicked => { file-menu.show(); } }
+		Button { text: "Help"; width: 64px; clicked => { help-menu.show(); } }
+	}
+	file-menu := PopupWindow { width: 180px; height: 190px; Rectangle { background: ThemeTokens.surface; VerticalBox { padding: 6px; Button { text: "Add torrent"; clicked => { root.add-torrent(); file-menu.close(); } } Button { text: "Add magnet"; clicked => { root.add-magnet(); file-menu.close(); } } Button { text: "Preferences"; clicked => { root.preferences(); file-menu.close(); } } Button { text: "Exit"; clicked => { root.exit(); file-menu.close(); } } } } }
+	help-menu := PopupWindow { width: 150px; height: 54px; Rectangle { background: ThemeTokens.surface; Button { text: "About"; clicked => { root.about(); help-menu.close(); } } } }
+}

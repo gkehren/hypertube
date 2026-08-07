@@ -8,6 +8,8 @@
 #include <cctype>
 #include <iterator>
 #include <filesystem>
+#include <utility>
+#include <initializer_list>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -16,6 +18,10 @@
 #else
 #include <unistd.h>
 #include <sys/wait.h>
+#include <spawn.h>
+#include <cerrno>
+#include <cstring>
+extern char **environ;
 #endif
 
 namespace Utils {
@@ -58,10 +64,62 @@ namespace Utils {
                 return Result::Failure("Opening paths is not supported on this platform", ResultCode::Unavailable);
 #endif
             }
+
+#ifndef _WIN32
+            Result copyWithProcess(const char *program, std::initializer_list<const char *> arguments,
+                const std::string &text) {
+                int pipes[2] = {-1, -1};
+                if (pipe(pipes) != 0)
+                    return Result::Failure("Unable to create a clipboard pipe", ResultCode::Unavailable, true);
+                std::vector<std::string> storage{program};
+                for (const auto *argument : arguments)
+                    storage.emplace_back(argument);
+                std::vector<char *> argv;
+                for (auto &argument : storage)
+                    argv.push_back(argument.data());
+                argv.push_back(nullptr);
+                posix_spawn_file_actions_t actions;
+                if (posix_spawn_file_actions_init(&actions) != 0) {
+                    close(pipes[0]);
+                    close(pipes[1]);
+                    return Result::Failure("Unable to initialize clipboard process", ResultCode::Unavailable, true);
+                }
+                posix_spawn_file_actions_adddup2(&actions, pipes[0], STDIN_FILENO);
+                posix_spawn_file_actions_addclose(&actions, pipes[1]);
+                pid_t pid = -1;
+                const int error = posix_spawnp(&pid, program, &actions, nullptr, argv.data(), environ);
+                posix_spawn_file_actions_destroy(&actions);
+                close(pipes[0]);
+                if (error != 0) {
+                    close(pipes[1]);
+                    return Result::Failure(error == ENOENT ? "No clipboard backend is available"
+                        : std::string("Unable to launch clipboard backend: ") + std::strerror(error),
+                        ResultCode::Unavailable, true);
+                }
+                const char *data = text.data();
+                std::size_t remaining = text.size();
+                while (remaining > 0) {
+                    const ssize_t written = write(pipes[1], data, remaining);
+                    if (written <= 0) {
+                        close(pipes[1]);
+                        waitpid(pid, nullptr, 0);
+                        return Result::Failure("Unable to write to the clipboard backend", ResultCode::Unavailable, true);
+                    }
+                    data += written;
+                    remaining -= static_cast<std::size_t>(written);
+                }
+                close(pipes[1]);
+                int status = 0;
+                if (waitpid(pid, &status, 0) < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
+                    return Result::Failure("The clipboard backend rejected the text", ResultCode::Unavailable, true);
+                return Result::Success();
+            }
+#endif
         }
 
-        SystemOpener::SystemOpener(std::size_t pendingLimit)
-            : maxPending(std::max<std::size_t>(1, pendingLimit)), worker(&SystemOpener::workerLoop, this) {}
+        SystemOpener::SystemOpener(std::size_t pendingLimit, Executor processExecutor)
+            : maxPending(std::max<std::size_t>(1, pendingLimit)), executor(std::move(processExecutor)),
+              worker(&SystemOpener::workerLoop, this) {}
 
         SystemOpener::~SystemOpener() {
             {
@@ -99,7 +157,8 @@ namespace Utils {
         }
 
         Result SystemOpener::execute(const Request &request) {
-            Result result = launchPlatformProcess(request.kind, request.path);
+            Result result = executor ? executor(request.kind, request.path)
+                : launchPlatformProcess(request.kind, request.path);
             if (!result)
                 Utils::Logger::error("ui", "Failed to open path: " + result.message);
             return result;
@@ -200,6 +259,55 @@ namespace Utils {
         Result openFilePreview(const std::string& filePath) {
             Result validation = validateOpenPath(OpenOperationKind::Preview, filePath);
             return validation ? launchPlatformProcess(OpenOperationKind::Preview, filePath) : validation;
+        }
+
+        Result copyToClipboard(const std::string &text) {
+            if (text.empty())
+                return Result::Failure("Nothing to copy", ResultCode::InvalidInput);
+#ifdef _WIN32
+            if (!OpenClipboard(nullptr))
+                return Result::Failure("Unable to open the Windows clipboard", ResultCode::Unavailable, true);
+            EmptyClipboard();
+            const int wideLength = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
+                static_cast<int>(text.size()), nullptr, 0);
+            if (wideLength <= 0) {
+                CloseClipboard();
+                return Result::Failure("Magnet URI is not valid UTF-8", ResultCode::InvalidInput);
+            }
+            HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, static_cast<SIZE_T>(wideLength + 1) * sizeof(wchar_t));
+            if (!memory) {
+                CloseClipboard();
+                return Result::Failure("Unable to allocate clipboard memory", ResultCode::Unavailable, true);
+            }
+            auto *target = static_cast<wchar_t *>(GlobalLock(memory));
+            MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()),
+                target, wideLength);
+            target[wideLength] = L'\0';
+            GlobalUnlock(memory);
+            if (!SetClipboardData(CF_UNICODETEXT, memory)) {
+                GlobalFree(memory);
+                CloseClipboard();
+                return Result::Failure("Unable to set the Windows clipboard", ResultCode::Unavailable, true);
+            }
+            CloseClipboard();
+            return Result::Success();
+#elif defined(__APPLE__)
+            return copyWithProcess("pbcopy", {}, text);
+#elif defined(__linux__)
+            const Result wlCopy = copyWithProcess("wl-copy", {}, text);
+            if (wlCopy || wlCopy.message.find("No clipboard backend") == std::string::npos)
+                return wlCopy;
+            const Result xclip = copyWithProcess("xclip", {"-selection", "clipboard"}, text);
+            if (xclip || xclip.message.find("No clipboard backend") == std::string::npos)
+                return xclip;
+            const Result xsel = copyWithProcess("xsel", {"--clipboard", "--input"}, text);
+            if (xsel || xsel.message.find("No clipboard backend") == std::string::npos)
+                return xsel;
+            return Result::Failure("No clipboard backend is available (tried wl-copy, xclip and xsel)",
+                ResultCode::Unavailable, true);
+#else
+            return Result::Failure("Clipboard support is not available on this platform", ResultCode::Unavailable);
+#endif
         }
 
     }

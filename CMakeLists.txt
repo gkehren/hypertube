@@ -1,13 +1,21 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.21)
 
-# Project name
-project(hypertube CXX)
+# Project name and version
+project(hypertube VERSION 0.1.0 LANGUAGES CXX)
+
+if(POLICY CMP0207)
+    cmake_policy(SET CMP0207 NEW)
+endif()
 
 # C++ standard
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(HYPERTUBE_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(HYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS
+    "Tune Release binaries for the build host (not suitable for distributed packages)" OFF)
+option(HYPERTUBE_ENABLE_SLINT_GPU_BENCHMARK
+    "Build the optional FemtoVG renderer and renderer comparison target" OFF)
 
 # Enable Position Independent Code (PIE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -17,7 +25,6 @@ if(APPLE)
     list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew" "/usr/local")
     include_directories(SYSTEM "/opt/homebrew/include" "/usr/local/include")
     link_directories("/opt/homebrew/lib" "/usr/local/lib")
-    add_compile_definitions(GL_SILENCE_DEPRECATION)
 endif()
 
 # Security Hardening Flags
@@ -53,87 +60,8 @@ if(HYPERTUBE_ENABLE_SANITIZERS AND NOT MSVC)
     add_link_options(-fsanitize=address,undefined)
 endif()
 
-set(OpenGL_GL_PREFERENCE GLVND)
-
 # Include FetchContent module for dependency management
 include(FetchContent)
-
-# 1. OpenGL dependency
-find_package(OpenGL REQUIRED)
-
-# 2. GLFW3 dependency (vcpkg / Homebrew / Linux or FetchContent fallback)
-find_package(glfw3 CONFIG QUIET)
-if(NOT glfw3_FOUND AND NOT TARGET glfw AND NOT TARGET glfw3::glfw)
-    find_package(PkgConfig QUIET)
-    if(PKG_CONFIG_FOUND)
-        pkg_check_modules(GLFW3 QUIET glfw3)
-    endif()
-    if(GLFW3_FOUND)
-        add_library(glfw INTERFACE IMPORTED)
-        target_include_directories(glfw INTERFACE ${GLFW3_INCLUDE_DIRS})
-        target_link_libraries(glfw INTERFACE ${GLFW3_LIBRARIES})
-    else()
-        FetchContent_Declare(
-            glfw
-            GIT_REPOSITORY https://github.com/glfw/glfw.git
-            GIT_TAG 3.4
-        )
-        set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-        set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-        set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-        set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-        FetchContent_MakeAvailable(glfw)
-    endif()
-endif()
-
-if(TARGET glfw3::glfw AND NOT TARGET glfw)
-    add_library(glfw ALIAS glfw3::glfw)
-endif()
-
-# 3. ImGui dependency (FetchContent for docking branch and backends)
-if(NOT TARGET imgui AND NOT TARGET imgui::imgui)
-    FetchContent_Declare(
-        imgui
-        GIT_REPOSITORY https://github.com/ocornut/imgui.git
-        GIT_TAG docking
-    )
-    FetchContent_MakeAvailable(imgui)
-
-    add_library(imgui STATIC
-        ${imgui_SOURCE_DIR}/imgui.cpp
-        ${imgui_SOURCE_DIR}/imgui_demo.cpp
-        ${imgui_SOURCE_DIR}/imgui_draw.cpp
-        ${imgui_SOURCE_DIR}/imgui_tables.cpp
-        ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-        ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
-        ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
-        ${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp
-    )
-    target_include_directories(imgui PUBLIC
-        ${imgui_SOURCE_DIR}
-        ${imgui_SOURCE_DIR}/backends
-    )
-    target_link_libraries(imgui PUBLIC glfw OpenGL::GL)
-    add_library(imgui::imgui ALIAS imgui)
-endif()
-
-# 4. ImGuiFileDialog dependency (vcpkg / system or FetchContent fallback)
-find_package(ImGuiFileDialog CONFIG QUIET)
-if(NOT ImGuiFileDialog_FOUND AND NOT TARGET ImGuiFileDialog)
-    FetchContent_Declare(
-        ImGuiFileDialog
-        GIT_REPOSITORY https://github.com/aiekick/ImGuiFileDialog.git
-        GIT_TAG master
-    )
-    FetchContent_MakeAvailable(ImGuiFileDialog)
-
-    if(TARGET ImGuiFileDialog AND TARGET imgui::imgui)
-        target_link_libraries(ImGuiFileDialog PUBLIC imgui::imgui)
-        if(imgui_SOURCE_DIR)
-            target_include_directories(ImGuiFileDialog PUBLIC ${imgui_SOURCE_DIR})
-        endif()
-    endif()
-endif()
 
 # 5. nlohmann/json dependency (vcpkg / system or FetchContent fallback)
 find_package(nlohmann_json CONFIG QUIET)
@@ -206,23 +134,29 @@ else()
     endif()
 endif()
 
-# 8. Find X11 on Linux systems if available
-if(UNIX AND NOT APPLE)
-    find_package(X11 QUIET)
-endif()
-
-# Source files
-set(SOURCES
-	src/main.cpp
-	src/app/App.cpp
-    src/ui/UIManager.cpp
-    src/ui/TorrentTableUI.cpp
-    src/ui/TorrentDetailsUI.cpp
-    src/ui/SearchUI.cpp
-    src/ui/ModalDialogs.cpp
-    src/ui/LogsUI.cpp
-    src/ui/Theme.cpp
+# 8. Slint dependency. Keep the version and backend choices explicit so a
+# local Qt installation cannot silently change the renderer.
+set(SLINT_FEATURE_BACKEND_QT OFF CACHE BOOL "" FORCE)
+set(SLINT_FEATURE_BACKEND_WINIT ON CACHE BOOL "" FORCE)
+set(SLINT_FEATURE_RENDERER_FEMTOVG ${HYPERTUBE_ENABLE_SLINT_GPU_BENCHMARK} CACHE BOOL "" FORCE)
+set(SLINT_FEATURE_RENDERER_SOFTWARE ON CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    Slint
+    GIT_REPOSITORY https://github.com/slint-ui/slint.git
+    GIT_TAG v1.17.1
+    SOURCE_SUBDIR api/cpp
 )
+FetchContent_MakeAvailable(Slint)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(HYPERTUBE_FONTCONFIG QUIET IMPORTED_TARGET fontconfig)
+    endif()
+    if(NOT TARGET PkgConfig::HYPERTUBE_FONTCONFIG)
+        message(FATAL_ERROR "Fontconfig development files are required for Slint")
+    endif()
+endif()
 
 # Create the utils library
 add_library(hypertube_utils STATIC
@@ -313,66 +247,237 @@ target_link_libraries(hypertube_search PUBLIC
     CURL::libcurl
 )
 
-# Create the executable
-add_executable(hypertube ${SOURCES})
+# Toolkit-neutral presentation and controller layer.
+add_library(hypertube_presentation STATIC
+    src/presentation/UiFormatters.cpp
+  src/presentation/TorrentListPresenter.cpp
+	  src/presentation/TorrentAvailability.cpp
+    src/presentation/TorrentDetailsPresenter.cpp
+    src/presentation/SearchPresenter.cpp
+    src/presentation/LogsPresenter.cpp
+    src/presentation/PreferencesController.cpp
+    src/presentation/UiStateController.cpp
+)
 
-# Set target-specific include directories
-target_include_directories(hypertube PRIVATE
+target_include_directories(hypertube_presentation PUBLIC
     "include"
     "include/app"
-    "include/ui"
     "include/utils"
 )
 
-# Link libraries using modern imported targets
-target_link_libraries(hypertube PRIVATE
-	hypertube_utils
-	hypertube_torrent
-    hypertube_config
+target_link_libraries(hypertube_presentation PUBLIC
+    hypertube_torrent
     hypertube_search
+    hypertube_utils
     LibtorrentRasterbar::torrent-rasterbar
-    OpenGL::GL
-    glfw
-    imgui::imgui
-    ImGuiFileDialog
-    nlohmann_json::nlohmann_json
-    CURL::libcurl
 )
 
-# Platform-specific libraries
-if(UNIX AND NOT APPLE AND X11_FOUND)
-    target_link_libraries(hypertube PRIVATE ${X11_LIBRARIES})
+if(NOT SLINT_STYLE)
+    set(SLINT_STYLE "fluent-dark" CACHE STRING "Slint widget style used by the application and previews" FORCE)
 endif()
 
+add_executable(hypertube
+        src/main.cpp
+        src/app/App.cpp
+        src/ui/slint/SlintAppController.cpp
+        src/ui/slint/SlintControllerFacades.cpp
+		src/ui/slint/SlintRefreshCoordinators.cpp
+        src/ui/slint/SlintModelAdapter.cpp
+        src/ui/slint/SearchModelAdapter.cpp
+        src/ui/slint/DetailsModelAdapter.cpp
+        src/ui/slint/LogModelAdapter.cpp
+        src/ui/slint/DialogService.cpp
+    )
+
+    target_include_directories(hypertube PRIVATE
+        "include"
+        "include/app"
+        "include/utils"
+        "include/ui/slint"
+    )
+
+    target_link_libraries(hypertube PRIVATE
+        hypertube_utils
+        hypertube_torrent
+        hypertube_config
+        hypertube_search
+        hypertube_presentation
+        Slint::Slint
+        CURL::libcurl
+    )
+
+    if(TARGET PkgConfig::HYPERTUBE_FONTCONFIG)
+        target_link_libraries(hypertube PRIVATE PkgConfig::HYPERTUBE_FONTCONFIG)
+    endif()
+
+    if(WIN32)
+        target_link_libraries(hypertube PRIVATE ole32)
+    endif()
+
+    slint_target_sources(hypertube
+        ui/main-window.slint
+    )
+
+    if(WIN32 AND TARGET slint_cpp-shared)
+            add_custom_command(TARGET hypertube POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_FILE:slint_cpp-shared>"
+                "$<TARGET_FILE_DIR:hypertube>"
+            VERBATIM
+        )
+    endif()
+
+# Keep the static layout previews independently checkable without making them
+# part of the production executable or requiring slint-viewer at runtime.
+set(HYPERTUBE_SLINT_PREVIEW_SOURCES
+    ui/previews/torrent-table-preview.slint
+    ui/previews/search-preview.slint
+    ui/previews/preferences-preview.slint
+    ui/previews/details-preview.slint
+    ui/previews/favorites-preview.slint
+    ui/previews/logs-preview.slint
+    ui/previews/add-torrent-dialog-preview.slint
+    ui/previews/remove-torrent-dialog-preview.slint
+    ui/previews/app-shell-preview.slint
+)
+set(HYPERTUBE_SLINT_PREVIEW_OUTPUTS)
+file(GLOB_RECURSE HYPERTUBE_SLINT_UI_DEPENDENCIES CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/ui/*.slint"
+)
+foreach(preview_source IN LISTS HYPERTUBE_SLINT_PREVIEW_SOURCES)
+    get_filename_component(preview_name "${preview_source}" NAME_WE)
+    set(preview_output "${CMAKE_CURRENT_BINARY_DIR}/${preview_name}.h")
+    add_custom_command(
+        OUTPUT "${preview_output}"
+        COMMAND $<TARGET_FILE:Slint::slint-compiler>
+            -f cpp
+            --style "${SLINT_STYLE}"
+            -I "${CMAKE_SOURCE_DIR}/ui"
+            -o "${preview_output}"
+            "${CMAKE_SOURCE_DIR}/${preview_source}"
+        DEPENDS
+            ${HYPERTUBE_SLINT_UI_DEPENDENCIES}
+        COMMENT "Checking Slint preview ${preview_name}"
+        VERBATIM
+    )
+    list(APPEND HYPERTUBE_SLINT_PREVIEW_OUTPUTS "${preview_output}")
+endforeach()
+add_custom_target(slint-preview-check DEPENDS ${HYPERTUBE_SLINT_PREVIEW_OUTPUTS})
+add_test(
+    NAME slint-preview-check
+    COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target slint-preview-check --config $<CONFIG>
+)
+
+add_executable(slint-visual-snapshots tools/slint_visual_snapshots.cpp)
+target_link_libraries(slint-visual-snapshots PRIVATE Slint::Slint)
+slint_target_sources(slint-visual-snapshots ui/snapshot-window.slint)
+
+add_executable(slint-renderer-benchmark EXCLUDE_FROM_ALL tools/slint_renderer_benchmark.cpp)
+target_link_libraries(slint-renderer-benchmark PRIVATE Slint::Slint)
 if(WIN32)
-    target_link_libraries(hypertube PRIVATE ws2_32 iphlpapi crypt32 dbghelp)
+    target_link_libraries(slint-renderer-benchmark PRIVATE psapi)
+    target_compile_options(slint-renderer-benchmark PRIVATE /EHsc)
 endif()
+slint_target_sources(slint-renderer-benchmark ui/renderer-benchmark-window.slint)
+if(WIN32 AND TARGET slint_cpp-shared)
+    add_custom_command(TARGET slint-renderer-benchmark POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:slint_cpp-shared>"
+            "$<TARGET_FILE_DIR:slint-renderer-benchmark>"
+        VERBATIM
+    )
+endif()
+
+set(HYPERTUBE_RENDERER_REPORT_DIRECTORY "${CMAKE_BINARY_DIR}/renderer-reports")
+add_custom_target(slint-renderer-software-benchmark
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${HYPERTUBE_RENDERER_REPORT_DIRECTORY}"
+    COMMAND ${CMAKE_COMMAND} -E env SLINT_BACKEND=winit-software
+        $<TARGET_FILE:slint-renderer-benchmark>
+        "${HYPERTUBE_RENDERER_REPORT_DIRECTORY}/software.json" software
+    DEPENDS slint-renderer-benchmark
+    USES_TERMINAL
+    VERBATIM
+)
+if(HYPERTUBE_ENABLE_SLINT_GPU_BENCHMARK)
+    add_custom_target(slint-renderer-comparison
+        COMMAND ${CMAKE_COMMAND}
+            -DBENCHMARK_EXECUTABLE=$<TARGET_FILE:slint-renderer-benchmark>
+            -DOUTPUT_DIRECTORY=${HYPERTUBE_RENDERER_REPORT_DIRECTORY}
+            -P "${CMAKE_SOURCE_DIR}/cmake/CompareSlintRenderers.cmake"
+        DEPENDS slint-renderer-benchmark
+        USES_TERMINAL
+        VERBATIM
+    )
+endif()
+add_custom_target(slint-visual-snapshots-run
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/visual-artifacts"
+    COMMAND ${CMAKE_COMMAND} -E env SLINT_BACKEND=winit-software
+        $<TARGET_FILE:slint-visual-snapshots> "${CMAKE_BINARY_DIR}/visual-artifacts"
+    DEPENDS slint-visual-snapshots
+    USES_TERMINAL
+)
 
 file(COPY config DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
 # Portable distribution: install the executable and seed configuration into a
 # flat directory that can be zipped for Linux/macOS/Windows packaging jobs.
 include(GNUInstallDirs)
-install(TARGETS hypertube COMPONENT runtime RUNTIME DESTINATION . BUNDLE DESTINATION .)
+if(WIN32)
+    set(HYPERTUBE_RUNTIME_DEPENDENCY_DIRECTORY_ARGS)
+    if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+        list(APPEND HYPERTUBE_RUNTIME_DEPENDENCY_DIRECTORY_ARGS
+            DIRECTORIES
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+        )
+    endif()
+
+    install(TARGETS hypertube
+        COMPONENT runtime
+        RUNTIME_DEPENDENCY_SET hypertube_runtime_dependencies
+        RUNTIME DESTINATION .
+    )
+    install(RUNTIME_DEPENDENCY_SET hypertube_runtime_dependencies
+        COMPONENT runtime
+        DESTINATION .
+        ${HYPERTUBE_RUNTIME_DEPENDENCY_DIRECTORY_ARGS}
+        PRE_EXCLUDE_REGEXES
+            "api-ms-win-.*"
+            "ext-ms-.*"
+            "slint_cpp.*"
+            "azureattest.*"
+            "hvsifiletrust.*"
+            "pdmutilities.*"
+            "wpaxholder.*"
+        POST_EXCLUDE_REGEXES
+            ".*[\\/][Ww][Ii][Nn][Dd][Oo][Ww][Ss][\\/].*"
+    )
+    if(TARGET slint_cpp-shared)
+        install(FILES "$<TARGET_FILE:slint_cpp-shared>" COMPONENT runtime DESTINATION .)
+    endif()
+else()
+    install(TARGETS hypertube COMPONENT runtime RUNTIME DESTINATION . BUNDLE DESTINATION .)
+endif()
 install(DIRECTORY config DESTINATION . COMPONENT runtime)
+install(FILES LICENSE THIRD_PARTY_NOTICES.md config/hypertube.desktop DESTINATION . COMPONENT runtime)
 set(CPACK_GENERATOR "ZIP")
 set(CPACK_PACKAGE_NAME "Hypertube")
-set(CPACK_PACKAGE_VERSION "0.1.0")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_INSTALL_CMAKE_PROJECTS "${CMAKE_BINARY_DIR};${CMAKE_PROJECT_NAME};runtime;.")
 set(CPACK_MONOLITHIC_INSTALL ON)
 include(CPack)
 
-# Add optimized flags for Release build
 if(MSVC)
     target_compile_options(hypertube PRIVATE
-        $<$<CONFIG:Release>:/O2 /arch:AVX2 /GL /fp:fast>
+        $<$<CONFIG:Release>:/O2 /GL>
+        $<$<AND:$<CONFIG:Release>,$<BOOL:${HYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS}>>:/arch:AVX2 /fp:fast>
     )
     target_link_options(hypertube PRIVATE
         $<$<CONFIG:Release>:/LTCG>
     )
 else()
     target_compile_options(hypertube PRIVATE
-        $<$<CONFIG:Release>:-O3 -march=native -flto -ffast-math>
+        $<$<CONFIG:Release>:-O3 -flto>
+        $<$<AND:$<CONFIG:Release>,$<BOOL:${HYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS}>>:-march=native -ffast-math>
     )
     target_link_options(hypertube PRIVATE
         $<$<CONFIG:Release>:-flto>

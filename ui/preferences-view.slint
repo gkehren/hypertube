@@ -1,0 +1,94 @@
+import { Button, CheckBox, HorizontalBox, LineEdit, ScrollView, VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "theme.slint";
+import { Theme } from "enums.slint";
+
+component SectionTitle inherits Text { color: ThemeTokens.foreground; font-size: 18px; }
+component FieldLabel inherits Text { color: ThemeTokens.muted-foreground; width: 180px; vertical-alignment: center; wrap: word-wrap; }
+
+export component PreferencesView inherits Rectangle {
+	in property <Theme> selected-theme: Theme.dark;
+	in property <bool> sidebar-collapsed: false;
+	in property <string> state-message;
+	in-out property <string> download-limit;
+	in-out property <string> upload-limit;
+	in-out property <string> download-path;
+	in-out property <bool> enable-dht: true;
+	in-out property <bool> enable-upnp: true;
+	in-out property <bool> enable-natpmp: true;
+	in-out property <bool> torznab-enabled: false;
+	in-out property <string> torznab-url;
+	in property <bool> torznab-secret-stored: false;
+	in-out property <string> torznab-secret;
+	in-out property <bool> proxy-enabled: false;
+	in-out property <string> proxy-type: "socks5";
+	in-out property <string> proxy-host;
+	in-out property <string> proxy-port;
+	in-out property <string> proxy-username;
+	in property <bool> proxy-secret-stored: false;
+	in-out property <string> proxy-secret;
+	in property <bool> saving: false;
+	callback change-theme(Theme);
+	callback toggle-sidebar();
+	callback browse-download-directory();
+	callback apply-preferences();
+	callback clear-torznab-secret();
+	callback clear-proxy-secret();
+
+	background: ThemeTokens.background;
+	VerticalBox {
+		padding: 20px;
+		Text { text: "Preferences"; color: ThemeTokens.foreground; font-size: 24px; }
+		Text { text: root.state-message; color: ThemeTokens.muted-foreground; wrap: word-wrap; }
+		ScrollView {
+			VerticalBox {
+				padding-right: 12px;
+				spacing: 10px;
+				SectionTitle { text: "Appearance"; }
+				VerticalBox {
+					HorizontalBox {
+						Rectangle { height: 38px; min-width: 90px; border-width: root.selected-theme == Theme.dark ? 2px : 1px; border-color: root.selected-theme == Theme.dark ? ThemeTokens.accent : ThemeTokens.border; Button { text: "Dark"; clicked => { root.change-theme(Theme.dark); } } }
+						Rectangle { height: 38px; min-width: 90px; border-width: root.selected-theme == Theme.ocean ? 2px : 1px; border-color: root.selected-theme == Theme.ocean ? ThemeTokens.accent : ThemeTokens.border; Button { text: "Ocean"; clicked => { root.change-theme(Theme.ocean); } } }
+						Rectangle { height: 38px; min-width: 90px; border-width: root.selected-theme == Theme.nord ? 2px : 1px; border-color: root.selected-theme == Theme.nord ? ThemeTokens.accent : ThemeTokens.border; Button { text: "Nord"; clicked => { root.change-theme(Theme.nord); } } }
+					}
+					HorizontalBox {
+						Rectangle { height: 38px; min-width: 90px; border-width: root.selected-theme == Theme.dracula ? 2px : 1px; border-color: root.selected-theme == Theme.dracula ? ThemeTokens.accent : ThemeTokens.border; Button { text: "Dracula"; clicked => { root.change-theme(Theme.dracula); } } }
+						Rectangle { height: 38px; min-width: 110px; border-width: root.selected-theme == Theme.cyberpunk ? 2px : 1px; border-color: root.selected-theme == Theme.cyberpunk ? ThemeTokens.accent : ThemeTokens.border; Button { text: "CyberPunk"; clicked => { root.change-theme(Theme.cyberpunk); } } }
+						Rectangle { }
+					}
+				}
+				SectionTitle { text: "Downloads"; }
+				HorizontalBox { FieldLabel { text: "Download limit (bytes/s, 0 = unlimited)"; } LineEdit { text <=> root.download-limit; placeholder-text: "0"; } }
+				HorizontalBox { FieldLabel { text: "Upload limit (bytes/s, 0 = unlimited)"; } LineEdit { text <=> root.upload-limit; placeholder-text: "0"; } }
+				HorizontalBox { FieldLabel { text: "Default download directory"; } LineEdit { text <=> root.download-path; placeholder-text: "~/Downloads"; } Button { text: "Browse"; width: 70px; clicked => { root.browse-download-directory(); } } }
+				SectionTitle { text: "Network discovery"; }
+				HorizontalBox {
+					CheckBox { text: "DHT"; checked <=> root.enable-dht; }
+					CheckBox { text: "UPnP"; checked <=> root.enable-upnp; }
+					CheckBox { text: "NAT-PMP"; checked <=> root.enable-natpmp; }
+				}
+				SectionTitle { text: "Torznab search"; }
+				CheckBox { text: "Enable Torznab"; checked <=> root.torznab-enabled; }
+				HorizontalBox { FieldLabel { text: "Endpoint URL"; } LineEdit { text <=> root.torznab-url; placeholder-text: "http://127.0.0.1:9696/..."; } }
+				HorizontalBox { FieldLabel { text: "API key"; } LineEdit { text <=> root.torznab-secret; input-type: password; placeholder-text: root.torznab-secret-stored ? "Stored — enter to replace" : "API key"; } Button { text: "Clear stored secret"; enabled: root.torznab-secret-stored; clicked => { root.clear-torznab-secret(); } } }
+				Text { text: root.torznab-secret-stored ? "A Torznab secret is stored securely." : "No Torznab secret is stored."; color: ThemeTokens.muted-foreground; }
+				SectionTitle { text: "Proxy"; }
+				CheckBox { text: "Enable proxy"; checked <=> root.proxy-enabled; }
+				HorizontalBox {
+					FieldLabel { text: "Proxy type"; }
+					Rectangle { height: 38px; width: 100px; border-width: root.proxy-type == "socks5" ? 2px : 1px; border-color: root.proxy-type == "socks5" ? ThemeTokens.accent : ThemeTokens.border; Button { text: "SOCKS5"; clicked => { root.proxy-type = "socks5"; } } }
+					Rectangle { height: 38px; width: 100px; border-width: root.proxy-type == "http" ? 2px : 1px; border-color: root.proxy-type == "http" ? ThemeTokens.accent : ThemeTokens.border; Button { text: "HTTP"; clicked => { root.proxy-type = "http"; } } }
+				}
+				HorizontalBox { FieldLabel { text: "Host"; } LineEdit { text <=> root.proxy-host; placeholder-text: "127.0.0.1"; } }
+				HorizontalBox { FieldLabel { text: "Port"; } LineEdit { text <=> root.proxy-port; placeholder-text: "1080"; } }
+				HorizontalBox { FieldLabel { text: "Username"; } LineEdit { text <=> root.proxy-username; } }
+				HorizontalBox { FieldLabel { text: "Password"; } LineEdit { text <=> root.proxy-secret; input-type: password; placeholder-text: root.proxy-secret-stored ? "Stored — enter to replace" : "Proxy password"; } Button { text: "Clear stored secret"; enabled: root.proxy-secret-stored; clicked => { root.clear-proxy-secret(); } } }
+				Text { text: root.proxy-secret-stored ? "A proxy secret is stored securely." : "No proxy secret is stored."; color: ThemeTokens.muted-foreground; }
+			}
+		}
+		HorizontalBox {
+			Button { text: root.sidebar-collapsed ? "Expand sidebar" : "Collapse sidebar"; clicked => { root.toggle-sidebar(); } }
+			Rectangle { }
+			Button { text: root.saving ? "Saving…" : "Apply preferences"; enabled: !root.saving; clicked => { root.apply-preferences(); } }
+		}
+	}
+}

@@ -21,8 +21,27 @@
 #include <deque>
 #include <array>
 
-// Forward declaration
+#include "Logger.hpp"
+#include <future>
+
 struct TorrentConfigData;
+
+enum class TorrentEventType
+{
+	Log,
+	ResumeData,
+	ResumeFailed,
+	StatusChanged
+};
+
+struct TorrentEvent
+{
+	TorrentEventType type = TorrentEventType::Log;
+	Utils::LogLevel severity = Utils::LogLevel::Info;
+	std::string category;
+	std::string message;
+	std::optional<lt::info_hash_t> hash;
+};
 
 // A value snapshot used by the UI and persistence layers. The map containing
 // these entries never escapes TorrentManager, so callers cannot race a map
@@ -33,6 +52,14 @@ struct ManagedTorrent
 	lt::torrent_handle handle;
 	std::string torrentFilePath;
 	std::vector<char> resumeData;
+	std::string displayName;
+};
+
+struct PersistenceSnapshotResult
+{
+	bool success = false;
+	std::vector<ManagedTorrent> torrents;
+	std::string errorMessage;
 };
 
 enum class TorrentRemovalMode
@@ -103,6 +130,7 @@ struct TorrentDetailsSnapshot
 	std::string savePath;
 	std::string message;
 	bool truncated = false;
+	std::uint64_t revision = 0;
 	std::vector<TorrentFileSnapshot> files;
 	std::vector<TorrentPeerSnapshot> peers;
 	std::vector<TorrentTrackerSnapshot> trackers;
@@ -121,6 +149,7 @@ public:
 	Result removeTorrent(const lt::info_hash_t &hash, TorrentRemovalMode removeMode);
 	Result executeCommand(const lt::info_hash_t &hash, TorrentCommand command);
 	std::vector<ManagedTorrent> getTorrentSnapshot() const;
+	std::uint64_t getTorrentCollectionRevision() const { return torrentCollectionRevision.load(); }
 	Result getPersistenceSnapshot(std::vector<ManagedTorrent> &snapshot, std::chrono::milliseconds timeout = std::chrono::seconds(5));
 
 	// Speed limit methods
@@ -133,6 +162,7 @@ public:
 	// Status cache methods
 	std::optional<lt::torrent_status> getCachedStatus(const lt::info_hash_t &hash) const;
 	std::shared_ptr<const std::unordered_map<lt::info_hash_t, lt::torrent_status>> getStatusCache() const;
+	std::uint64_t getStatusRevision() const;
 	void refreshStatusCache();
 	void requestStatusRefresh();
 	void setCacheRefreshInterval(int milliseconds);
@@ -151,7 +181,12 @@ public:
 	// proxyType: 0 disables the proxy, 1 selects SOCKS5, 2 selects HTTP.
 	void setProxyConfig(const std::string &hostname, int port, const std::string &username = "", const std::string &password = "", int proxyType = 0);
 
-	// Alert polling methods
+	// Asynchronous persistence snapshot methods
+	Result requestPersistenceSnapshot();
+	std::optional<PersistenceSnapshotResult> pollPersistenceSnapshot();
+
+	// Event draining methods (replaces raw pollAlerts)
+	std::vector<TorrentEvent> drainEvents();
 	std::vector<lt::alert *> pollAlerts();
 
 private:
@@ -160,17 +195,36 @@ private:
 	mutable std::mutex stateMutex;
 	std::unordered_map<lt::info_hash_t, lt::torrent_handle> torrents;
 	std::unordered_map<lt::info_hash_t, std::string> torrentFilePaths;
+	std::unordered_map<lt::info_hash_t, std::string> torrentDisplayNames;
+	std::atomic<std::uint64_t> torrentCollectionRevision{0};
+
+	// Alert pump & persistence synchronization
+	mutable std::mutex alertMutex_;
+	std::condition_variable alertCv_;
+	std::atomic<bool> stopAlertWorker_{false};
+	std::vector<TorrentEvent> eventsQueue_;
+	std::unordered_map<lt::info_hash_t, std::vector<char>> resumeDataStore_;
+	std::unordered_set<lt::info_hash_t> pendingResumeHashes_;
+	std::thread alertWorker_;
+	void alertWorkerLoop();
+
+	// Async persistence task
+	mutable std::mutex asyncPersistenceMutex_;
+	std::future<PersistenceSnapshotResult> asyncPersistenceFuture_;
+	bool asyncPersistencePending_{false};
+	std::atomic<bool> shuttingDown_{false};
 
 	// Status cache
 	mutable std::mutex cacheMutex;
 	std::shared_ptr<const std::unordered_map<lt::info_hash_t, lt::torrent_status>> statusCache = std::make_shared<std::unordered_map<lt::info_hash_t, lt::torrent_status>>();
+	std::uint64_t statusRevision = 0;
 	std::chrono::steady_clock::time_point lastCacheRefresh;
 	int cacheRefreshIntervalMs = 250; // Default 250ms
-	std::thread statusWorker;
 	std::mutex statusWorkerMutex;
 	std::condition_variable statusWorkerCv;
 	std::atomic<bool> stopStatusWorker{false};
 	std::atomic<bool> statusRefreshPending{false};
+	std::thread statusWorker;
 	void statusWorkerLoop();
 
 	struct DetailRequest
@@ -183,9 +237,10 @@ private:
 	std::deque<DetailRequest> detailRequests;
 	std::array<std::unordered_set<lt::info_hash_t>, 3> pendingDetailRequests;
 	std::array<std::unordered_map<lt::info_hash_t, std::shared_ptr<const TorrentDetailsSnapshot>>, 3> detailCache;
+	std::array<std::unordered_map<lt::info_hash_t, std::uint64_t>, 3> detailRevisions;
 	std::array<std::unordered_map<lt::info_hash_t, std::chrono::steady_clock::time_point>, 3> detailLastRefresh;
-	std::thread detailWorker;
 	std::atomic<bool> stopDetailWorker{false};
+	std::thread detailWorker;
 	void detailWorkerLoop();
-	std::shared_ptr<const TorrentDetailsSnapshot> collectDetails(const DetailRequest &request);
+	std::shared_ptr<TorrentDetailsSnapshot> collectDetails(const DetailRequest &request);
 };

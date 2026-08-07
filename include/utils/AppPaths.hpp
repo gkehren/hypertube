@@ -19,6 +19,7 @@ public:
 	static std::filesystem::path configDirectory();
 	static std::filesystem::path dataDirectory();
 	static std::filesystem::path cacheDirectory();
+	static std::filesystem::path expandUserPath(const std::filesystem::path &path);
 	static std::filesystem::path torrentsConfigPath();
 	static std::filesystem::path settingsConfigPath();
 	static std::filesystem::path logFilePath();

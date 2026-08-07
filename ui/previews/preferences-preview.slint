@@ -1,0 +1,5 @@
+import { PreferencesView } from "../preferences-view.slint";
+export component PreferencesPreview inherits Window {
+	preferred-width: 800px; preferred-height: 600px;
+	PreferencesView { state-message: "Changes are saved transactionally."; download-path: "~/Downloads/非常に長いディレクトリ名"; torznab-secret-stored: true; proxy-secret-stored: true; }
+}

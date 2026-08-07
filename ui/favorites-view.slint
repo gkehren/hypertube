@@ -1,0 +1,19 @@
+import { VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "theme.slint";
+import { SearchResultRow } from "search-types.slint";
+import { SearchResultList } from "components/search-result-list.slint";
+
+export component FavoritesView inherits Rectangle {
+	in property <[SearchResultRow]> rows: [];
+	in property <string> state-message;
+	callback select-result(string);
+	callback remove-favorite(string);
+	callback add-result(string);
+	background: ThemeTokens.background;
+	VerticalBox {
+		padding: 20px;
+		Text { text: "Favorites"; color: ThemeTokens.foreground; font-size: 24px; }
+		Text { text: root.state-message; color: ThemeTokens.muted-foreground; }
+		SearchResultList { rows: root.rows; favorite-mode: true; empty-message: "No favorites"; select(id) => { root.select-result(id); } remove-favorite(id) => { root.remove-favorite(id); } add(id) => { root.add-result(id); } }
+	}
+}

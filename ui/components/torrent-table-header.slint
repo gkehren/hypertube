@@ -1,0 +1,28 @@
+import { Button, HorizontalBox } from "std-widgets.slint";
+import { ThemeTokens } from "../theme.slint";
+import { TorrentSort } from "../enums.slint";
+import { TorrentTableGeometry } from "torrent-table-geometry.slint";
+
+export component TorrentTableHeader inherits Rectangle {
+	in property <bool> compact: false;
+	in property <bool> narrow: false;
+	in property <length> progress-width;
+	in property <length> status-width;
+	callback sort(TorrentSort);
+	height: 34px;
+	background: ThemeTokens.surface;
+	HorizontalBox {
+		padding: 6px;
+		spacing: 6px;
+		Button { text: "Name"; min-width: TorrentTableGeometry.minimum-name-width; horizontal-stretch: 1; clicked => { root.sort(TorrentSort.name); } }
+		if (!root.compact && !root.narrow): Button { text: "Size"; width: TorrentTableGeometry.size-width; clicked => { root.sort(TorrentSort.size); } }
+		if (!root.narrow): Button { text: "Progress"; width: root.progress-width; clicked => { root.sort(TorrentSort.progress); } }
+		if (!root.narrow): Button { text: "Status"; width: root.status-width; clicked => { root.sort(TorrentSort.status); } }
+		if (!root.compact && !root.narrow): Button { text: "Seeds"; width: TorrentTableGeometry.count-width; clicked => { root.sort(TorrentSort.seeds); } }
+		if (!root.compact && !root.narrow): Button { text: "Peers"; width: TorrentTableGeometry.count-width; clicked => { root.sort(TorrentSort.peers); } }
+		if (!root.narrow): Button { text: "Down"; width: TorrentTableGeometry.rate-width; clicked => { root.sort(TorrentSort.download-rate); } }
+		if (!root.compact && !root.narrow): Button { text: "Up"; width: TorrentTableGeometry.rate-width; clicked => { root.sort(TorrentSort.upload-rate); } }
+		if (!root.compact && !root.narrow): Button { text: "ETA"; width: TorrentTableGeometry.eta-width; clicked => { root.sort(TorrentSort.eta); } }
+		Rectangle { width: TorrentTableGeometry.actions-width; }
+	}
+}

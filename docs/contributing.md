@@ -25,7 +25,7 @@ Read the relevant document in `docs/` and inspect nearby code and tests. Preserv
 
 ## Code guidelines
 
-- Use C++17 and match the surrounding C++ style.
+- Use C++20 and match the surrounding C++ style.
 - Prefer RAII, standard containers, `std::filesystem`, and scoped locks.
 - Keep UI calls on the main/render thread.
 - Use snapshots when crossing from mutable services to UI or persistence.

@@ -1,0 +1,20 @@
+import { ThemeTokens } from "../theme.slint";
+
+export component TorrentStatusBadge inherits Rectangle {
+	in property <string> label;
+	in property <bool> error: false;
+	in property <bool> active: false;
+	in property <bool> paused: false;
+	height: 24px;
+	background: root.error ? ThemeTokens.error : root.active ? ThemeTokens.success : root.paused ? ThemeTokens.warning : ThemeTokens.border;
+	border-radius: 6px;
+	Text {
+		text: root.label;
+		color: ThemeTokens.background;
+		font-size: 11px;
+		horizontal-alignment: center;
+		vertical-alignment: center;
+		wrap: no-wrap;
+		overflow: elide;
+	}
+}

@@ -30,4 +30,8 @@ namespace Utils {
     // Formats a magnet URI from an infoHash and a name.
     std::string formatMagnetUri(const std::string &infoHash, const std::string &name);
 
+    // Replaces malformed UTF-8 sequences with the Unicode replacement character.
+    // This is used before passing external/libtorrent text to UTF-8 UI APIs.
+    std::string sanitizeUtf8(const std::string &value);
+
 }

@@ -179,4 +179,14 @@ TEST(StringUtilsTest, FormatBytesBufferTruncation) {
     EXPECT_STREQ(buf, "1 K");
 }
 
+TEST(StringUtilsTest, SanitizesMalformedUtf8) {
+    const std::string malformed("prefix\xFF\xC3\x28\xF0\x28\x8C\xBCsuffix", 19);
+    EXPECT_EQ(Utils::sanitizeUtf8(malformed), "prefix\xEF\xBF\xBD\xEF\xBF\xBD(\xEF\xBF\xBD(\xEF\xBF\xBD\xEF\xBF\xBDsuffix");
+}
+
+TEST(StringUtilsTest, PreservesValidUtf8) {
+    const std::string value = "日本語 🚀";
+    EXPECT_EQ(Utils::sanitizeUtf8(value), value);
+}
+
 } // namespace

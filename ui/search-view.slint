@@ -1,0 +1,75 @@
+import { Button, HorizontalBox, LineEdit, ScrollView, VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "theme.slint";
+import { SearchResultRow } from "search-types.slint";
+import { SearchResultList } from "components/search-result-list.slint";
+
+export component SearchView inherits Rectangle {
+	in-out property <string> query;
+	in property <string> state-message;
+	in property <bool> loading: false;
+	in property <bool> can-load-more: false;
+	in property <[SearchResultRow]> rows: [];
+	in property <[string]> recent-queries: [];
+	in property <bool> focus-request: false;
+
+	callback execute-search(string);
+	callback cancel-search();
+	callback load-more();
+	callback select-result(string);
+	callback toggle-favorite(string);
+	callback add-result(string);
+	callback select-history(string);
+	callback clear-history();
+
+	public function focus-search-field() {
+		search-input.focus();
+	}
+
+	background: ThemeTokens.background;
+
+	VerticalBox {
+		padding: 20px;
+		HorizontalBox {
+			search-input := LineEdit {
+				text <=> root.query;
+				placeholder-text: "Search torrents";
+				accepted => { root.execute-search(root.query); }
+			}
+			Button {
+				text: root.loading ? "Searching..." : "Search";
+				clicked => { root.execute-search(root.query); }
+			}
+			Button {
+				text: "Cancel";
+				enabled: root.loading;
+				clicked => { root.cancel-search(); }
+			}
+		}
+
+		Text { text: root.state-message; color: ThemeTokens.muted-foreground; }
+
+		if (root.recent-queries.length > 0): ScrollView {
+			height: 44px;
+			HorizontalBox {
+				Text { text: "Recent:"; color: ThemeTokens.muted-foreground; }
+				for recent in root.recent-queries: Button {
+					text: recent;
+					clicked => { root.select-history(recent); }
+				}
+				Button { text: "Clear history"; clicked => { root.clear-history(); } }
+			}
+		}
+
+		SearchResultList { rows: root.rows; empty-message: root.loading ? "Searching…" : "No search results"; select(id) => { root.select-result(id); } toggle-favorite(id) => { root.toggle-favorite(id); } add(id) => { root.add-result(id); } }
+
+		Button {
+			text: "Load more";
+			enabled: root.can-load-more && !root.loading;
+			clicked => { root.load-more(); }
+		}
+	}
+
+	changed focus-request => {
+		search-input.focus();
+	}
+}

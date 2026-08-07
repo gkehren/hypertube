@@ -1,0 +1,22 @@
+import { ThemeTokens } from "../theme.slint";
+
+export component TorrentProgress inherits Rectangle {
+	in property <float> value: 0;
+	in property <string> label;
+	height: 18px;
+	background: ThemeTokens.border;
+	border-radius: 4px;
+	Rectangle {
+		width: max(0px, min(parent.width, parent.width * root.value));
+		height: parent.height;
+		background: ThemeTokens.accent;
+		border-radius: 4px;
+	}
+	Text {
+		text: root.label;
+		color: ThemeTokens.foreground;
+		font-size: 11px;
+		horizontal-alignment: center;
+		vertical-alignment: center;
+	}
+}

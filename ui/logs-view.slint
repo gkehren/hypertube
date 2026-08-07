@@ -1,0 +1,74 @@
+import { Button, HorizontalBox, ListView, VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "theme.slint";
+import { LogRow } from "log-types.slint";
+import { LogLevel } from "enums.slint";
+
+export component LogsView inherits Rectangle {
+	in property <[LogRow]> rows: [];
+	in property <string> state-message;
+	in property <bool> show-debug: false;
+	in property <bool> show-info: true;
+	in property <bool> show-warning: true;
+	in property <bool> show-error: true;
+	in property <bool> auto-scroll: true;
+	in property <length> available-width: 1280px;
+	callback clear-logs();
+	callback set-log-filter(LogLevel, bool);
+	callback toggle-autoscroll(bool);
+
+	public function scroll-to-end() {
+		log-list.viewport-y = min(0px, log-list.height - log-list.viewport-height);
+	}
+
+	background: ThemeTokens.background;
+	scroll-after-layout := Timer {
+		interval: 1ms;
+		triggered => { self.stop(); log-list.viewport-y = min(0px, log-list.height - log-list.viewport-height); }
+	}
+	VerticalBox {
+		padding: 20px;
+		if (root.available-width >= 720px): HorizontalBox {
+			Text { text: "Diagnostics"; color: ThemeTokens.foreground; font-size: 24px; }
+			Rectangle { }
+			Rectangle { height: 36px; width: 72px; border-width: root.show-debug ? 2px : 1px; border-color: root.show-debug ? ThemeTokens.accent : ThemeTokens.border; Button { text: "Debug"; clicked => { root.set-log-filter(LogLevel.debug, !root.show-debug); } } }
+			Rectangle { height: 36px; width: 64px; border-width: root.show-info ? 2px : 1px; border-color: root.show-info ? ThemeTokens.accent : ThemeTokens.border; Button { text: "Info"; clicked => { root.set-log-filter(LogLevel.info, !root.show-info); } } }
+			Rectangle { height: 36px; width: 90px; border-width: root.show-warning ? 2px : 1px; border-color: root.show-warning ? ThemeTokens.accent : ThemeTokens.border; Button { text: "Warning"; clicked => { root.set-log-filter(LogLevel.warning, !root.show-warning); } } }
+			Rectangle { height: 36px; width: 70px; border-width: root.show-error ? 2px : 1px; border-color: root.show-error ? ThemeTokens.accent : ThemeTokens.border; Button { text: "Error"; clicked => { root.set-log-filter(LogLevel.error, !root.show-error); } } }
+			Button { text: root.auto-scroll ? "Autoscroll on" : "Autoscroll off"; clicked => { root.toggle-autoscroll(!root.auto-scroll); } }
+			Button { text: "Clear"; clicked => { root.clear-logs(); } }
+		}
+		if (root.available-width < 720px): VerticalBox {
+			HorizontalBox {
+				Text { text: "Diagnostics"; color: ThemeTokens.foreground; font-size: 24px; }
+				Rectangle { }
+				Button { text: root.auto-scroll ? "Autoscroll on" : "Autoscroll off"; clicked => { root.toggle-autoscroll(!root.auto-scroll); } }
+				Button { text: "Clear"; clicked => { root.clear-logs(); } }
+			}
+			HorizontalBox {
+				Rectangle { height: 36px; border-width: root.show-debug ? 2px : 1px; border-color: root.show-debug ? ThemeTokens.accent : ThemeTokens.border; Button { text: "Debug"; clicked => { root.set-log-filter(LogLevel.debug, !root.show-debug); } } }
+				Rectangle { height: 36px; border-width: root.show-info ? 2px : 1px; border-color: root.show-info ? ThemeTokens.accent : ThemeTokens.border; Button { text: "Info"; clicked => { root.set-log-filter(LogLevel.info, !root.show-info); } } }
+				Rectangle { height: 36px; border-width: root.show-warning ? 2px : 1px; border-color: root.show-warning ? ThemeTokens.accent : ThemeTokens.border; Button { text: "Warning"; clicked => { root.set-log-filter(LogLevel.warning, !root.show-warning); } } }
+				Rectangle { height: 36px; border-width: root.show-error ? 2px : 1px; border-color: root.show-error ? ThemeTokens.accent : ThemeTokens.border; Button { text: "Error"; clicked => { root.set-log-filter(LogLevel.error, !root.show-error); } } }
+			}
+		}
+		Text { text: root.state-message; color: ThemeTokens.muted-foreground; }
+		log-list := ListView {
+			accessible-role: list;
+			accessible-label: "Diagnostics log";
+			accessible-item-count: root.rows.length;
+			for row in root.rows: HorizontalBox {
+				height: 34px;
+				accessible-role: list-item;
+				accessible-label: row.level + ", " + row.category + ": " + row.message;
+				Text { text: row.timestamp; color: ThemeTokens.muted-foreground; width: 170px; }
+				Text { text: row.level; color: row.severity >= 3 ? ThemeTokens.error : row.severity == 2 ? ThemeTokens.warning : ThemeTokens.muted-foreground; width: 80px; }
+				Text { text: row.category; color: ThemeTokens.accent; width: 110px; }
+				Text { text: row.message; color: ThemeTokens.foreground; wrap: no-wrap; overflow: elide; }
+			}
+		}
+		if (root.rows.length == 0): Text { text: "No diagnostics"; color: ThemeTokens.muted-foreground; }
+	}
+	changed rows => {
+		if (root.auto-scroll) { root.scroll-to-end(); }
+	}
+}

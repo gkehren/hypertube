@@ -1,0 +1,18 @@
+import { VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "../theme.slint";
+import { TorrentRow } from "../torrent-types.slint";
+import { TorrentTable } from "../components/torrent-table.slint";
+
+export component TorrentTablePreview inherits Window {
+	in property <[TorrentRow]> rows: [
+		{ id: "v1:0000000000000000000000000000000000000001", name: "Ubuntu 24.04 LTS amd64 desktop image", state-label: "Downloading", progress-label: "42%", progress: 0.42, size-label: "4.7 GiB", download-rate-label: "12.4 MiB/s", upload-rate-label: "1.2 MiB/s", peers-label: "34", seeds-label: "120", eta-label: "6m", paused: false, error: false, active: true },
+		{ id: "v1:0000000000000000000000000000000000000002", name: "日本語と Unicode 🚀 — an exceptionally long torrent name that must be elided", state-label: "Seeding", progress-label: "100%", progress: 1, size-label: "980 MiB", download-rate-label: "0 B/s", upload-rate-label: "3.1 MiB/s", peers-label: "8", seeds-label: "52", eta-label: "—", paused: false, error: false, active: true },
+		{ id: "v1:0000000000000000000000000000000000000003", name: "Waiting for metadata", state-label: "Metadata", progress-label: "0%", progress: 0, size-label: "Unknown", download-rate-label: "—", upload-rate-label: "—", peers-label: "0", seeds-label: "0", eta-label: "—", paused: true, error: false, active: false },
+	];
+	title: "Hypertube torrent table preview";
+	preferred-width: 1024px;
+	preferred-height: 600px;
+	background: ThemeTokens.background;
+	Text { x: 16px; y: 16px; width: parent.width - 32px; height: 32px; text: "Production TorrentTable"; color: ThemeTokens.foreground; font-size: 24px; }
+	TorrentTable { x: 16px; y: 56px; width: parent.width - 32px; height: parent.height - 72px; rows: root.rows; selected-id: root.rows[1].id; available-width: root.width - 32px; }
+}

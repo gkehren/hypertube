@@ -92,6 +92,24 @@ std::filesystem::path AppPaths::cacheDirectory()
 	return std::filesystem::current_path() / "cache";
 }
 
+std::filesystem::path AppPaths::expandUserPath(const std::filesystem::path &path)
+{
+	if (path.empty() || path.is_absolute())
+		return path;
+
+	const std::string genericPath = path.generic_string();
+	if (genericPath != "~" && genericPath.rfind("~/", 0) != 0)
+		return path.lexically_normal();
+
+	const std::filesystem::path suffix = genericPath == "~"
+		? std::filesystem::path()
+		: std::filesystem::path(genericPath.substr(2));
+	const std::filesystem::path home = homeDirectory();
+	const std::filesystem::path base = home.empty() ? std::filesystem::current_path() : home;
+	const std::filesystem::path normalizedBase = base.lexically_normal();
+	return suffix.empty() ? normalizedBase : (normalizedBase / suffix).lexically_normal();
+}
+
 std::filesystem::path AppPaths::torrentsConfigPath()
 {
 	return configDirectory() / "torrents.json";

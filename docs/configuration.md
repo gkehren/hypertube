@@ -29,11 +29,11 @@ Portable mode is intended for a self-contained distribution. It should not be us
 
 ## `settings.json`
 
-The current settings schema is version 1:
+The current settings schema is version 2. Version 1 files are migrated by adding the nested UI layout defaults:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "settings": {
     "speed_limits": {
       "download": 0,

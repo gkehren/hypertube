@@ -1,9 +1,9 @@
 #pragma once
 
-#include "UIManager.hpp"
 #include "ConfigManager.hpp"
 #include "TorrentManager.hpp"
 #include "SearchEngine.hpp"
+#include "SystemUtils.hpp"
 
 class App
 {
@@ -11,13 +11,20 @@ public:
 	App();
 	~App();
 
-	void run();
+	void initialize();
+	void shutdown();
+
+	ConfigManager &torrentsConfigManager() { return torrentsConfigManager_; }
+	ConfigManager &settingsConfigManager() { return settingsConfigManager_; }
+	TorrentManager &torrentManager() { return torrentManager_; }
+	SearchEngine &searchEngine() { return searchEngine_; }
+	Utils::SystemUtils::SystemOpener &systemOpener() { return systemOpener_; }
 
 private:
-	GLFWwindow *window;
-	ConfigManager torrentsConfigManager;
-	ConfigManager settingsConfigManager;
-	TorrentManager torrentManager;
-	SearchEngine searchEngine;
-	UIManager uiManager;
+	ConfigManager torrentsConfigManager_;
+	ConfigManager settingsConfigManager_;
+	TorrentManager torrentManager_;
+	SearchEngine searchEngine_;
+	Utils::SystemUtils::SystemOpener systemOpener_;
+	bool initialized_ = false;
 };

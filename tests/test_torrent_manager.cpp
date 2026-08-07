@@ -5,16 +5,35 @@
 
 #include <filesystem>
 #include <fstream>
+#include <random>
+#include <stdexcept>
 #include <thread>
 
 namespace
 {
+std::filesystem::path makeUniqueTestDirectory()
+{
+	const auto base = std::filesystem::temp_directory_path();
+	std::random_device random;
+
+	for (int attempt = 0; attempt < 100; ++attempt)
+	{
+		const auto candidate = base / ("hypertube-torrent-test-" +
+			std::to_string(random()) + "-" + std::to_string(random()));
+		std::error_code error;
+		if (std::filesystem::create_directory(candidate, error))
+			return candidate;
+	}
+
+	throw std::runtime_error("Unable to create unique torrent test directory");
+}
+
 class TorrentManagerTest : public ::testing::Test
 {
 protected:
 	void SetUp() override
 	{
-		testDirectory = std::filesystem::temp_directory_path() / ("hypertube-torrent-test-" + std::to_string(testCounter++));
+		testDirectory = makeUniqueTestDirectory();
 		std::filesystem::create_directories(testDirectory / "downloads");
 	}
 
@@ -36,7 +55,6 @@ protected:
 	}
 
 	std::filesystem::path testDirectory;
-	static inline int testCounter = 0;
 };
 }
 
@@ -127,7 +145,66 @@ TEST_F(TorrentManagerTest, CollectsFileDetailsOffTheCallingThread)
 	}
 	ASSERT_TRUE(details);
 	EXPECT_EQ(details->state, TorrentDetailState::Ready);
+	EXPECT_GT(details->revision, 0u);
 	ASSERT_EQ(details->files.size(), 1u);
 	EXPECT_EQ(details->files.front().name, "fixture");
 	EXPECT_EQ(details->files.front().size, 1);
+}
+
+TEST_F(TorrentManagerTest, CollectionRevisionChangesOnlyForSuccessfulMembershipChanges)
+{
+	TorrentManager manager;
+	const auto initial = manager.getTorrentCollectionRevision();
+	const auto torrentPath = writeTorrentFile();
+	const auto downloadPath = testDirectory / "downloads";
+	ASSERT_TRUE(manager.addTorrent(torrentPath.string(), downloadPath.string()));
+	const auto added = manager.getTorrentCollectionRevision();
+	EXPECT_GT(added, initial);
+	EXPECT_FALSE(manager.addTorrent(torrentPath.string(), downloadPath.string()));
+	EXPECT_EQ(manager.getTorrentCollectionRevision(), added);
+	const auto hash = manager.getTorrentSnapshot().front().hash;
+	ASSERT_TRUE(manager.removeTorrent(hash, TorrentRemovalMode::KeepAllFiles));
+	EXPECT_GT(manager.getTorrentCollectionRevision(), added);
+}
+
+TEST_F(TorrentManagerTest, RefreshesStatusCacheWhenRequested)
+{
+	TorrentManager manager;
+	const auto torrentPath = writeTorrentFile();
+	const auto downloadPath = testDirectory / "downloads";
+	ASSERT_TRUE(manager.addTorrent(torrentPath.string(), downloadPath.string()));
+	const auto hash = manager.getTorrentSnapshot().front().hash;
+
+	manager.requestStatusRefresh();
+	std::optional<lt::torrent_status> status;
+	for (int attempt = 0; attempt < 100 && !status; ++attempt)
+	{
+		status = manager.getCachedStatus(hash);
+		if (!status)
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+
+	ASSERT_TRUE(status);
+	EXPECT_EQ(status->name, "fixture");
+}
+
+TEST_F(TorrentManagerTest, PublishesAStableStatusRevisionBetweenRefreshes)
+{
+	TorrentManager manager;
+	const auto torrentPath = writeTorrentFile();
+	ASSERT_TRUE(manager.addTorrent(torrentPath.string(), (testDirectory / "downloads").string()));
+
+	const auto before = manager.getStatusRevision();
+	manager.requestStatusRefresh();
+	std::uint64_t refreshed = before;
+	for (int attempt = 0; attempt < 100 && refreshed == before; ++attempt)
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		refreshed = manager.getStatusRevision();
+	}
+	ASSERT_GT(refreshed, before);
+
+	manager.requestStatusRefresh();
+	std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	EXPECT_EQ(manager.getStatusRevision(), refreshed);
 }

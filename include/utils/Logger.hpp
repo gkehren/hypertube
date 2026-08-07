@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <mutex>
 #include <string>
+#include <cstdint>
 #include <vector>
 
 namespace Utils
@@ -35,6 +36,7 @@ public:
 	static void warning(const std::string &category, const std::string &message);
 	static void error(const std::string &category, const std::string &message);
 	static std::vector<LogRecord> recent();
+	static std::uint64_t revision();
 	static void clearRecent();
 	static std::filesystem::path logPath();
 

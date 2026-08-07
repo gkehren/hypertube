@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Hypertube
+GenericName=BitTorrent Client
+Comment=Cross-platform BitTorrent desktop client
+Exec=hypertube %U
+Icon=hypertube
+Terminal=false
+Categories=Network;FileTransfer;P2P;GTK;
+MimeType=application/x-bittorrent;x-scheme-handler/magnet;
+Keywords=torrent;bittorrent;download;p2p;

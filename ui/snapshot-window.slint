@@ -1,0 +1,63 @@
+import { MainWindow } from "main-window.slint";
+import { TorrentRow } from "torrent-types.slint";
+import { SearchResultRow } from "search-types.slint";
+import { LogRow } from "log-types.slint";
+import { CategoryRow } from "category-types.slint";
+import { AppTab, Theme, TorrentCategory } from "enums.slint";
+
+export component SnapshotWindow inherits MainWindow {
+	in-out property <length> snapshot-width: 1280px;
+	in-out property <length> snapshot-height: 760px;
+	in-out property <AppTab> snapshot-tab: AppTab.torrents;
+	in-out property <Theme> snapshot-theme: Theme.dark;
+	in-out property <bool> snapshot-add-dialog: false;
+	in-out property <bool> snapshot-remove-dialog: false;
+	in-out property <bool> snapshot-empty-torrents: false;
+	in-out property <bool> snapshot-empty-search: false;
+	in-out property <bool> snapshot-empty-favorites: false;
+	in-out property <bool> snapshot-empty-logs: false;
+	in-out property <bool> snapshot-empty-details: false;
+	in-out property <[TorrentRow]> snapshot-torrent-rows: [
+		{ id: "v1:0000000000000000000000000000000000000001", name: "Ubuntu 24.04 LTS — a long production torrent row used for visual validation", state-label: "Downloading", progress-label: "47.5%", progress: 0.475, size-label: "4.7 GiB", download-rate-label: "8.2 MiB/s", upload-rate-label: "512 KiB/s", peers-label: "34", seeds-label: "120", eta-label: "14m", paused: false, error: false, active: true },
+		{ id: "v1:0000000000000000000000000000000000000002", name: "Unicode пример français 🚀 with a pathologically long title that must be elided", state-label: "Paused", progress-label: "82.0%", progress: 0.82, size-label: "9.8 GiB", download-rate-label: "0 B/s", upload-rate-label: "0 B/s", peers-label: "0", seeds-label: "42", eta-label: "—", paused: true, error: false, active: false },
+		{ id: "v2:0000000000000000000000000000000000000000000000000000000000000003", name: "BitTorrent v2 metadata pending", state-label: "Loading metadata…", progress-label: "0%", progress: 0, size-label: "—", download-rate-label: "0 B/s", upload-rate-label: "0 B/s", peers-label: "0", seeds-label: "0", eta-label: "—", paused: false, error: false, active: true },
+		{ id: "v1:0000000000000000000000000000000000000004|v2:0000000000000000000000000000000000000000000000000000000000000004", name: "Hybrid torrent with a recoverable tracker error", state-label: "Tracker error", progress-label: "12.0%", progress: 0.12, size-label: "2.1 GiB", download-rate-label: "0 B/s", upload-rate-label: "0 B/s", peers-label: "0", seeds-label: "0", eta-label: "—", paused: false, error: true, active: false }
+	];
+	in-out property <[SearchResultRow]> snapshot-search-rows: [{ id: "result-1", name: "A search result with a long Unicode title пример that must not cover its actions", size-label: "1.2 GiB", seeders-label: "240", leechers-label: "12", category: "Movies", published-label: "Today", favorite: false, magnet-available: true }];
+	in-out property <[SearchResultRow]> snapshot-favorite-rows: [{ id: "result-2", name: "Favorite production row", size-label: "980 MiB", seeders-label: "18", leechers-label: "2", category: "Other", published-label: "Yesterday", favorite: true, magnet-available: true }];
+	in-out property <[LogRow]> snapshot-log-rows: [{ timestamp: "2026-08-06 12:00:00", level: "Info", category: "torrent", message: "A long diagnostic message that must remain within the row", severity: 1 }, { timestamp: "2026-08-06 12:00:01", level: "Error", category: "system", message: "Example failure", severity: 3 }];
+	width: root.snapshot-width;
+	height: root.snapshot-height;
+
+	active-tab: root.snapshot-tab;
+		selected-theme: root.snapshot-theme;
+		add-dialog-open: root.snapshot-add-dialog;
+		remove-dialog-open: root.snapshot-remove-dialog;
+		startup-state: "Ready";
+		version-text: "Visual snapshot";
+		selected-torrent-id: root.snapshot-empty-details ? "" : "v1:0000000000000000000000000000000000000001";
+		selected-torrent-name: root.snapshot-empty-details ? "" : "Ubuntu 24.04 LTS — a long production torrent row used for visual validation";
+		selected-torrent-state: "Downloading";
+		selected-torrent-progress: "47.5%";
+		selected-torrent-progress-value: 0.475;
+		selected-torrent-size: "4.7 GiB";
+		selected-torrent-down-rate: "8.2 MiB/s";
+		selected-torrent-up-rate: "512 KiB/s";
+		selected-torrent-eta: "14m";
+		selected-torrent-save-path: "C:/Users/example/Downloads/a/very/long/unicode/résultats";
+		torrent-rows: root.snapshot-empty-torrents ? [] : root.snapshot-torrent-rows;
+		categories: [{ filter: TorrentCategory.all, label: "All", count: root.snapshot-empty-torrents ? 0 : root.snapshot-torrent-rows.length }, { filter: TorrentCategory.active, label: "Active", count: root.snapshot-empty-torrents ? 0 : 2 }];
+		search-rows: root.snapshot-empty-search ? [] : root.snapshot-search-rows;
+		favorite-rows: root.snapshot-empty-favorites ? [] : root.snapshot-favorite-rows;
+		recent-searches: ["linux", "unicode", "documentary"];
+		search-state-message: root.snapshot-empty-search ? "0 results" : "1 result";
+		favorites-state-message: root.snapshot-empty-favorites ? "0 favorites" : "1 favorite";
+		log-rows: root.snapshot-empty-logs ? [] : root.snapshot-log-rows;
+		logs-state-message: root.snapshot-empty-logs ? "0 records" : "2 records";
+		preferences-state-message: "Changes are saved transactionally.";
+		preference-download-path: "~/Downloads/répertoire-très-long-пример";
+		preference-torznab-secret-stored: true;
+		preference-proxy-secret-stored: true;
+		add-save-path: "~/Downloads";
+	remove-dialog-name: "Unicode пример torrent with a long visible name";
+}

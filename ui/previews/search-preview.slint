@@ -1,0 +1,10 @@
+import { SearchView } from "../search-view.slint";
+import { SearchResultRow } from "../search-types.slint";
+export component SearchPreview inherits Window {
+	in property <[SearchResultRow]> mock-rows: [
+		{ id: "1", name: "A result with a very long title that must be elided without covering its actions", size-label: "4.7 GiB", seeders-label: "240", leechers-label: "12", category: "Movies", published-label: "Today", favorite: false, magnet-available: true },
+		{ id: "2", name: "Unicode пример 日本語 🚀", size-label: "980 MiB", seeders-label: "18", leechers-label: "2", category: "Other", published-label: "Yesterday", favorite: true, magnet-available: true }
+	];
+	preferred-width: 900px; preferred-height: 700px;
+	SearchView { query: "linux"; state-message: "2 results"; rows: root.mock-rows; recent-queries: ["linux", "unicode", "documentary"]; can-load-more: true; }
+}

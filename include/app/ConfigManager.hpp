@@ -42,6 +42,14 @@ struct PreferencesSettings
 	std::string proxyHost;
 	int proxyPort = 1080;
 	std::string proxyUsername;
+	struct UiLayout
+	{
+		int sidebarWidth = 240;
+		int bottomPanelHeight = 300;
+		bool sidebarCollapsed = false;
+		int selectedMainTab = 0;
+		int selectedDetailsTab = 0;
+	} ui;
 };
 
 using SaveHandle = std::shared_future<Result>;
@@ -49,6 +57,8 @@ using SaveHandle = std::shared_future<Result>;
 class ConfigManager
 {
 public:
+	static constexpr int CURRENT_CONFIG_VERSION = 2;
+
 	ConfigManager();
 	~ConfigManager();
 
@@ -111,8 +121,6 @@ public:
 private:
 	mutable std::mutex configMutex;
 	json config;
-	static constexpr int CURRENT_CONFIG_VERSION = 1;
-
 	// Async save worker
 	struct SaveRequest {
 		std::string path;

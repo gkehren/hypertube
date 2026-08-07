@@ -1,0 +1,75 @@
+export enum AppTab {
+    torrents,
+    search,
+    preferences,
+    logs,
+    favorites,
+}
+
+export enum UiTorrentCommand {
+    pause,
+    resume,
+    force-start,
+    force-recheck,
+    queue-up,
+    queue-down,
+    force-reannounce,
+}
+
+export enum RemovalMode {
+    keep-files,
+    delete-data,
+    delete-source,
+    delete-data-and-source,
+}
+
+export enum TorrentCategory {
+    all,
+    downloading,
+    seeding,
+    completed,
+    paused,
+    active,
+    inactive,
+}
+
+export enum TorrentSort {
+    queue,
+    name,
+    size,
+    progress,
+    status,
+    download-rate,
+    upload-rate,
+    eta,
+    seeds,
+    peers,
+}
+
+export enum DetailsTab {
+    general,
+    files,
+    peers,
+    trackers,
+    settings,
+}
+
+export enum DetailsAction {
+    open-containing-folder,
+    preview-largest-media,
+}
+
+export enum Theme {
+    dark,
+    ocean,
+    nord,
+    dracula,
+    cyberpunk,
+}
+
+export enum LogLevel {
+    debug,
+    info,
+    warning,
+    error,
+}

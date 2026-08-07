@@ -33,10 +33,29 @@
 
 build/
 build-*/
+dist/
 out/
+data/
+logs/
 .vscode/
 .vs/
 config/torrents.json
+
+# Packages & Archives
+*.zip
+*.tar.gz
+*.deb
+*.rpm
+*.dmg
+
+# Runtime logs & backups
+*.log
+*.bak
+portable.mode
+
+# OS generated files
+.DS_Store
+Thumbs.db
 
 # CodeQL build directory
 _codeql_build_dir/

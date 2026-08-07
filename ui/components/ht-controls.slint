@@ -1,0 +1,55 @@
+import { Button, CheckBox, LineEdit } from "std-widgets.slint";
+import { ThemeTokens } from "../theme.slint";
+
+export component HtButton inherits Rectangle {
+	in property <string> text;
+	in property <bool> selected: false;
+	in property <bool> enabled: true;
+	callback activated();
+	height: 36px;
+	min-width: 76px;
+	border-width: root.selected ? 2px : 1px;
+	border-color: root.selected ? ThemeTokens.accent : ThemeTokens.border;
+	border-radius: 5px;
+	Button { width: parent.width; height: parent.height; text: root.text; enabled: root.enabled; clicked => { root.activated(); } }
+}
+
+export component HtIconButton inherits HtButton { min-width: 36px; width: 36px; }
+export component HtTabButton inherits HtButton { min-width: 86px; }
+
+export component HtToggle inherits CheckBox {
+	in-out property <bool> active <=> self.checked;
+}
+
+export component HtSection inherits Rectangle {
+	background: transparent;
+	border-width: 1px;
+	border-color: ThemeTokens.border;
+	border-radius: 6px;
+}
+
+export component HtCard inherits Rectangle {
+	background: ThemeTokens.surface;
+	border-width: 1px;
+	border-color: ThemeTokens.border;
+	border-radius: 6px;
+}
+
+export component HtStatusBadge inherits Rectangle {
+	in property <string> text;
+	in property <color> badge-color: ThemeTokens.accent;
+	height: 24px;
+	background: root.badge-color;
+	border-radius: 6px;
+	Text { text: root.text; color: ThemeTokens.background; horizontal-alignment: center; vertical-alignment: center; wrap: no-wrap; overflow: elide; }
+}
+
+export component HtTextField inherits Rectangle {
+	in-out property <string> text;
+	in property <string> placeholder-text;
+	height: 36px;
+	border-width: 1px;
+	border-color: ThemeTokens.border;
+	border-radius: 5px;
+	LineEdit { width: parent.width; height: parent.height; text <=> root.text; placeholder-text: root.placeholder-text; }
+}

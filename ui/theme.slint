@@ -1,0 +1,79 @@
+import { Theme } from "enums.slint";
+
+export global ThemeTokens {
+	in-out property <color> background: #15181d;
+	in-out property <color> surface: #1c2129;
+	in-out property <color> surface-hover: #293448;
+	in-out property <color> foreground: #f5f7fa;
+	in-out property <color> muted-foreground: #9aa4b2;
+	in-out property <color> accent: #6ea8fe;
+	in-out property <color> accent-hover: #8ab8ff;
+	in-out property <color> border: #2b333e;
+	in-out property <color> success: #7bd88f;
+	in-out property <color> warning: #f5c26b;
+	in-out property <color> error: #ff7b86;
+
+	public function apply-theme(theme: Theme) {
+		if (theme == Theme.ocean) {
+			background = #101c2c;
+			surface = #16283c;
+			surface-hover = #244967;
+			foreground = #e6f4ff;
+			muted-foreground = #9db8cc;
+			accent = #72c7ff;
+			accent-hover = #9edaff;
+			border = #2c506c;
+			success = #75d6a0;
+			warning = #f2c572;
+			error = #ff8296;
+		} else if (theme == Theme.nord) {
+			background = #2e3440;
+			surface = #3b4252;
+			surface-hover = #434c5e;
+			foreground = #eceff4;
+			muted-foreground = #d8dee9;
+			accent = #88c0d0;
+			accent-hover = #8fbcbb;
+			border = #4c566a;
+			success = #a3be8c;
+			warning = #ebcb8b;
+			error = #bf616a;
+		} else if (theme == Theme.dracula) {
+			background = #282a36;
+			surface = #44475a;
+			surface-hover = #6272a4;
+			foreground = #f8f8f2;
+			muted-foreground = #bdc0c9;
+			accent = #bd93f9;
+			accent-hover = #d6b8ff;
+			border = #6272a4;
+			success = #50fa7b;
+			warning = #ffb86c;
+			error = #ff5555;
+		} else if (theme == Theme.cyberpunk) {
+			background = #100d1a;
+			surface = #211432;
+			surface-hover = #38235a;
+			foreground = #f5f0ff;
+			muted-foreground = #d0a8f5;
+			accent = #ff4fd8;
+			accent-hover = #ff8be7;
+			border = #653d8f;
+			success = #65f5a4;
+			warning = #ffd166;
+			error = #ff5c8a;
+		} else {
+			background = #15181d;
+			surface = #1c2129;
+			surface-hover = #293448;
+			foreground = #f5f7fa;
+			muted-foreground = #9aa4b2;
+			accent = #6ea8fe;
+			accent-hover = #8ab8ff;
+			border = #2b333e;
+			success = #7bd88f;
+			warning = #f5c26b;
+			error = #ff7b86;
+		}
+	}
+}

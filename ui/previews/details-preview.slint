@@ -1,0 +1,6 @@
+import { DetailsView } from "../details-view.slint";
+import { DetailFileRow, DetailPeerRow, DetailTrackerRow } from "../detail-types.slint";
+export component DetailsPreview inherits Window {
+	preferred-width: 900px; preferred-height: 600px;
+	DetailsView { name: "A very long selected torrent name that should be safely elided in the details panel"; state-label: "Downloading"; progress-label: "47.5%"; progress: 0.475; size-label: "12.4 GiB"; download-rate-label: "8.2 MiB/s"; upload-rate-label: "512 KiB/s"; eta-label: "14m"; save-path: "C:/Users/example/Downloads/a/very/long/unicode/保存先"; }
+}
