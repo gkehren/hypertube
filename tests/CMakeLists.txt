@@ -17,6 +17,7 @@ add_executable(unit_tests
     test_system_utils.cpp
     test_presentation.cpp
     test_preferences_controller.cpp
+    test_logger.cpp
 )
 
 target_include_directories(unit_tests PRIVATE
