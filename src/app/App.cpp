@@ -92,6 +92,7 @@ App::~App()
 
 void App::shutdown()
 {
+	Utils::CredentialStore::shutdown();
 	if (!initialized_)
 		return;
 	initialized_ = false;

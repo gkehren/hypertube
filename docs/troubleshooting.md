@@ -88,7 +88,7 @@ Use a disposable test directory when reproducing removal or file-priority behavi
 
 ## Where to find diagnostics
 
-The Logs window displays recent application and libtorrent diagnostics. The persistent file is `hypertube.log` under the platform data directory, or `./data/hypertube.log` in portable mode. Relevant categories include `app`, `config`, `torrent`, and `search`.
+The Logs window displays recent application and libtorrent diagnostics. The persistent file is `hypertube.log` under the platform data directory, or `<executable-directory>/data/hypertube.log` in portable mode. Relevant categories include `app`, `config`, `torrent`, and `search`.
 
 ## Reporting a bug
 

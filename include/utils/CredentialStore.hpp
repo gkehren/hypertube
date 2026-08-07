@@ -29,4 +29,5 @@ namespace Utils::CredentialStore
 	bool hasStoredCredential(const std::string &account);
 	CredentialStatus cachedStatus(const std::string &account);
 	void asyncRefreshStatus(const std::vector<std::string> &accounts, std::function<void()> onComplete = {});
+	void shutdown();
 }

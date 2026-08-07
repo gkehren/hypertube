@@ -90,14 +90,6 @@ void resolvePortableStateUnlocked()
 		return;
 	}
 
-	const auto cwd = std::filesystem::current_path(ec);
-	if (!ec && std::filesystem::exists(cwd / "portable.mode", ec))
-	{
-		g_isPortableCached = true;
-		g_portableRootCached = cwd;
-		return;
-	}
-
 	g_isPortableCached = false;
 	g_portableRootCached.clear();
 }

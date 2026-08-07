@@ -10,6 +10,37 @@
 
 namespace Presentation
 {
+namespace
+{
+Result restoreCredentialSet(const PreferencesController::CredentialStoreOps &credentialStore,
+	const std::optional<std::string> &previousTorznabCredential,
+	const std::optional<std::string> &previousProxyCredential,
+	bool torznabChanged, bool proxyChanged)
+{
+	Result firstFailure = Result::Success();
+	if (torznabChanged)
+	{
+		const Result result = previousTorznabCredential
+			? credentialStore.store("torznab_api_key", *previousTorznabCredential)
+			: credentialStore.erase("torznab_api_key");
+		if (!result)
+		{
+			Utils::Logger::error("config", "Unable to restore Torznab credential: " + result.message);
+			firstFailure = Result::Failure(result.message, ResultCode::Partial);
+		}
+	}
+	if (proxyChanged)
+	{
+		const Result result = previousProxyCredential
+			? credentialStore.store("proxy_password", *previousProxyCredential)
+			: credentialStore.erase("proxy_password");
+		if (!result && firstFailure)
+			firstFailure = Result::Failure(result.message, ResultCode::Partial);
+	}
+	return firstFailure;
+}
+}
+
 PreferencesController::PreferencesController(TorrentManager &torrentManager, SearchEngine &searchEngine,
 	ConfigManager &configManager, ThemeCallback themeCallback, CredentialStoreOps credentialStore,
 	std::string settingsPath)
@@ -33,7 +64,7 @@ PreferencesController::PreferencesController(TorrentManager &torrentManager, Sea
 
 PreferencesController::~PreferencesController()
 {
-	if (pendingSave_)
+	while (isSaving())
 		waitForSave();
 }
 
@@ -53,7 +84,7 @@ const std::string &PreferencesController::settingsPath() const
 Result PreferencesController::beginSave(const PreferencesSettings &settings,
 	std::optional<std::string> torznabApiKey, std::optional<std::string> proxyPassword)
 {
-	if (pendingSave_)
+	if (isSaving())
 		return Result::Failure("Preferences are already being saved", ResultCode::Busy, true);
 
 	const std::string proxyType = settings.proxyType.empty() ? "socks5" : settings.proxyType;
@@ -69,44 +100,79 @@ Result PreferencesController::beginSave(const PreferencesSettings &settings,
 	}
 
 	previousPreferences_ = configManager.getPreferencesSettings();
-	const auto torznabLoad = credentialStore.load("torznab_api_key");
-	previousTorznabCredential_ = torznabLoad.hasSecret() ? std::optional<std::string>(torznabLoad.secret) : std::nullopt;
-	const auto proxyLoad = credentialStore.load("proxy_password");
-	previousProxyCredential_ = proxyLoad.hasSecret() ? std::optional<std::string>(proxyLoad.secret) : std::nullopt;
-	torznabCredentialChanged_ = false;
-	proxyCredentialChanged_ = false;
-
-	if (torznabApiKey.has_value())
-	{
-		const Result torznab = torznabApiKey->empty()
-			? credentialStore.erase("torznab_api_key")
-			: credentialStore.store("torznab_api_key", *torznabApiKey);
-		if (!torznab)
-			return torznab;
-		torznabCredentialChanged_ = true;
-	}
-
-	if (proxyPassword.has_value())
-	{
-		const Result proxy = proxyPassword->empty()
-			? credentialStore.erase("proxy_password")
-			: credentialStore.store("proxy_password", *proxyPassword);
-		if (!proxy)
-		{
-			restoreCredentials();
-			return proxy;
-		}
-		proxyCredentialChanged_ = true;
-	}
-
 	pendingPreferences_ = settings;
-	pendingSave_ = configManager.savePreferencesCandidate(settingsPath(), settings);
 	pendingSaveKind_ = SaveKind::Preferences;
+
+	pendingSave_ = std::async(std::launch::async, [this, settings, torznabApiKey, proxyPassword]() -> Result {
+		const auto torznabLoad = credentialStore.load("torznab_api_key");
+		const auto proxyLoad = credentialStore.load("proxy_password");
+		const std::optional<std::string> previousTorznab = torznabLoad.hasSecret()
+			? std::optional<std::string>(torznabLoad.secret) : std::nullopt;
+		const std::optional<std::string> previousProxy = proxyLoad.hasSecret()
+			? std::optional<std::string>(proxyLoad.secret) : std::nullopt;
+		std::optional<std::string> runtimeTorznab = previousTorznab;
+		std::optional<std::string> runtimeProxy = previousProxy;
+		bool torznabChanged = false;
+		bool proxyChanged = false;
+
+		if (torznabApiKey.has_value())
+		{
+			const Result torznab = torznabApiKey->empty()
+				? credentialStore.erase("torznab_api_key")
+				: credentialStore.store("torznab_api_key", *torznabApiKey);
+			if (!torznab)
+				return torznab;
+			torznabChanged = true;
+			runtimeTorznab = torznabApiKey->empty() ? std::nullopt : torznabApiKey;
+		}
+
+		if (proxyPassword.has_value())
+		{
+			const Result proxy = proxyPassword->empty()
+				? credentialStore.erase("proxy_password")
+				: credentialStore.store("proxy_password", *proxyPassword);
+			if (!proxy)
+			{
+				const Result restore = restoreCredentialSet(credentialStore, previousTorznab, previousProxy,
+					torznabChanged, false);
+				return restore ? proxy : Result::Failure(proxy.message + "; credentials could not be fully restored: "
+					+ restore.message, ResultCode::Partial);
+			}
+			proxyChanged = true;
+			runtimeProxy = proxyPassword->empty() ? std::nullopt : proxyPassword;
+		}
+
+		const auto candidateSave = configManager.savePreferencesCandidate(settingsPath(), settings);
+		const Result candidateResult = candidateSave.get();
+		if (!candidateResult)
+		{
+			const Result restore = restoreCredentialSet(credentialStore, previousTorznab, previousProxy,
+				torznabChanged, proxyChanged);
+			return restore ? candidateResult : Result::Failure(candidateResult.message
+				+ "; credentials could not be fully restored: " + restore.message, ResultCode::Partial);
+		}
+
+		// These fields are consumed only after the shared future becomes ready,
+		// which synchronizes the worker's writes with the UI-thread completion.
+		previousTorznabCredential_ = previousTorznab;
+		previousProxyCredential_ = previousProxy;
+		runtimeTorznabCredential_ = runtimeTorznab;
+		runtimeProxyCredential_ = runtimeProxy.value_or("");
+		torznabCredentialChanged_ = torznabChanged;
+		proxyCredentialChanged_ = proxyChanged;
+		return candidateResult;
+	});
+
 	return Result::Success();
 }
 
 Result PreferencesController::beginUiStateSave(const PreferencesSettings &settings)
 {
+	if (pendingCredentialRollback_)
+	{
+		queuedUiState_ = settings;
+		return Result::Success();
+	}
 	if (pendingSave_)
 	{
 		queuedUiState_ = settings;
@@ -117,7 +183,7 @@ Result PreferencesController::beginUiStateSave(const PreferencesSettings &settin
 
 Result PreferencesController::beginUiStateSaveNow(const PreferencesSettings &settings)
 {
-	if (pendingSave_)
+	if (isSaving())
 		return Result::Failure("Preferences are already being saved", ResultCode::Busy, true);
 	pendingPreferences_ = settings;
 	previousPreferences_ = configManager.getPreferencesSettings();
@@ -136,6 +202,23 @@ PreferencesSettings PreferencesController::mergeUiStateIntoCurrent(const Prefere
 
 std::optional<Result> PreferencesController::pollSave()
 {
+	if (pendingCredentialRollback_)
+	{
+		if (pendingCredentialRollback_->wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+			return std::nullopt;
+		const Result rollback = pendingCredentialRollback_->get();
+		pendingCredentialRollback_.reset();
+		if (!rollback)
+			Utils::Logger::error("config", "Credential rollback failed: " + rollback.message);
+		if (queuedUiState_ && !pendingSave_)
+		{
+			const auto queued = mergeUiStateIntoCurrent(*queuedUiState_);
+			queuedUiState_.reset();
+			if (!beginUiStateSaveNow(queued))
+				queuedUiState_ = queued;
+		}
+		return std::nullopt;
+	}
 	if (!pendingSave_ || pendingSave_->wait_for(std::chrono::seconds(0)) != std::future_status::ready)
 		return std::nullopt;
 	const Result saveResult = pendingSave_->get();
@@ -151,7 +234,20 @@ std::optional<Result> PreferencesController::pollSave()
 Result PreferencesController::waitForSave()
 {
 	if (!pendingSave_)
-		return Result::Success();
+	{
+		if (!pendingCredentialRollback_)
+			return Result::Success();
+		const Result rollback = pendingCredentialRollback_->get();
+		pendingCredentialRollback_.reset();
+		if (queuedUiState_)
+		{
+			const auto queued = mergeUiStateIntoCurrent(*queuedUiState_);
+			queuedUiState_.reset();
+			if (!beginUiStateSaveNow(queued))
+				queuedUiState_ = queued;
+		}
+		return rollback;
+	}
 	const Result saveResult = pendingSave_->get();
 	const SaveKind completedKind = pendingSaveKind_;
 	pendingSave_.reset();
@@ -159,6 +255,21 @@ Result PreferencesController::waitForSave()
 	lastCompletedSaveKind_ = completedKind;
 	if (!pendingSave_)
 		pendingSaveKind_ = SaveKind::None;
+	if (pendingCredentialRollback_)
+	{
+		const Result rollback = pendingCredentialRollback_->get();
+		pendingCredentialRollback_.reset();
+		if (!rollback)
+			return Result::Failure(result.message + "; credentials could not be fully restored: "
+				+ rollback.message, ResultCode::Partial);
+		if (queuedUiState_)
+		{
+			const auto queued = mergeUiStateIntoCurrent(*queuedUiState_);
+			queuedUiState_.reset();
+			if (!beginUiStateSaveNow(queued))
+				queuedUiState_ = queued;
+		}
+	}
 	return result;
 }
 
@@ -166,14 +277,13 @@ Result PreferencesController::finishSave(const Result &saveResult)
 {
 	if (!saveResult)
 	{
-		const Result restore = restoreCredentials();
 		if (queuedUiState_)
 		{
 			const auto queued = mergeUiStateIntoCurrent(*queuedUiState_);
 			queuedUiState_.reset();
 			beginUiStateSaveNow(queued);
 		}
-		return restore ? saveResult : Result::Failure(saveResult.message + "; credentials could not be fully restored: " + restore.message, ResultCode::Partial);
+		return saveResult;
 	}
 
 	const bool uiOnly = pendingSaveKind_ == SaveKind::UiState;
@@ -194,47 +304,36 @@ Result PreferencesController::finishSave(const Result &saveResult)
 		return Result::Success();
 	}
 
-	const Result credentialRestore = restoreCredentials();
-	configManager.commitPreferences(previousPreferences_);
-	const Result runtimeRestore = uiOnly
-		? applyUiRuntime(previousPreferences_) : applyRuntime(previousPreferences_);
-	configManager.savePreferencesCandidate(settingsPath(), previousPreferences_);
-	if (!credentialRestore || !runtimeRestore)
-		return Result::Failure("Preferences failed and runtime restoration was incomplete: " + runtime.message, ResultCode::Partial);
-	if (queuedUiState_)
+	const auto previousTorznab = previousTorznabCredential_;
+	const auto previousProxy = previousProxyCredential_;
+	const bool torznabChanged = torznabCredentialChanged_;
+	const bool proxyChanged = proxyCredentialChanged_;
+	if (torznabChanged || proxyChanged)
 	{
-		const auto queued = mergeUiStateIntoCurrent(*queuedUiState_);
-		queuedUiState_.reset();
-		beginUiStateSaveNow(queued);
-	}
-	return Result::Failure("Preferences were rolled back: " + runtime.message, runtime.code);
-}
-
-Result PreferencesController::restoreCredentials()
-{
-	Result firstFailure = Result::Success();
-	if (torznabCredentialChanged_)
-	{
-		const Result result = previousTorznabCredential_
-			? credentialStore.store("torznab_api_key", *previousTorznabCredential_)
-			: credentialStore.erase("torznab_api_key");
-		if (!result)
-		{
-			Utils::Logger::error("config", "Unable to restore Torznab credential: " + result.message);
-			firstFailure = Result::Failure(result.message, ResultCode::Partial);
-		}
-	}
-	if (proxyCredentialChanged_)
-	{
-		const Result result = previousProxyCredential_
-			? credentialStore.store("proxy_password", *previousProxyCredential_)
-			: credentialStore.erase("proxy_password");
-		if (!result && firstFailure)
-			firstFailure = Result::Failure(result.message, ResultCode::Partial);
+		const auto credentialStoreCopy = credentialStore;
+		pendingCredentialRollback_ = std::async(std::launch::async,
+			[credentialStoreCopy, previousTorznab, previousProxy, torznabChanged, proxyChanged]() {
+				return restoreCredentialSet(credentialStoreCopy, previousTorznab, previousProxy,
+					torznabChanged, proxyChanged);
+			}).share();
 	}
 	torznabCredentialChanged_ = false;
 	proxyCredentialChanged_ = false;
-	return firstFailure;
+	runtimeTorznabCredential_ = previousTorznab;
+	runtimeProxyCredential_ = previousProxy.value_or("");
+	configManager.commitPreferences(previousPreferences_);
+	const Result runtimeRestore = uiOnly ? applyUiRuntime(previousPreferences_) : applyRuntime(previousPreferences_);
+	configManager.savePreferencesCandidate(settingsPath(), previousPreferences_);
+	if (!runtimeRestore)
+		return Result::Failure("Preferences failed and runtime restoration was incomplete: " + runtime.message, ResultCode::Partial);
+	if (!pendingCredentialRollback_ && queuedUiState_)
+	{
+		const auto queued = mergeUiStateIntoCurrent(*queuedUiState_);
+		queuedUiState_.reset();
+		if (!beginUiStateSaveNow(queued))
+			queuedUiState_ = queued;
+	}
+	return Result::Failure("Preferences were rolled back: " + runtime.message, runtime.code);
 }
 
 Result PreferencesController::applyRuntime(const PreferencesSettings &settings)
@@ -245,7 +344,7 @@ Result PreferencesController::applyRuntime(const PreferencesSettings &settings)
 	torrentManager.setUploadSpeedLimit(settings.uploadSpeedLimit);
 	torrentManager.configureDiscovery(settings.enableDht, settings.enableUpnp, settings.enableNatPmp);
 
-	const std::string proxyPassword = credentialStore.load("proxy_password").secret;
+	const std::string &proxyPassword = runtimeProxyCredential_;
 	torrentManager.setProxyConfig(settings.proxyHost, settings.proxyPort, settings.proxyUsername, proxyPassword,
 		settings.proxyEnabled ? (settings.proxyType == "http" ? 2 : 1) : 0);
 	const Result searchProxy = searchEngine.setProxyConfig(settings.proxyEnabled, settings.proxyType,
@@ -255,7 +354,7 @@ Result PreferencesController::applyRuntime(const PreferencesSettings &settings)
 
 	if (settings.torznabEnabled)
 	{
-		const std::string apiKey = credentialStore.load("torznab_api_key").secret;
+		const std::string apiKey = runtimeTorznabCredential_.value_or("");
 		const Result provider = searchEngine.configureTorznabProvider(settings.torznabUrl, apiKey);
 		if (!provider)
 			return provider;

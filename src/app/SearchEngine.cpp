@@ -886,10 +886,12 @@ Result SearchEngine::parseTorznabResponse(const std::string &response, SearchRes
 
 	std::unordered_set<std::string> seen;
 	const pugi::xpath_node_set items = doc.select_nodes("//item");
+	long long consumedItemCount = 0;
 	for (const auto &xpathItem : items)
 	{
 		if (searchResponse.torrents.size() >= 500)
 			break;
+		++consumedItemCount;
 
 		const pugi::xml_node item = xpathItem.node();
 		TorrentSearchResult result;
@@ -950,8 +952,8 @@ Result SearchEngine::parseTorznabResponse(const std::string &response, SearchRes
 	{
 		const long long offset = parseNonNegative(responseNode.attribute("offset").as_string());
 		const long long total = parseNonNegative(responseNode.attribute("total").as_string());
-		const long long next = offset + static_cast<long long>(searchResponse.torrents.size());
-		searchResponse.hasMore = next < total;
+		const long long next = offset + consumedItemCount;
+		searchResponse.hasMore = (next < total) && (consumedItemCount > 0);
 		if (searchResponse.hasMore)
 			searchResponse.nextToken = std::to_string(next);
 	}

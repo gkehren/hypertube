@@ -130,12 +130,14 @@ target_link_libraries(torrent_tests
 )
 
 if(WIN32)
+	target_link_libraries(slint_model_tests PRIVATE imm32)
+	target_link_libraries(slint_controller_tests PRIVATE imm32)
 	# Multi-config generators place GoogleTest and Slint DLLs in their own
 	# runtime directories.  gtest_discover_tests() launches each executable
 	# during the build, before CTest can provide a custom environment, so make
 	# the runtime dependencies available beside the test binaries.
 	function(copy_windows_test_runtime test_target)
-		foreach(runtime_target IN ITEMS gtest gtest_main)
+		foreach(runtime_target IN ITEMS gtest gtest_main pugixml-shared)
 			if(TARGET ${runtime_target})
 				add_custom_command(TARGET ${test_target} POST_BUILD
 					COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -145,6 +147,14 @@ if(WIN32)
 				)
 			endif()
 		endforeach()
+		if(TARGET slint_cpp-shared)
+			add_custom_command(TARGET ${test_target} POST_BUILD
+				COMMAND ${CMAKE_COMMAND} -E copy_if_different
+					"$<TARGET_FILE:slint_cpp-shared>"
+					"$<TARGET_FILE_DIR:${test_target}>"
+				VERBATIM
+			)
+		endif()
 	endfunction()
 
 	copy_windows_test_runtime(unit_tests)
@@ -153,28 +163,12 @@ if(WIN32)
 	copy_windows_test_runtime(torrent_tests)
 	copy_windows_test_runtime(slint_model_tests)
 	copy_windows_test_runtime(slint_controller_tests)
-	if(TARGET slint_cpp-shared)
-		add_custom_command(TARGET slint_model_tests POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy_if_different
-				"$<TARGET_FILE:slint_cpp-shared>"
-				"$<TARGET_FILE_DIR:slint_model_tests>"
-			VERBATIM
-		)
-    endif()
-	if(TARGET slint_cpp-shared)
-		add_custom_command(TARGET slint_controller_tests POST_BUILD
-			COMMAND ${CMAKE_COMMAND} -E copy_if_different
-				"$<TARGET_FILE:slint_cpp-shared>"
-				"$<TARGET_FILE_DIR:slint_controller_tests>"
-			VERBATIM
-		)
-	endif()
 endif()
 
 include(GoogleTest)
-gtest_discover_tests(unit_tests)
-gtest_discover_tests(config_tests)
-gtest_discover_tests(search_tests)
-gtest_discover_tests(torrent_tests)
-gtest_discover_tests(slint_model_tests DISCOVERY_TIMEOUT 30)
-gtest_discover_tests(slint_controller_tests DISCOVERY_TIMEOUT 30)
+gtest_discover_tests(unit_tests DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(config_tests DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(search_tests DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(torrent_tests DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(slint_model_tests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 30)
+gtest_discover_tests(slint_controller_tests DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 30)

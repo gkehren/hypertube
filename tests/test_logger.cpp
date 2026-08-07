@@ -21,9 +21,11 @@ protected:
 
 	void TearDown() override
 	{
+		Utils::Logger::initialize("");
 		if (fs::exists(testDir))
 		{
-			fs::remove_all(testDir);
+			std::error_code ec;
+			fs::remove_all(testDir, ec);
 		}
 	}
 

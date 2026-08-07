@@ -3,7 +3,9 @@
 #include <vector>
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 #include <wincred.h>
 #elif defined(__APPLE__)
@@ -26,6 +28,34 @@ namespace
 constexpr const char *serviceName = "Hypertube";
 std::unordered_map<std::string, Utils::CredentialStore::CredentialStatus> g_statusCache;
 std::mutex g_cacheMutex;
+std::mutex g_refreshMutex;
+std::thread g_refreshThread;
+
+void updateCachedStatus(const std::string &account, Utils::CredentialStore::CredentialStatus status)
+{
+	std::lock_guard<std::mutex> lock(g_cacheMutex);
+	g_statusCache[account] = status;
+}
+
+void joinRefreshThread()
+{
+	// The refresh worker updates g_statusCache, so never hold g_cacheMutex while
+	// waiting for it to finish. g_refreshMutex only serializes refresh lifecycle
+	// operations and is not used by the worker.
+	std::lock_guard<std::mutex> lock(g_refreshMutex);
+	if (g_refreshThread.joinable())
+		g_refreshThread.join();
+}
+
+struct RefreshThreadGuard
+{
+	~RefreshThreadGuard()
+	{
+		joinRefreshThread();
+	}
+};
+
+RefreshThreadGuard g_refreshThreadGuard;
 }
 
 namespace Utils::CredentialStore
@@ -34,6 +64,7 @@ Result store(const std::string &account, const std::string &secret)
 {
 	if (account.empty())
 		return Result::Failure("Credential account cannot be empty", ResultCode::InvalidInput);
+	Result res = Result::Success();
 #ifdef _WIN32
 	const std::string target = std::string(serviceName) + "/" + account;
 	CREDENTIALA credential{};
@@ -42,7 +73,7 @@ Result store(const std::string &account, const std::string &secret)
 	credential.CredentialBlobSize = static_cast<DWORD>(secret.size());
 	credential.CredentialBlob = reinterpret_cast<LPBYTE>(const_cast<char *>(secret.data()));
 	credential.Persist = CRED_PERSIST_LOCAL_MACHINE;
-	return CredWriteA(&credential, 0)
+	res = CredWriteA(&credential, 0)
 		? Result::Success()
 		: Result::Failure("Windows Credential Manager rejected the credential", ResultCode::Storage);
 #elif defined(__APPLE__)
@@ -73,7 +104,7 @@ Result store(const std::string &account, const std::string &secret)
 	if (accountCF) CFRelease(accountCF);
 	if (secretCF) CFRelease(secretCF);
 
-	return status == errSecSuccess ? Result::Success()
+	res = status == errSecSuccess ? Result::Success()
 		: Result::Failure("macOS Keychain rejected the credential", ResultCode::Storage);
 #else
 	int pipes[2] = {-1, -1};
@@ -124,21 +155,26 @@ Result store(const std::string &account, const std::string &secret)
 
 	int status = 0;
 	waitpid(pid, &status, 0);
-	return (WIFEXITED(status) && WEXITSTATUS(status) == 0)
+	res = (WIFEXITED(status) && WEXITSTATUS(status) == 0)
 		? Result::Success()
 		: Result::Failure("Secret Service rejected credential or keyring is locked", ResultCode::Unavailable);
 #endif
+	if (res)
+		updateCachedStatus(account, CredentialStatus::Stored);
+	return res;
 }
 
 Result erase(const std::string &account)
 {
 	if (account.empty())
 		return Result::Failure("Credential account cannot be empty", ResultCode::InvalidInput);
+	Result res = Result::Success();
 #ifdef _WIN32
 	const std::string target = std::string(serviceName) + "/" + account;
 	if (CredDeleteA(target.c_str(), CRED_TYPE_GENERIC, 0) || GetLastError() == ERROR_NOT_FOUND)
-		return Result::Success();
-	return Result::Failure("Windows Credential Manager could not delete the credential", ResultCode::Storage);
+		res = Result::Success();
+	else
+		res = Result::Failure("Windows Credential Manager could not delete the credential", ResultCode::Storage);
 #elif defined(__APPLE__)
 	CFStringRef serviceCF = CFStringCreateWithCString(nullptr, serviceName, kCFStringEncodingUTF8);
 	CFStringRef accountCF = CFStringCreateWithCString(nullptr, account.c_str(), kCFStringEncodingUTF8);
@@ -152,7 +188,7 @@ Result erase(const std::string &account)
 	if (serviceCF) CFRelease(serviceCF);
 	if (accountCF) CFRelease(accountCF);
 
-	return (status == errSecSuccess || status == errSecItemNotFound) ? Result::Success()
+	res = (status == errSecSuccess || status == errSecItemNotFound) ? Result::Success()
 		: Result::Failure("macOS Keychain could not delete the credential", ResultCode::Storage);
 #else
 	char *const argv[] = {
@@ -172,30 +208,39 @@ Result erase(const std::string &account)
 
 	int status = 0;
 	waitpid(pid, &status, 0);
-	return (WIFEXITED(status) && WEXITSTATUS(status) == 0)
+	res = (WIFEXITED(status) && WEXITSTATUS(status) == 0)
 		? Result::Success()
 		: Result::Failure("Secret Service could not delete the credential", ResultCode::Unavailable);
 #endif
+	if (res)
+		updateCachedStatus(account, CredentialStatus::Missing);
+	return res;
 }
 
 CredentialLoadResult load(const std::string &account)
 {
 	if (account.empty())
 		return {CredentialStatus::Missing, ""};
+
+	CredentialLoadResult finalResult{CredentialStatus::Missing, ""};
 #ifdef _WIN32
 	const std::string target = std::string(serviceName) + "/" + account;
 	PCREDENTIALA credential = nullptr;
 	if (!CredReadA(target.c_str(), CRED_TYPE_GENERIC, 0, &credential)) {
 		const DWORD err = GetLastError();
 		if (err == ERROR_NOT_FOUND)
-			return {CredentialStatus::Missing, ""};
-		if (err == ERROR_ACCESS_DENIED)
-			return {CredentialStatus::PermissionDenied, ""};
-		return {CredentialStatus::Unavailable, ""};
+			finalResult = {CredentialStatus::Missing, ""};
+		else if (err == ERROR_ACCESS_DENIED)
+			finalResult = {CredentialStatus::PermissionDenied, ""};
+		else
+			finalResult = {CredentialStatus::Unavailable, ""};
 	}
-	std::string secret(reinterpret_cast<char *>(credential->CredentialBlob), credential->CredentialBlobSize);
-	CredFree(credential);
-	return {CredentialStatus::Stored, secret};
+	else
+	{
+		std::string secret(reinterpret_cast<char *>(credential->CredentialBlob), credential->CredentialBlobSize);
+		CredFree(credential);
+		finalResult = {CredentialStatus::Stored, secret};
+	}
 #elif defined(__APPLE__)
 	CFStringRef serviceCF = CFStringCreateWithCString(nullptr, serviceName, kCFStringEncodingUTF8);
 	CFStringRef accountCF = CFStringCreateWithCString(nullptr, account.c_str(), kCFStringEncodingUTF8);
@@ -211,74 +256,84 @@ CredentialLoadResult load(const std::string &account)
 	if (accountCF) CFRelease(accountCF);
 
 	if (status == errSecItemNotFound)
-		return {CredentialStatus::Missing, ""};
-	if (status == errSecAuthFailed || status == errSecInteractionNotAllowed)
-		return {CredentialStatus::PermissionDenied, ""};
-	if (status != errSecSuccess || !dataTypeRef)
-		return {CredentialStatus::Unavailable, ""};
-
-	CFDataRef dataRef = static_cast<CFDataRef>(dataTypeRef);
-	std::string secret(reinterpret_cast<const char *>(CFDataGetBytePtr(dataRef)), CFDataGetLength(dataRef));
-	CFRelease(dataRef);
-	return {CredentialStatus::Stored, secret};
+		finalResult = {CredentialStatus::Missing, ""};
+	else if (status == errSecAuthFailed || status == errSecInteractionNotAllowed)
+		finalResult = {CredentialStatus::PermissionDenied, ""};
+	else if (status != errSecSuccess || !dataTypeRef)
+		finalResult = {CredentialStatus::Unavailable, ""};
+	else
+	{
+		CFDataRef dataRef = static_cast<CFDataRef>(dataTypeRef);
+		std::string secret(reinterpret_cast<const char *>(CFDataGetBytePtr(dataRef)), CFDataGetLength(dataRef));
+		CFRelease(dataRef);
+		finalResult = {CredentialStatus::Stored, secret};
+	}
 #else
 	int pipes[2] = {-1, -1};
 	if (pipe(pipes) != 0)
-		return {CredentialStatus::Unavailable, ""};
-
-	posix_spawn_file_actions_t actions;
-	if (posix_spawn_file_actions_init(&actions) != 0) {
-		close(pipes[0]);
-		close(pipes[1]);
-		return {CredentialStatus::Unavailable, ""};
-	}
-	posix_spawn_file_actions_adddup2(&actions, pipes[1], STDOUT_FILENO);
-	posix_spawn_file_actions_addclose(&actions, pipes[0]);
-
-	char *const argv[] = {
-		const_cast<char *>("secret-tool"),
-		const_cast<char *>("lookup"),
-		const_cast<char *>("service"),
-		const_cast<char *>(serviceName),
-		const_cast<char *>("account"),
-		const_cast<char *>(account.c_str()),
-		nullptr
-	};
-
-	pid_t pid = -1;
-	int spawnErr = posix_spawnp(&pid, "secret-tool", &actions, nullptr, argv, environ);
-	posix_spawn_file_actions_destroy(&actions);
-	close(pipes[1]);
-
-	if (spawnErr != 0) {
-		close(pipes[0]);
-		return {CredentialStatus::Unavailable, ""};
-	}
-
-	std::string secret;
-	char buffer[1024];
-	ssize_t bytesRead = 0;
-	while ((bytesRead = read(pipes[0], buffer, sizeof(buffer))) > 0) {
-		secret.append(buffer, static_cast<std::size_t>(bytesRead));
-	}
-	close(pipes[0]);
-
-	int status = 0;
-	waitpid(pid, &status, 0);
-	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
-		return {CredentialStatus::Missing, ""};
-
-	while (!secret.empty() && (secret.back() == '\n' || secret.back() == '\r'))
-		secret.pop_back();
-
-	const CredentialLoadResult finalResult = secret.empty() ? CredentialLoadResult{CredentialStatus::Missing, ""}
-														  : CredentialLoadResult{CredentialStatus::Stored, std::move(secret)};
 	{
-		std::lock_guard<std::mutex> lock(g_cacheMutex);
-		g_statusCache[account] = finalResult.status;
+		finalResult = {CredentialStatus::Unavailable, ""};
 	}
-	return finalResult;
+	else
+	{
+		posix_spawn_file_actions_t actions;
+		if (posix_spawn_file_actions_init(&actions) != 0) {
+			close(pipes[0]);
+			close(pipes[1]);
+			finalResult = {CredentialStatus::Unavailable, ""};
+		}
+		else
+		{
+			posix_spawn_file_actions_adddup2(&actions, pipes[1], STDOUT_FILENO);
+			posix_spawn_file_actions_addclose(&actions, pipes[0]);
+
+			char *const argv[] = {
+				const_cast<char *>("secret-tool"),
+				const_cast<char *>("lookup"),
+				const_cast<char *>("service"),
+				const_cast<char *>(serviceName),
+				const_cast<char *>("account"),
+				const_cast<char *>(account.c_str()),
+				nullptr
+			};
+
+			pid_t pid = -1;
+			int spawnErr = posix_spawnp(&pid, "secret-tool", &actions, nullptr, argv, environ);
+			posix_spawn_file_actions_destroy(&actions);
+			close(pipes[1]);
+
+			if (spawnErr != 0) {
+				close(pipes[0]);
+				finalResult = {CredentialStatus::Unavailable, ""};
+			}
+			else
+			{
+				std::string secret;
+				char buffer[1024];
+				ssize_t bytesRead = 0;
+				while ((bytesRead = read(pipes[0], buffer, sizeof(buffer))) > 0) {
+					secret.append(buffer, static_cast<std::size_t>(bytesRead));
+				}
+				close(pipes[0]);
+
+				int status = 0;
+				waitpid(pid, &status, 0);
+				if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+					finalResult = {CredentialStatus::Missing, ""};
+				else
+				{
+					while (!secret.empty() && (secret.back() == '\n' || secret.back() == '\r'))
+						secret.pop_back();
+
+					finalResult = secret.empty() ? CredentialLoadResult{CredentialStatus::Missing, ""}
+												  : CredentialLoadResult{CredentialStatus::Stored, std::move(secret)};
+				}
+			}
+		}
+	}
 #endif
+	updateCachedStatus(account, finalResult.status);
+	return finalResult;
 }
 
 CredentialStatus cachedStatus(const std::string &account)
@@ -295,9 +350,18 @@ bool hasStoredCredential(const std::string &account)
 	return cachedStatus(account) == CredentialStatus::Stored;
 }
 
+void shutdown()
+{
+	joinRefreshThread();
+}
+
 void asyncRefreshStatus(const std::vector<std::string> &accounts, std::function<void()> onComplete)
 {
-	std::thread worker([accounts, onComplete = std::move(onComplete)]() {
+	std::lock_guard<std::mutex> lock(g_refreshMutex);
+	if (g_refreshThread.joinable())
+		g_refreshThread.join();
+
+	g_refreshThread = std::thread([accounts, onComplete = std::move(onComplete)]() {
 		for (const auto &account : accounts)
 		{
 			load(account);
@@ -305,7 +369,6 @@ void asyncRefreshStatus(const std::vector<std::string> &accounts, std::function<
 		if (onComplete)
 			onComplete();
 	});
-	worker.detach();
 }
 
 }

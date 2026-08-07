@@ -56,6 +56,12 @@ SlintAppController::SlintAppController(App &app, slint::ComponentHandle<MainWind
 	notificationController_ = std::make_unique<SlintUi::NotificationController>(app.systemOpener(), torrentPresenter, *window);
 }
 
+SlintAppController::~SlintAppController()
+{
+	if (isAlive_)
+		*isAlive_ = false;
+}
+
 void SlintAppController::bind()
 {
 	window->on_request_close([] {
@@ -205,9 +211,14 @@ void SlintAppController::start()
 	window->set_remove_dialog_open(false);
 	window->set_search_query(slint::SharedString());
 	started = true;
-	Utils::CredentialStore::asyncRefreshStatus({"torznab_api_key", "proxy_password"}, [this]() {
-		slint::invoke_from_event_loop([this]() {
-			refreshCredentialIndicators();
+	std::weak_ptr<bool> weakAlive = isAlive_;
+	Utils::CredentialStore::asyncRefreshStatus({"torznab_api_key", "proxy_password"}, [this, weakAlive]() {
+		slint::invoke_from_event_loop([this, weakAlive]() {
+			if (auto alive = weakAlive.lock())
+			{
+				if (*alive && started)
+					refreshCredentialIndicators();
+			}
 		});
 	});
 	app.torrentManager().requestStatusRefresh();

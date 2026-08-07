@@ -560,9 +560,11 @@ TEST_F(ConfigManagerTest, DurableWriteFileFlushesAndCreatesBackup)
 	std::string error;
 	ASSERT_TRUE(Utils::FileUtils::durableWriteFile(target, "initial content", error));
 
-	std::ifstream file1(target);
-	std::string read1((std::istreambuf_iterator<char>(file1)), std::istreambuf_iterator<char>());
-	EXPECT_EQ(read1, "initial content");
+	{
+		std::ifstream file1(target);
+		std::string read1((std::istreambuf_iterator<char>(file1)), std::istreambuf_iterator<char>());
+		EXPECT_EQ(read1, "initial content");
+	}
 
 	ASSERT_TRUE(Utils::FileUtils::durableWriteFile(target, "updated content", error));
 
