@@ -40,10 +40,10 @@ LogsPresenter::LogsPresenter(TorrentManager &torrentManager)
 
 void LogsPresenter::update()
 {
-	for (auto *alert : torrentManager.pollAlerts())
+	for (const auto &event : torrentManager.drainEvents())
 	{
-		if (alert)
-			processAlert(alert);
+		if (!event.message.empty())
+			addLogEntry(event.category, event.message, event.severity);
 	}
 }
 

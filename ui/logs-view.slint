@@ -16,6 +16,10 @@ export component LogsView inherits Rectangle {
 	callback set-log-filter(LogLevel, bool);
 	callback toggle-autoscroll(bool);
 
+	public function scroll-to-end() {
+		log-list.viewport-y = min(0px, log-list.height - log-list.viewport-height);
+	}
+
 	background: ThemeTokens.background;
 	scroll-after-layout := Timer {
 		interval: 1ms;
@@ -65,6 +69,6 @@ export component LogsView inherits Rectangle {
 		if (root.rows.length == 0): Text { text: "No diagnostics"; color: ThemeTokens.muted-foreground; }
 	}
 	changed rows => {
-		if (root.auto-scroll) { scroll-after-layout.restart(); }
+		if (root.auto-scroll) { root.scroll-to-end(); }
 	}
 }

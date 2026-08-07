@@ -48,4 +48,5 @@ in [docs/features.md](docs/features.md).
 
 ## License
 
-See the repository license file when one is added or supplied with a release artifact.
+Hypertube is released under the [GNU General Public License v3.0](LICENSE).
+For third-party software attributions and licenses, see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [docs/licensing.md](docs/licensing.md).

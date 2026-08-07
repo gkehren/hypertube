@@ -12,6 +12,7 @@ export component TorrentTableHeader inherits Rectangle {
 	height: 34px;
 	background: ThemeTokens.surface;
 	HorizontalBox {
+		padding: 6px;
 		spacing: 6px;
 		Button { text: "Name"; min-width: TorrentTableGeometry.minimum-name-width; horizontal-stretch: 1; clicked => { root.sort(TorrentSort.name); } }
 		if (!root.compact && !root.narrow): Button { text: "Size"; width: TorrentTableGeometry.size-width; clicked => { root.sort(TorrentSort.size); } }

@@ -12,7 +12,7 @@ when a dependency is not found.
 ## Dependencies
 
 The build searches for nlohmann/json, libtorrent-rasterbar, cURL, and Slint.
-Slint 1.16.1 requires Rust 1.88 or newer for its build and Fontconfig
+Slint 1.17.1 requires Rust 1.88 or newer for its build and Fontconfig
 development files on Linux for the software renderer. Slint is the only
 frontend and is always configured.
 

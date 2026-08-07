@@ -24,7 +24,13 @@ export component SearchResultListRow inherits Rectangle {
 			}
 			TouchArea { clicked => { root.select(root.result.id); } }
 		}
-		Button { text: root.favorite-mode ? "Remove" : root.result.favorite ? "Unfavorite" : "Favorite"; clicked => { if (root.favorite-mode) { root.remove-favorite(root.result.id); } else { root.toggle-favorite(root.result.id); } } }
-		Button { text: "Add"; clicked => { root.add(root.result.id); } }
+		actions-container := Rectangle {
+			width: 152px;
+			HorizontalBox {
+				spacing: 4px;
+				Button { text: root.favorite-mode ? "Remove" : root.result.favorite ? "Unfav" : "Fav"; clicked => { if (root.favorite-mode) { root.remove-favorite(root.result.id); } else { root.toggle-favorite(root.result.id); } } }
+				Button { text: "Add"; clicked => { root.add(root.result.id); } }
+			}
+		}
 	}
 }

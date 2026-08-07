@@ -26,11 +26,14 @@ TEST(SlintControllerTest, RowCallbackSelectsTorrentAndPublishesDetails)
 	}
 
 	TorrentManager manager;
+	manager.setCacheRefreshInterval(0);
 	ASSERT_TRUE(manager.addTorrent(torrentPath.string(), (directory / "downloads").string()));
-	manager.requestStatusRefresh();
 	const auto hash = manager.getTorrentSnapshot().front().hash;
 	for (int attempt = 0; attempt < 100 && !manager.getCachedStatus(hash); ++attempt)
+	{
+		manager.requestStatusRefresh();
 		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
 	ASSERT_TRUE(manager.getCachedStatus(hash));
 
 	Presentation::TorrentListPresenter torrentPresenter(manager);

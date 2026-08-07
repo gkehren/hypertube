@@ -39,6 +39,8 @@ struct TorrentRowDto
 	bool active = false;
 	bool error = false;
 	bool finished = false;
+	bool metadataPending = false;
+	bool commandsAvailable = true;
 	TorrentUiState state = TorrentUiState::Other;
 };
 

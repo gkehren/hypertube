@@ -59,9 +59,6 @@ void SearchModelAdapter::update(const std::vector<Presentation::SearchResultDto>
 		return;
 	}
 
-	indexById_.clear();
-	for (std::size_t index = 0; index < rows_.size(); ++index)
-		indexById_.emplace(std::string(rows_[index].id.begin(), rows_[index].id.end()), index);
 	while (rows_.size() > next.size())
 	{
 		const auto index = rows_.size() - 1;
@@ -80,7 +77,4 @@ void SearchModelAdapter::update(const std::vector<Presentation::SearchResultDto>
 			model_->set_row_data(index, next[index]);
 		rows_[index] = next[index];
 	}
-	indexById_.clear();
-	for (std::size_t index = 0; index < rows_.size(); ++index)
-		indexById_.emplace(std::string(rows_[index].id.begin(), rows_[index].id.end()), index);
 }

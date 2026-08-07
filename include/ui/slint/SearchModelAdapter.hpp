@@ -19,5 +19,4 @@ public:
 private:
 	std::shared_ptr<slint::VectorModel<SearchResultRow>> model_;
 	std::vector<SearchResultRow> rows_;
-	std::unordered_map<std::string, std::size_t> indexById_;
 };

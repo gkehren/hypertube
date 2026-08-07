@@ -74,24 +74,28 @@ Result PreferencesController::beginSave(const PreferencesSettings &settings,
 	torznabCredentialChanged_ = false;
 	proxyCredentialChanged_ = false;
 
-	const std::string torznabSecret = torznabApiKey.value_or(previousTorznabCredential_.value_or(""));
-	const Result torznab = !settings.torznabEnabled || torznabSecret.empty()
-		? credentialStore.erase("torznab_api_key")
-		: credentialStore.store("torznab_api_key", torznabSecret);
-	if (!torznab)
-		return torznab;
-	torznabCredentialChanged_ = true;
-
-	const std::string proxySecret = proxyPassword.value_or(previousProxyCredential_.value_or(""));
-	const Result proxy = !settings.proxyEnabled || proxySecret.empty()
-		? credentialStore.erase("proxy_password")
-		: credentialStore.store("proxy_password", proxySecret);
-	if (!proxy)
+	if (torznabApiKey.has_value())
 	{
-		restoreCredentials();
-		return proxy;
+		const Result torznab = torznabApiKey->empty()
+			? credentialStore.erase("torznab_api_key")
+			: credentialStore.store("torznab_api_key", *torznabApiKey);
+		if (!torznab)
+			return torznab;
+		torznabCredentialChanged_ = true;
 	}
-	proxyCredentialChanged_ = true;
+
+	if (proxyPassword.has_value())
+	{
+		const Result proxy = proxyPassword->empty()
+			? credentialStore.erase("proxy_password")
+			: credentialStore.store("proxy_password", *proxyPassword);
+		if (!proxy)
+		{
+			restoreCredentials();
+			return proxy;
+		}
+		proxyCredentialChanged_ = true;
+	}
 
 	pendingPreferences_ = settings;
 	pendingSave_ = configManager.savePreferencesCandidate(settingsPath(), settings);

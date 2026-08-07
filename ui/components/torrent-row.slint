@@ -64,7 +64,7 @@ export component TorrentTableRow inherits Rectangle {
 			}
 		}
 		TouchArea {
-			width: parent.width - 118px;
+			width: parent.width - TorrentTableGeometry.actions-width;
 			height: parent.height;
 			clicked => { root.select(root.torrent.id); }
 			changed has-hover => { root.hovered = self.has-hover; }

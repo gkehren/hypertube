@@ -155,10 +155,10 @@ void SlintAppController::bind()
 void SlintAppController::start()
 {
 	const auto preferences = app.settingsConfigManager().getPreferencesSettings();
-	window->set_version_text(slint::SharedString("Slint v1.16.1"));
+	window->set_version_text(slint::SharedString("Slint v1.17.1"));
 	window->set_startup_state(slint::SharedString("Starting"));
-	window->set_sidebar_width(preferences.ui.sidebarWidth);
-	window->set_bottom_panel_height(preferences.ui.bottomPanelHeight);
+	window->set_sidebar_width(std::clamp(preferences.ui.sidebarWidth, 120, 600));
+	window->set_bottom_panel_height(std::clamp(preferences.ui.bottomPanelHeight, 120, 600));
 	window->set_sidebar_collapsed(preferences.ui.sidebarCollapsed);
 	window->set_active_tab(static_cast<AppTab>(std::clamp(preferences.ui.selectedMainTab, 0, 4)));
 	window->set_category_filter(static_cast<TorrentCategory>(torrentPresenter.categoryFilter()));
@@ -220,6 +220,17 @@ Result SlintAppController::stop()
 	refreshTimer.stop();
 	autosaveTimer.stop();
 	started = false;
+
+	std::vector<ManagedTorrent> finalSnapshot;
+	if (app.torrentManager().getPersistenceSnapshot(finalSnapshot, std::chrono::seconds(3)))
+	{
+		app.torrentsConfigManager().saveTorrents(finalSnapshot);
+	}
+	else
+	{
+		app.torrentsConfigManager().saveTorrents(app.torrentManager().getTorrentSnapshot());
+	}
+
 	Result result = uiStateController.flush();
 	const Result preferences = preferencesController.waitForSave();
 	if (!preferences)
@@ -253,6 +264,19 @@ void SlintAppController::refresh()
 		window->set_preferences_state_message(SlintUi::toSharedString(saveResult->success
 			? "Preferences saved" : saveResult->message));
 	}
+
+	if (const auto snapshotRes = app.torrentManager().pollPersistenceSnapshot())
+	{
+		if (snapshotRes->success)
+		{
+			app.torrentsConfigManager().saveTorrents(snapshotRes->torrents);
+		}
+		else
+		{
+			Utils::Logger::warning("app", "Autosave fast-resume snapshot failed: " + snapshotRes->errorMessage);
+		}
+	}
+
 	window->set_preferences_saving(preferencesController.isSaving());
 	logRefreshCoordinator_->refresh(activeTab);
 	torrentRefreshCoordinator_->refresh(activeTab);
@@ -271,7 +295,7 @@ void SlintAppController::autosave()
 	if (!started)
 		return;
 
-	app.torrentsConfigManager().saveTorrents(app.torrentManager().getTorrentSnapshot());
+	app.torrentManager().requestPersistenceSnapshot();
 	if (preferencesController.isSaving() || uiStateController.hasPending())
 	{
 		window->set_preferences_state_message(slint::SharedString(

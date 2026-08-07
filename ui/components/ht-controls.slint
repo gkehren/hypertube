@@ -11,7 +11,7 @@ export component HtButton inherits Rectangle {
 	border-width: root.selected ? 2px : 1px;
 	border-color: root.selected ? ThemeTokens.accent : ThemeTokens.border;
 	border-radius: 5px;
-	Button { text: root.text; enabled: root.enabled; clicked => { root.activated(); } }
+	Button { width: parent.width; height: parent.height; text: root.text; enabled: root.enabled; clicked => { root.activated(); } }
 }
 
 export component HtIconButton inherits HtButton { min-width: 36px; width: 36px; }
@@ -51,5 +51,5 @@ export component HtTextField inherits Rectangle {
 	border-width: 1px;
 	border-color: ThemeTokens.border;
 	border-radius: 5px;
-	LineEdit { text <=> root.text; placeholder-text: root.placeholder-text; }
+	LineEdit { width: parent.width; height: parent.height; text <=> root.text; placeholder-text: root.placeholder-text; }
 }

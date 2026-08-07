@@ -117,6 +117,35 @@ void DetailsRefreshCoordinator::reset()
 	lastTab_ = -1;
 }
 
+void DetailsRefreshCoordinator::clearSelection()
+{
+	detailsPresenter_.setSelectedTorrent(std::nullopt);
+	clear("Select a torrent");
+}
+
+void DetailsRefreshCoordinator::clearDetailsContentPreservingSelection(
+	const std::string &id, const std::string &name, const std::string &message)
+{
+	window_.set_selected_torrent_id(SlintUi::toSharedTorrentId(id));
+	window_.set_selected_torrent_name(SlintUi::toSharedString(name));
+	window_.set_selected_torrent_state(slint::SharedString());
+	window_.set_selected_torrent_progress(slint::SharedString());
+	window_.set_selected_torrent_progress_value(0.0f);
+	window_.set_selected_torrent_size(slint::SharedString());
+	window_.set_selected_torrent_down_rate(slint::SharedString());
+	window_.set_selected_torrent_up_rate(slint::SharedString());
+	window_.set_selected_torrent_eta(slint::SharedString());
+	window_.set_selected_torrent_save_path(slint::SharedString());
+	window_.set_selected_download_limit(slint::SharedString());
+	window_.set_selected_upload_limit(slint::SharedString());
+	window_.set_selected_torrent_paused(false);
+	window_.set_selected_sequential_download(false);
+	window_.set_details_message(SlintUi::toSharedString(message));
+	model_.updateFiles({});
+	model_.updatePeers({});
+	model_.updateTrackers({});
+}
+
 void DetailsRefreshCoordinator::clear(const std::string &message)
 {
 	window_.set_selected_torrent_id(slint::SharedString());
@@ -153,7 +182,7 @@ void DetailsRefreshCoordinator::refresh(AppTab activeTab)
 	const std::string selectedId = torrentPresenter_.selectedId();
 	if (selectedId.empty())
 	{
-		clear("Select a torrent");
+		clearSelection();
 		return;
 	}
 
@@ -172,8 +201,15 @@ void DetailsRefreshCoordinator::refresh(AppTab activeTab)
 		if (availability.state == Presentation::TorrentAvailability::InvalidId)
 			Presentation::logInvalidTorrentId(selectedId, torrentPresenter_.collectionRevision(),
 				torrentPresenter_.registrySize());
-		clear(Presentation::availabilityMessage(availability));
+		clearSelection();
+		window_.set_details_message(SlintUi::toSharedString(Presentation::availabilityMessage(availability)));
 		return;
+	}
+
+	const bool selectionChanged = selectedId != lastTorrentId_;
+	if (selectionChanged)
+	{
+		clearDetailsContentPreservingSelection(selectedRow->id, selectedRow->name, "Loading details...");
 	}
 
 	const auto hash = torrentPresenter_.hashForId(selectedRow->id);
@@ -187,7 +223,7 @@ void DetailsRefreshCoordinator::refresh(AppTab activeTab)
 	if (!details)
 	{
 		const auto availability = torrentPresenter_.availabilityForId(selectedId);
-		window_.set_details_message(SlintUi::toSharedString(Presentation::availabilityMessage(availability)));
+		clearDetailsContentPreservingSelection(selectedRow->id, selectedRow->name, Presentation::availabilityMessage(availability));
 		return;
 	}
 	window_.set_selected_torrent_state(SlintUi::toSharedString(details->stateLabel));
@@ -204,13 +240,19 @@ void DetailsRefreshCoordinator::refresh(AppTab activeTab)
 		window_.set_selected_download_limit(SlintUi::toSharedString(std::to_string(settings->downloadLimitBytes)));
 		window_.set_selected_upload_limit(SlintUi::toSharedString(std::to_string(settings->uploadLimitBytes)));
 	}
+	else
+	{
+		window_.set_selected_sequential_download(false);
+		window_.set_selected_download_limit(slint::SharedString());
+		window_.set_selected_upload_limit(slint::SharedString());
+	}
 	const auto availabilityText = Presentation::availabilityMessage(availability);
 	window_.set_details_message(availabilityText.empty()
 		? slint::SharedString("General") : SlintUi::toSharedString(availabilityText));
 	if (selectedTab_ >= 1 && selectedTab_ <= 3)
 	{
 		const auto section = detailsPresenter_.buildSection(detailsPresenter_.selectedTab());
-		const bool changed = lastTorrentId_ != selectedRow->id || lastTab_ != selectedTab_
+		const bool changed = selectionChanged || lastTab_ != selectedTab_
 			|| lastRevision_ != section.revision;
 		if (changed && selectedTab_ == 1) model_.updateFiles(section.files);
 		if (changed && selectedTab_ == 2) model_.updatePeers(section.peers);
@@ -223,7 +265,11 @@ void DetailsRefreshCoordinator::refresh(AppTab activeTab)
 		else if (section.files.empty() && section.peers.empty() && section.trackers.empty()) window_.set_details_message(slint::SharedString("No details available"));
 	}
 	else if (selectedTab_ == 4)
+	{
+		lastTorrentId_ = selectedRow->id;
+		lastTab_ = selectedTab_;
 		window_.set_details_message(slint::SharedString("Settings ready"));
+	}
 }
 
 NotificationController::NotificationController(Utils::SystemUtils::SystemOpener &opener,

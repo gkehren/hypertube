@@ -23,26 +23,35 @@ export component TorrentTable inherits Rectangle {
 	background: ThemeTokens.background;
 	min-width: 0px;
 	preferred-width: 0px;
-	VerticalBox {
-		spacing: 2px;
-		TorrentTableHeader { compact: root.compact; narrow: root.narrow; progress-width: root.progress-width; status-width: root.status-width; sort(value) => { root.sort(value); } }
-		ListView {
-			accessible-role: list;
-			accessible-label: "Torrent list";
-			accessible-item-count: root.rows.length;
-			for torrent in root.rows: TorrentTableRow {
-				torrent: torrent;
-				selected: torrent.id == root.selected-id;
-				compact: root.compact;
-				narrow: root.narrow;
-				progress-width: root.progress-width;
-				status-width: root.status-width;
-				select(id) => { root.select(id); }
-				execute(id, command) => { root.execute(id, command); }
-				remove(id) => { root.remove(id); }
-				copy-magnet(id) => { root.copy-magnet(id); }
+	focus-scope := FocusScope {
+		key-pressed(event) => {
+			if (event.text == "\n" && root.selected-id != "") {
+				root.execute(root.selected-id, UiTorrentCommand.pause);
+				return accept;
 			}
+			return reject;
 		}
-		if (root.rows.length == 0): Text { text: root.empty-message; color: ThemeTokens.muted-foreground; horizontal-alignment: center; }
+		VerticalBox {
+			spacing: 2px;
+			TorrentTableHeader { compact: root.compact; narrow: root.narrow; progress-width: root.progress-width; status-width: root.status-width; sort(value) => { root.sort(value); } }
+			ListView {
+				accessible-role: list;
+				accessible-label: "Torrent list";
+				accessible-item-count: root.rows.length;
+				for torrent in root.rows: TorrentTableRow {
+					torrent: torrent;
+					selected: torrent.id == root.selected-id;
+					compact: root.compact;
+					narrow: root.narrow;
+					progress-width: root.progress-width;
+					status-width: root.status-width;
+					select(id) => { focus-scope.focus(); root.select(id); }
+					execute(id, command) => { root.execute(id, command); }
+					remove(id) => { root.remove(id); }
+					copy-magnet(id) => { root.copy-magnet(id); }
+				}
+			}
+			if (root.rows.length == 0): Text { text: root.empty-message; color: ThemeTokens.muted-foreground; horizontal-alignment: center; }
+		}
 	}
 }

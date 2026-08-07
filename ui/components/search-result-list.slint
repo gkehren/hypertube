@@ -7,7 +7,7 @@ export component SearchResultList inherits Rectangle {
 	in property <[SearchResultRow]> rows: [];
 	in property <bool> favorite-mode: false;
 	in property <string> empty-message: "No results";
-	private property <string> selected-id;
+	in-out property <string> selected-id;
 	callback select(string);
 	callback toggle-favorite(string);
 	callback remove-favorite(string);

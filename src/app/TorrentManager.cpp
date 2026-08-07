@@ -54,6 +54,89 @@ std::size_t detailSectionIndex(TorrentDetailSection section)
 {
 	return static_cast<std::size_t>(section);
 }
+
+TorrentEvent makeTorrentEvent(lt::alert *alert)
+{
+	TorrentEvent event;
+	if (!alert)
+		return event;
+
+	if (auto *trackerError = lt::alert_cast<lt::tracker_error_alert>(alert))
+	{
+		event.category = "tracker";
+		event.message = std::string("Tracker error for '") + trackerError->torrent_name() + "': " + trackerError->error_message();
+		event.severity = Utils::LogLevel::Error;
+		event.hash = trackerError->handle.info_hashes();
+	}
+	else if (auto *trackerWarning = lt::alert_cast<lt::tracker_warning_alert>(alert))
+	{
+		event.category = "tracker";
+		event.message = std::string("Tracker warning for '") + trackerWarning->torrent_name() + "': " + trackerWarning->warning_message();
+		event.severity = Utils::LogLevel::Warning;
+		event.hash = trackerWarning->handle.info_hashes();
+	}
+	else if (auto *fileError = lt::alert_cast<lt::file_error_alert>(alert))
+	{
+		event.category = "storage";
+		event.message = std::string("File error for '") + fileError->torrent_name() + "': " + fileError->error.message();
+		event.severity = Utils::LogLevel::Error;
+		event.hash = fileError->handle.info_hashes();
+	}
+	else if (auto *movedFailed = lt::alert_cast<lt::storage_moved_failed_alert>(alert))
+	{
+		event.category = "storage";
+		event.message = std::string("Storage move failed for '") + movedFailed->torrent_name() + "': " + movedFailed->error.message();
+		event.severity = Utils::LogLevel::Error;
+		event.hash = movedFailed->handle.info_hashes();
+	}
+	else if (lt::alert_cast<lt::session_stats_alert>(alert))
+	{
+		event.category = "torrent";
+		event.message = "Session stats updated";
+		event.severity = Utils::LogLevel::Debug;
+	}
+	else if (auto *added = lt::alert_cast<lt::add_torrent_alert>(alert))
+	{
+		event.category = "torrent";
+		event.message = added->error ? std::string("Failed to add torrent: ") + added->error.message() : std::string("Torrent added: ") + added->torrent_name();
+		event.severity = added->error ? Utils::LogLevel::Error : Utils::LogLevel::Info;
+		event.hash = added->handle.info_hashes();
+	}
+	else if (auto *finished = lt::alert_cast<lt::torrent_finished_alert>(alert))
+	{
+		event.category = "torrent";
+		event.message = std::string("Torrent finished: ") + finished->torrent_name();
+		event.severity = Utils::LogLevel::Info;
+		event.hash = finished->handle.info_hashes();
+	}
+	else if (auto *metadata = lt::alert_cast<lt::metadata_received_alert>(alert))
+	{
+		event.category = "torrent";
+		event.message = std::string("Metadata received for: ") + metadata->torrent_name();
+		event.severity = Utils::LogLevel::Info;
+		event.hash = metadata->handle.info_hashes();
+	}
+	else if (auto *peerError = lt::alert_cast<lt::peer_error_alert>(alert))
+	{
+		event.category = "peer";
+		event.message = std::string("Peer error for '") + peerError->torrent_name() + "': " + peerError->error.message();
+		event.severity = Utils::LogLevel::Warning;
+		event.hash = peerError->handle.info_hashes();
+	}
+	else if (lt::alert_cast<lt::dht_bootstrap_alert>(alert))
+	{
+		event.category = "torrent";
+		event.message = "DHT bootstrap complete";
+		event.severity = Utils::LogLevel::Info;
+	}
+	else
+	{
+		event.category = "torrent";
+		event.message = alert->message();
+		event.severity = Utils::LogLevel::Debug;
+	}
+	return event;
+}
 }
 
 Result TorrentManager::addTorrent(const std::string &torrentPath, const std::string &savePath)
@@ -82,6 +165,8 @@ Result TorrentManager::addTorrent(const std::string &torrentPath, const std::str
 			std::lock_guard<std::mutex> lock(stateMutex);
 			const auto [_, inserted] = torrents.emplace(hash, handle);
 			torrentFilePaths.emplace(hash, torrentPath);
+			if (params.ti && !params.ti->name().empty())
+				torrentDisplayNames.emplace(hash, params.ti->name());
 			if (inserted)
 				++torrentCollectionRevision;
 		}
@@ -127,6 +212,8 @@ Result TorrentManager::addMagnetTorrent(const std::string &magnetUri, const std:
 		{
 			std::lock_guard<std::mutex> lock(stateMutex);
 			const auto [_, inserted] = torrents.emplace(hash, handle);
+			if (!params.name.empty())
+				torrentDisplayNames.emplace(hash, params.name);
 			if (inserted)
 				++torrentCollectionRevision;
 		}
@@ -236,6 +323,7 @@ Result TorrentManager::removeTorrent(const lt::info_hash_t &hash, TorrentRemoval
 			if (torrents.erase(hash) > 0)
 				++torrentCollectionRevision;
 			torrentFilePaths.erase(hash);
+			torrentDisplayNames.erase(hash);
 		}
 		markStatusCacheStale(cacheMutex, lastCacheRefresh);
 		Utils::Logger::info("torrent", "Removed torrent " + hashForLog(hash));
@@ -311,10 +399,13 @@ std::vector<ManagedTorrent> TorrentManager::getTorrentSnapshot() const
 	snapshot.reserve(torrents.size());
 	for (const auto &[hash, handle] : torrents)
 	{
-		ManagedTorrent entry{hash, handle, {}, {}};
+		ManagedTorrent entry{hash, handle, {}, {}, {}};
 		auto pathIt = torrentFilePaths.find(hash);
 		if (pathIt != torrentFilePaths.end())
 			entry.torrentFilePath = pathIt->second;
+		auto nameIt = torrentDisplayNames.find(hash);
+		if (nameIt != torrentDisplayNames.end())
+			entry.displayName = nameIt->second;
 		snapshot.push_back(std::move(entry));
 	}
 	return snapshot;
@@ -324,54 +415,144 @@ Result TorrentManager::getPersistenceSnapshot(std::vector<ManagedTorrent> &snaps
 {
 	std::lock_guard<std::mutex> operationLock(operationMutex);
 	snapshot = getTorrentSnapshot();
-	std::unordered_set<lt::info_hash_t> pending;
-	for (const auto &torrent : snapshot)
+
 	{
-		if (!torrent.handle.is_valid())
-			continue;
-		try
+		std::lock_guard<std::mutex> lock(alertMutex_);
+		resumeDataStore_.clear();
+		pendingResumeHashes_.clear();
+		for (const auto &torrent : snapshot)
 		{
-			torrent.handle.save_resume_data();
-			pending.insert(torrent.hash);
-		}
-		catch (const std::exception &e)
-		{
-			Utils::Logger::warning("torrent", "Unable to request fast-resume data: " + std::string(e.what()));
+			if (!torrent.handle.is_valid())
+				continue;
+			try
+			{
+				torrent.handle.save_resume_data();
+				pendingResumeHashes_.insert(torrent.hash);
+			}
+			catch (const std::exception &e)
+			{
+				Utils::Logger::warning("torrent", "Unable to request fast-resume data: " + std::string(e.what()));
+			}
 		}
 	}
 
 	const auto deadline = std::chrono::steady_clock::now() + timeout;
-	while (!pending.empty() && std::chrono::steady_clock::now() < deadline)
+	std::unique_lock<std::mutex> lock(alertMutex_);
+	alertCv_.wait_until(lock, deadline, [this] {
+		return pendingResumeHashes_.empty();
+	});
+
+	for (auto &torrent : snapshot)
+	{
+		auto found = resumeDataStore_.find(torrent.hash);
+		if (found != resumeDataStore_.end())
+		{
+			torrent.resumeData = found->second;
+		}
+	}
+
+	if (!pendingResumeHashes_.empty())
+		return Result::Failure("Timed out while collecting fast-resume data for " + std::to_string(pendingResumeHashes_.size()) + " torrent(s)", ResultCode::Storage, true);
+	return Result::Success();
+}
+
+Result TorrentManager::requestPersistenceSnapshot()
+{
+	std::lock_guard<std::mutex> lock(asyncPersistenceMutex_);
+	if (asyncPersistencePending_)
+		return Result::Failure("Persistence snapshot is already in progress", ResultCode::Busy, true);
+
+	asyncPersistencePending_ = true;
+	asyncPersistenceFuture_ = std::async(std::launch::async, [this]() {
+		std::vector<ManagedTorrent> snapshot;
+		Result res = getPersistenceSnapshot(snapshot);
+		PersistenceSnapshotResult result;
+		result.success = static_cast<bool>(res);
+		if (result.success)
+			result.torrents = std::move(snapshot);
+		else
+			result.errorMessage = res.message;
+		return result;
+	});
+	return Result::Success();
+}
+
+std::optional<PersistenceSnapshotResult> TorrentManager::pollPersistenceSnapshot()
+{
+	std::lock_guard<std::mutex> lock(asyncPersistenceMutex_);
+	if (!asyncPersistencePending_ || !asyncPersistenceFuture_.valid())
+		return std::nullopt;
+
+	if (asyncPersistenceFuture_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+	{
+		auto result = asyncPersistenceFuture_.get();
+		asyncPersistencePending_ = false;
+		return result;
+	}
+	return std::nullopt;
+}
+
+std::vector<TorrentEvent> TorrentManager::drainEvents()
+{
+	std::lock_guard<std::mutex> lock(alertMutex_);
+	std::vector<TorrentEvent> events = std::move(eventsQueue_);
+	eventsQueue_.clear();
+	return events;
+}
+
+void TorrentManager::alertWorkerLoop()
+{
+	while (!stopAlertWorker_.load())
 	{
 		session.wait_for_alert(lt::milliseconds(100));
 		std::vector<lt::alert *> alerts;
 		session.pop_alerts(&alerts);
+		if (alerts.empty())
+			continue;
+
+		std::lock_guard<std::mutex> lock(alertMutex_);
 		for (lt::alert *alert : alerts)
 		{
+			if (!alert)
+				continue;
+
 			if (auto *saved = lt::alert_cast<lt::save_resume_data_alert>(alert))
 			{
 				const lt::info_hash_t hash = saved->handle.info_hashes();
-				for (auto &torrent : snapshot)
-				{
-					if (torrent.hash == hash)
-					{
-						torrent.resumeData = lt::write_resume_data_buf(saved->params);
-						break;
-					}
-				}
-				pending.erase(hash);
+				resumeDataStore_[hash] = lt::write_resume_data_buf(saved->params);
+				pendingResumeHashes_.erase(hash);
+				alertCv_.notify_all();
 			}
 			else if (auto *failed = lt::alert_cast<lt::save_resume_data_failed_alert>(alert))
 			{
-				pending.erase(failed->handle.info_hashes());
+				const lt::info_hash_t hash = failed->handle.info_hashes();
+				pendingResumeHashes_.erase(hash);
+				alertCv_.notify_all();
 				Utils::Logger::warning("torrent", "Unable to save fast-resume data: " + failed->error.message());
 			}
+
+			if (auto *metadata = lt::alert_cast<lt::metadata_received_alert>(alert))
+			{
+				const auto hash = metadata->handle.info_hashes();
+				if (metadata->handle.is_valid())
+				{
+					try
+					{
+						const auto tf = metadata->handle.torrent_file();
+						if (tf && !tf->name().empty())
+						{
+							std::lock_guard<std::mutex> stateLock(stateMutex);
+							torrentDisplayNames[hash] = tf->name();
+						}
+					}
+					catch (const std::exception &) {}
+				}
+			}
+
+			TorrentEvent event = makeTorrentEvent(alert);
+			eventsQueue_.push_back(std::move(event));
 		}
 	}
-
-	if (!pending.empty())
-		return Result::Failure("Timed out while collecting fast-resume data for " + std::to_string(pending.size()) + " torrent(s)", ResultCode::Storage, true);
-	return Result::Success();
 }
 
 void TorrentManager::setDownloadSpeedLimit(int bytesPerSecond)
@@ -764,12 +945,25 @@ void TorrentManager::setProxyConfig(const std::string &hostname, int port, const
 	session.apply_settings(settings);
 }
 TorrentManager::TorrentManager()
-	: statusWorker(&TorrentManager::statusWorkerLoop, this), detailWorker(&TorrentManager::detailWorkerLoop, this)
+	: alertWorker_(&TorrentManager::alertWorkerLoop, this),
+	  statusWorker(&TorrentManager::statusWorkerLoop, this),
+	  detailWorker(&TorrentManager::detailWorkerLoop, this)
 {
 }
 
 TorrentManager::~TorrentManager()
 {
+	stopAlertWorker_ = true;
+	alertCv_.notify_all();
+	if (alertWorker_.joinable())
+		alertWorker_.join();
+
+	{
+		std::lock_guard<std::mutex> lock(asyncPersistenceMutex_);
+		if (asyncPersistenceFuture_.valid())
+			asyncPersistenceFuture_.wait();
+	}
+
 	stopDetailWorker = true;
 	detailCv.notify_all();
 	if (detailWorker.joinable())

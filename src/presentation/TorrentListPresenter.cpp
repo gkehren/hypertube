@@ -102,19 +102,43 @@ std::vector<TorrentRowDto> TorrentListPresenter::buildUnfilteredRows()
 		const auto id = torrentId(torrent.hash);
 		if (id.empty())
 			continue;
-		// Keep the identity index independent from the status snapshot. Status
-		// loading is asynchronous and must not make a live torrent unavailable
-		// for selection or commands.
-		if (!statusCache)
+		const auto status = statusCache ? statusCache->find(torrent.hash) : statusCache->end();
+		if (!statusCache || status == statusCache->end())
+		{
+			TorrentRowDto row;
+			row.id = id;
+			row.name = !torrent.displayName.empty() ? torrent.displayName : "Loading torrent...";
+			row.progress = 0.0f;
+			row.progressLabel = UiFormatters::formatProgress(0.0f);
+			row.sizeBytes = 0;
+			row.sizeLabel = UiFormatters::formatBytes(0);
+			row.downloadRateBytes = 0;
+			row.uploadRateBytes = 0;
+			row.downloadRateLabel = UiFormatters::formatRate(0);
+			row.uploadRateLabel = UiFormatters::formatRate(0);
+			row.peers = 0;
+			row.seeds = 0;
+			row.peersLabel = UiFormatters::formatCount(0);
+			row.seedsLabel = UiFormatters::formatCount(0);
+			row.queuePosition = -1;
+			row.paused = false;
+			row.active = false;
+			row.finished = false;
+			row.error = false;
+			row.state = TorrentUiState::Other;
+			row.stateLabel = "Loading";
+			row.etaSeconds = -1;
+			row.etaLabel = UiFormatters::formatEta(-1);
+			row.metadataPending = true;
+			row.commandsAvailable = true;
+			rows.push_back(std::move(row));
 			continue;
-		auto status = statusCache->find(torrent.hash);
-		if (status == statusCache->end())
-			continue;
+		}
 
 		const auto &value = status->second;
 		TorrentRowDto row;
 		row.id = id;
-		row.name = value.name;
+		row.name = !value.name.empty() ? value.name : (!torrent.displayName.empty() ? torrent.displayName : "Loading torrent...");
 		row.progress = std::clamp(value.progress, 0.0f, 1.0f);
 		row.progressLabel = UiFormatters::formatProgress(row.progress);
 		row.sizeBytes = value.total_wanted;
@@ -134,6 +158,8 @@ std::vector<TorrentRowDto> TorrentListPresenter::buildUnfilteredRows()
 		row.active = row.downloadRateBytes > 0 || row.uploadRateBytes > 0;
 		row.finished = value.is_finished;
 		row.error = static_cast<bool>(value.errc);
+		row.metadataPending = value.state == lt::torrent_status::downloading_metadata || value.has_metadata == false;
+		row.commandsAvailable = true;
 		if (row.paused)
 			row.state = TorrentUiState::Paused;
 		else if (row.finished)
@@ -269,14 +295,7 @@ std::optional<TorrentRowDto> TorrentListPresenter::findRowById(const std::string
 		hashesById_[id] = torrent.hash;
 		TorrentRowDto row;
 		row.id = id;
-		try
-		{
-			row.name = torrent.handle.status().name;
-		}
-		catch (const std::exception &)
-		{
-			row.name = "Loading torrent...";
-		}
+		row.name = !torrent.displayName.empty() ? torrent.displayName : "Loading torrent...";
 		row.stateLabel = "Loading";
 		row.progressLabel = UiFormatters::formatProgress(0.0f);
 		row.sizeLabel = UiFormatters::formatBytes(0);

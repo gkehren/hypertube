@@ -33,6 +33,7 @@ export component SearchView inherits Rectangle {
 			search-input := LineEdit {
 				text <=> root.query;
 				placeholder-text: "Search torrents";
+				accepted => { root.execute-search(root.query); }
 			}
 			Button {
 				text: root.loading ? "Searching..." : "Search";

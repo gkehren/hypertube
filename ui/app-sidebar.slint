@@ -1,4 +1,4 @@
-import { Button, ScrollView, VerticalBox } from "std-widgets.slint";
+import { Button, HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
 import { ThemeTokens } from "theme.slint";
 import { CategoryRow } from "category-types.slint";
 import { AppTab, TorrentCategory } from "enums.slint";
@@ -24,6 +24,58 @@ component SidebarButton inherits Rectangle {
 	tip := PopupWindow { x: root.width + 4px; width: 130px; height: 30px; Rectangle { background: ThemeTokens.surface-hover; border-width: 1px; border-color: ThemeTokens.border; Text { text: root.accessible-name; color: ThemeTokens.foreground; horizontal-alignment: center; vertical-alignment: center; } } }
 }
 
+component CategoryButton inherits Rectangle {
+	in property <string> label;
+	in property <int> count: 0;
+	in property <bool> selected: false;
+	callback clicked();
+	private property <bool> hovered: false;
+
+	height: 34px;
+	border-radius: 6px;
+	background: root.selected ? ThemeTokens.surface-hover : root.hovered ? ThemeTokens.surface-hover : transparent;
+	border-width: root.selected ? 1px : 0px;
+	border-color: root.selected ? ThemeTokens.accent : transparent;
+
+	HorizontalBox {
+		padding-left: 10px;
+		padding-right: 8px;
+		spacing: 6px;
+
+		Text {
+			text: root.label;
+			color: root.selected ? ThemeTokens.accent : root.hovered ? ThemeTokens.foreground : ThemeTokens.muted-foreground;
+			font-weight: root.selected ? 600 : 400;
+			vertical-alignment: center;
+			wrap: no-wrap;
+			overflow: elide;
+			horizontal-stretch: 1;
+		}
+
+		Rectangle {
+			height: 20px;
+			min-width: 24px;
+			background: root.selected ? ThemeTokens.accent : ThemeTokens.border;
+			border-radius: 10px;
+			Text {
+				text: root.count;
+				color: root.selected ? ThemeTokens.background : ThemeTokens.muted-foreground;
+				font-size: 11px;
+				font-weight: 600;
+				horizontal-alignment: center;
+				vertical-alignment: center;
+			}
+		}
+	}
+
+	TouchArea {
+		accessible-role: button;
+		accessible-label: root.label + " (" + root.count + ")";
+		clicked => { root.clicked(); }
+		changed has-hover => { root.hovered = self.has-hover; }
+	}
+}
+
 export component AppSidebar inherits Rectangle {
 	in property <int> sidebar-width: 240;
 	in property <bool> collapsed: false;
@@ -41,6 +93,7 @@ export component AppSidebar inherits Rectangle {
 	width: root.collapsed ? 56px : root.sidebar-width * 1px;
 	VerticalBox {
 		padding: root.collapsed ? 8px : 16px;
+		spacing: 6px;
 		Text { text: root.collapsed ? "H" : "Hypertube"; accessible-label: "Hypertube"; font-size: 22px; color: ThemeTokens.foreground; horizontal-alignment: center; }
 		SidebarButton { label: root.collapsed ? "+" : "Add torrent"; accessible-name: "Add torrent"; tooltip-enabled: root.collapsed; clicked => { root.add-torrent(); } }
 		SidebarButton { label: root.collapsed ? "T" : "Torrents"; accessible-name: "Torrents"; tooltip-enabled: root.collapsed; selected: root.active-tab == AppTab.torrents; clicked => { root.torrents-tab(); } }
@@ -50,10 +103,14 @@ export component AppSidebar inherits Rectangle {
 		SidebarButton { label: root.collapsed ? "L" : "Logs"; accessible-name: "Logs"; tooltip-enabled: root.collapsed; selected: root.active-tab == AppTab.logs; clicked => { root.logs-tab(); } }
 		if (!root.collapsed && root.active-tab == AppTab.torrents): ScrollView {
 			VerticalBox {
-				Text { text: "Categories"; color: ThemeTokens.muted-foreground; font-size: 12px; }
-				for category in root.categories: Rectangle {
-					height: 36px; border-width: category.filter == root.category-filter ? 2px : 0px; border-color: ThemeTokens.accent; border-radius: 5px;
-					Button { text: category.label + " (" + category.count + ")"; clicked => { root.select-category(category.filter); } }
+				padding: 4px;
+				spacing: 4px;
+				Text { text: "CATEGORIES"; color: ThemeTokens.muted-foreground; font-size: 11px; font-weight: 600; }
+				for category in root.categories: CategoryButton {
+					label: category.label;
+					count: category.count;
+					selected: category.filter == root.category-filter;
+					clicked => { root.select-category(category.filter); }
 				}
 			}
 		}

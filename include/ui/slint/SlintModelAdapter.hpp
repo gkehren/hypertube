@@ -27,6 +27,5 @@ private:
 
 	std::shared_ptr<Model> model_;
 	std::vector<TorrentRow> rows_;
-	std::unordered_map<std::string, std::size_t> indexById_;
 	UpdateStats lastUpdateStats_;
 };

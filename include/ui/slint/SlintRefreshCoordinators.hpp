@@ -79,6 +79,8 @@ public:
 		MainWindow &window, int &selectedTab, std::vector<Presentation::TorrentRowDto> &visibleRows);
 	void refresh(AppTab activeTab);
 	void reset();
+	void clearSelection();
+	void clearDetailsContentPreservingSelection(const std::string &id, const std::string &name, const std::string &message);
 
 private:
 	void clear(const std::string &message);

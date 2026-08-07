@@ -90,33 +90,76 @@ TEST(PreferencesControllerTest, UiStateSaveSkipsInvalidNetworkValidation)
 TEST(PreferencesControllerTest, PreservesReplacesAndExplicitlyClearsSecrets)
 {
 	TempDirectory temp;
-	std::map<std::string, std::string> secrets{{"proxy_password", "old-password"}};
+	std::map<std::string, std::string> secrets{{"proxy_password", "old-password"}, {"torznab_api_key", "old-key"}};
 	TorrentManager torrentManager;
 	SearchEngine searchEngine;
 	ConfigManager configManager;
 	PreferencesSettings settings = configManager.getPreferencesSettings();
-	settings.proxyEnabled = true;
-	settings.proxyHost = "127.0.0.1";
-	settings.proxyPort = 1080;
+	settings.proxyEnabled = false;
+	settings.torznabEnabled = false;
 	const auto path = (temp.path / "settings.json").string();
 
+	// Disabling proxy or torznab with std::nullopt secrets preserves existing stored credentials
 	Presentation::PreferencesController preserve(torrentManager, searchEngine, configManager,
 		{}, fakeStore(secrets), path);
 	ASSERT_TRUE(preserve.beginSave(settings));
 	ASSERT_TRUE(preserve.waitForSave());
 	EXPECT_EQ(secrets.at("proxy_password"), "old-password");
+	EXPECT_EQ(secrets.at("torznab_api_key"), "old-key");
 
+	// Replacing proxy secret with non-empty optional
 	Presentation::PreferencesController replace(torrentManager, searchEngine, configManager,
 		{}, fakeStore(secrets), path);
-	ASSERT_TRUE(replace.beginSave(settings, std::nullopt, std::string("new-password")));
+	ASSERT_TRUE(replace.beginSave(settings, std::optional<std::string>("new-key"), std::optional<std::string>("new-password")));
 	ASSERT_TRUE(replace.waitForSave());
 	EXPECT_EQ(secrets.at("proxy_password"), "new-password");
+	EXPECT_EQ(secrets.at("torznab_api_key"), "new-key");
 
+	// Explicitly passing empty string erases the secret
 	Presentation::PreferencesController clear(torrentManager, searchEngine, configManager,
 		{}, fakeStore(secrets), path);
-	ASSERT_TRUE(clear.beginSave(settings, std::nullopt, std::string()));
+	ASSERT_TRUE(clear.beginSave(settings, std::optional<std::string>(""), std::optional<std::string>("")));
 	ASSERT_TRUE(clear.waitForSave());
 	EXPECT_FALSE(secrets.contains("proxy_password"));
+	EXPECT_FALSE(secrets.contains("torznab_api_key"));
+}
+
+TEST(PreferencesControllerTest, NoSecretMutationDoesNotTouchCredentialStore)
+{
+	TempDirectory temp;
+	std::map<std::string, std::string> secrets{{"proxy_password", "my-secret"}};
+	std::size_t storeCalls = 0;
+	std::size_t eraseCalls = 0;
+	Presentation::PreferencesController::CredentialStoreOps trackingOps{
+		[&secrets, &storeCalls](const std::string &account, const std::string &secret) {
+			storeCalls++;
+			secrets[account] = secret;
+			return Result::Success();
+		},
+		[&secrets, &eraseCalls](const std::string &account) {
+			eraseCalls++;
+			secrets.erase(account);
+			return Result::Success();
+		},
+		[&secrets](const std::string &account) -> std::optional<std::string> {
+			const auto found = secrets.find(account);
+			return found == secrets.end() ? std::nullopt : std::optional<std::string>(found->second);
+		}
+	};
+	TorrentManager torrentManager;
+	SearchEngine searchEngine;
+	ConfigManager configManager;
+	PreferencesSettings settings = configManager.getPreferencesSettings();
+	const auto path = (temp.path / "settings.json").string();
+
+	Presentation::PreferencesController controller(torrentManager, searchEngine, configManager,
+		{}, trackingOps, path);
+	ASSERT_TRUE(controller.beginSave(settings));
+	ASSERT_TRUE(controller.waitForSave());
+
+	EXPECT_EQ(storeCalls, 0u);
+	EXPECT_EQ(eraseCalls, 0u);
+	EXPECT_EQ(secrets.at("proxy_password"), "my-secret");
 }
 
 TEST(PreferencesControllerTest, QueuedUiStateDoesNotOverwriteNetworkTransaction)

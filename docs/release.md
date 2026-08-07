@@ -13,11 +13,7 @@ from automation that is still planned.
 
 ## Licensing and notices
 
-The repository does not currently contain a project license or third-party
-notice file. Before publishing a binary, choose the applicable Slint license
-regime, add the project license and required third-party notices, and record
-that decision in the release materials. Until this gate is complete, builds
-and packages are for local development and testing only.
+The repository includes [LICENSE](../LICENSE) (GNU General Public License v3.0) and [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) detailing third-party dependency licenses. Distribution packages automatically bundle these notice files. For additional information, see [docs/licensing.md](licensing.md).
 
 ## Prepare a release build
 

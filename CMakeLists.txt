@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
-# Project name
-project(hypertube CXX)
+# Project name and version
+project(hypertube VERSION 0.1.0 LANGUAGES CXX)
 
 if(POLICY CMP0207)
     cmake_policy(SET CMP0207 NEW)
@@ -143,7 +143,7 @@ set(SLINT_FEATURE_RENDERER_SOFTWARE ON CACHE BOOL "" FORCE)
 FetchContent_Declare(
     Slint
     GIT_REPOSITORY https://github.com/slint-ui/slint.git
-    GIT_TAG v1.16.1
+    GIT_TAG v1.17.1
     SOURCE_SUBDIR api/cpp
 )
 FetchContent_MakeAvailable(Slint)
@@ -458,25 +458,26 @@ else()
     install(TARGETS hypertube COMPONENT runtime RUNTIME DESTINATION . BUNDLE DESTINATION .)
 endif()
 install(DIRECTORY config DESTINATION . COMPONENT runtime)
+install(FILES LICENSE THIRD_PARTY_NOTICES.md config/hypertube.desktop DESTINATION . COMPONENT runtime)
 set(CPACK_GENERATOR "ZIP")
 set(CPACK_PACKAGE_NAME "Hypertube")
-set(CPACK_PACKAGE_VERSION "0.1.0")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_INSTALL_CMAKE_PROJECTS "${CMAKE_BINARY_DIR};${CMAKE_PROJECT_NAME};runtime;.")
 set(CPACK_MONOLITHIC_INSTALL ON)
 include(CPack)
 
 if(MSVC)
     target_compile_options(hypertube PRIVATE
-        $<$<CONFIG:Release>:/O2 /GL /fp:fast>
-        $<$<AND:$<CONFIG:Release>,$<BOOL:${HYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS}>>:/arch:AVX2>
+        $<$<CONFIG:Release>:/O2 /GL>
+        $<$<AND:$<CONFIG:Release>,$<BOOL:${HYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS}>>:/arch:AVX2 /fp:fast>
     )
     target_link_options(hypertube PRIVATE
         $<$<CONFIG:Release>:/LTCG>
     )
 else()
     target_compile_options(hypertube PRIVATE
-        $<$<CONFIG:Release>:-O3 -flto -ffast-math>
-        $<$<AND:$<CONFIG:Release>,$<BOOL:${HYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS}>>:-march=native>
+        $<$<CONFIG:Release>:-O3 -flto>
+        $<$<AND:$<CONFIG:Release>,$<BOOL:${HYPERTUBE_ENABLE_NATIVE_OPTIMIZATIONS}>>:-march=native -ffast-math>
     )
     target_link_options(hypertube PRIVATE
         $<$<CONFIG:Release>:-flto>

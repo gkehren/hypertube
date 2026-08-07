@@ -21,8 +21,27 @@
 #include <deque>
 #include <array>
 
-// Forward declaration
+#include "Logger.hpp"
+#include <future>
+
 struct TorrentConfigData;
+
+enum class TorrentEventType
+{
+	Log,
+	ResumeData,
+	ResumeFailed,
+	StatusChanged
+};
+
+struct TorrentEvent
+{
+	TorrentEventType type = TorrentEventType::Log;
+	Utils::LogLevel severity = Utils::LogLevel::Info;
+	std::string category;
+	std::string message;
+	std::optional<lt::info_hash_t> hash;
+};
 
 // A value snapshot used by the UI and persistence layers. The map containing
 // these entries never escapes TorrentManager, so callers cannot race a map
@@ -33,6 +52,14 @@ struct ManagedTorrent
 	lt::torrent_handle handle;
 	std::string torrentFilePath;
 	std::vector<char> resumeData;
+	std::string displayName;
+};
+
+struct PersistenceSnapshotResult
+{
+	bool success = false;
+	std::vector<ManagedTorrent> torrents;
+	std::string errorMessage;
 };
 
 enum class TorrentRemovalMode
@@ -154,7 +181,12 @@ public:
 	// proxyType: 0 disables the proxy, 1 selects SOCKS5, 2 selects HTTP.
 	void setProxyConfig(const std::string &hostname, int port, const std::string &username = "", const std::string &password = "", int proxyType = 0);
 
-	// Alert polling methods
+	// Asynchronous persistence snapshot methods
+	Result requestPersistenceSnapshot();
+	std::optional<PersistenceSnapshotResult> pollPersistenceSnapshot();
+
+	// Event draining methods (replaces raw pollAlerts)
+	std::vector<TorrentEvent> drainEvents();
 	std::vector<lt::alert *> pollAlerts();
 
 private:
@@ -163,7 +195,23 @@ private:
 	mutable std::mutex stateMutex;
 	std::unordered_map<lt::info_hash_t, lt::torrent_handle> torrents;
 	std::unordered_map<lt::info_hash_t, std::string> torrentFilePaths;
+	std::unordered_map<lt::info_hash_t, std::string> torrentDisplayNames;
 	std::atomic<std::uint64_t> torrentCollectionRevision{0};
+
+	// Alert pump & persistence synchronization
+	mutable std::mutex alertMutex_;
+	std::condition_variable alertCv_;
+	std::thread alertWorker_;
+	std::atomic<bool> stopAlertWorker_{false};
+	std::vector<TorrentEvent> eventsQueue_;
+	std::unordered_map<lt::info_hash_t, std::vector<char>> resumeDataStore_;
+	std::unordered_set<lt::info_hash_t> pendingResumeHashes_;
+	void alertWorkerLoop();
+
+	// Async persistence task
+	mutable std::mutex asyncPersistenceMutex_;
+	std::future<PersistenceSnapshotResult> asyncPersistenceFuture_;
+	bool asyncPersistencePending_{false};
 
 	// Status cache
 	mutable std::mutex cacheMutex;

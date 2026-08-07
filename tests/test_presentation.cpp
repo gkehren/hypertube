@@ -168,7 +168,9 @@ TEST(TorrentListPresenterTest, KeepsSelectionIdentityWhileStatusesAreLoading)
 
 	Presentation::TorrentListPresenter presenter(manager);
 	presenter.setSelectedId(id);
-	EXPECT_TRUE(presenter.buildRows().empty());
+	const auto rows = presenter.buildRows();
+	ASSERT_EQ(rows.size(), 1u);
+	EXPECT_EQ(rows.front().stateLabel, "Loading");
 	EXPECT_EQ(presenter.selectedId(), id);
 	EXPECT_TRUE(presenter.hashForId(id).has_value());
 	const auto selectedRow = presenter.findRowById(id);

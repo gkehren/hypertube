@@ -142,13 +142,15 @@ export component MainWindow inherits Window {
 	in property <bool> remove-dialog-open: false;
 	in property <string> remove-dialog-name;
 	private property <length> maximum-sidebar-width: max(120px, content.width - 528px);
-	private property <length> main-content-width: content.width - (root.sidebar-collapsed ? 56px : root.sidebar-width * 1px) - 8px;
+	private property <length> main-content-width: max(0px, content.width - (root.sidebar-collapsed ? 56px : root.sidebar-width * 1px) - 8px);
 	private property <int> maximum-details-height: max(120, round((content.height - 294px) / 1px));
 	private property <bool> details-collapsed: false;
 
 	title: "Hypertube";
-	width: 1280px;
-	height: 760px;
+	preferred-width: 1280px;
+	preferred-height: 760px;
+	min-width: 760px;
+	min-height: 560px;
 
 	background: ThemeTokens.background;
 	forward-focus: main-scope;
