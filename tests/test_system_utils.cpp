@@ -405,4 +405,12 @@ TEST(FileUtilsTest, DurableWriteFileRelativePathSucceeds)
 	std::filesystem::remove_all(tempDir, ec);
 }
 
+TEST(AppPathsTest, ExecutablePathResolutionDynamicBuffer)
+{
+	Utils::AppPaths::resetPortableCache();
+	const auto exeDir = Utils::AppPaths::executableDirectory();
+	EXPECT_FALSE(exeDir.empty());
+	EXPECT_TRUE(std::filesystem::exists(exeDir));
+}
+
 } // namespace

@@ -4,6 +4,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -24,28 +25,58 @@ std::mutex g_pathsMutex;
 std::filesystem::path querySystemExecutablePath()
 {
 #if defined(_WIN32)
-	wchar_t buffer[MAX_PATH];
-	DWORD len = GetModuleFileNameW(NULL, buffer, MAX_PATH);
-	if (len > 0)
+	DWORD bufferSize = MAX_PATH;
+	std::vector<wchar_t> buffer(bufferSize);
+	while (true)
 	{
-		return std::filesystem::path(buffer);
+		DWORD len = GetModuleFileNameW(NULL, buffer.data(), bufferSize);
+		if (len == 0)
+		{
+			break;
+		}
+		if (len < bufferSize && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+		{
+			return std::filesystem::path(buffer.data());
+		}
+		bufferSize *= 2;
+		if (bufferSize > 65536)
+		{
+			break;
+		}
+		buffer.resize(bufferSize);
 	}
 #elif defined(__APPLE__)
-	char buffer[1024];
-	uint32_t size = sizeof(buffer);
-	if (_NSGetExecutablePath(buffer, &size) == 0)
+	uint32_t size = 0;
+	_NSGetExecutablePath(nullptr, &size);
+	if (size > 0)
 	{
-		std::error_code ec;
-		auto canonical = std::filesystem::canonical(buffer, ec);
-		return ec ? std::filesystem::path(buffer) : canonical;
+		std::vector<char> buffer(size);
+		if (_NSGetExecutablePath(buffer.data(), &size) == 0)
+		{
+			std::error_code ec;
+			auto canonical = std::filesystem::canonical(buffer.data(), ec);
+			return ec ? std::filesystem::path(buffer.data()) : canonical;
+		}
 	}
 #else
-	char buffer[PATH_MAX];
-	ssize_t len = ::readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
-	if (len > 0)
+	size_t bufferSize = 4096;
+	while (bufferSize <= 65536)
 	{
-		buffer[len] = '\0';
-		return std::filesystem::path(buffer);
+		std::vector<char> buffer(bufferSize);
+		ssize_t len = ::readlink("/proc/self/exe", buffer.data(), bufferSize - 1);
+		if (len > 0)
+		{
+			if (static_cast<size_t>(len) < bufferSize - 1)
+			{
+				buffer[len] = '\0';
+				return std::filesystem::path(buffer.data());
+			}
+		}
+		else if (len < 0)
+		{
+			break;
+		}
+		bufferSize *= 2;
 	}
 #endif
 	return std::filesystem::current_path();
