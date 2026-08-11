@@ -18,6 +18,7 @@ add_executable(unit_tests
     test_presentation.cpp
     test_preferences_controller.cpp
     test_logger.cpp
+    test_app_shutdown.cpp
 )
 
 target_include_directories(unit_tests PRIVATE
@@ -67,6 +68,7 @@ target_link_libraries(slint_controller_tests PRIVATE
 	hypertube_torrent
 	hypertube_utils
 	Slint::Slint
+	hypertube_slint_platform
 )
 
 add_dependencies(slint_controller_tests hypertube)
@@ -83,12 +85,8 @@ target_link_libraries(slint_model_tests
     gtest_main
     hypertube_utils
     Slint::Slint
+    hypertube_slint_platform
 )
-
-if(TARGET PkgConfig::HYPERTUBE_FONTCONFIG)
-    target_link_libraries(slint_model_tests PRIVATE PkgConfig::HYPERTUBE_FONTCONFIG)
-    target_link_libraries(slint_controller_tests PRIVATE PkgConfig::HYPERTUBE_FONTCONFIG)
-endif()
 
 add_dependencies(slint_model_tests hypertube)
 
@@ -107,6 +105,7 @@ target_include_directories(search_tests PRIVATE
 target_link_libraries(unit_tests
     PRIVATE
     gtest_main
+    hypertube_app
     hypertube_utils
     hypertube_presentation
 )
@@ -130,8 +129,6 @@ target_link_libraries(torrent_tests
 )
 
 if(WIN32)
-	target_link_libraries(slint_model_tests PRIVATE imm32)
-	target_link_libraries(slint_controller_tests PRIVATE imm32)
 	# Multi-config generators place GoogleTest and Slint DLLs in their own
 	# runtime directories.  gtest_discover_tests() launches each executable
 	# during the build, before CTest can provide a custom environment, so make

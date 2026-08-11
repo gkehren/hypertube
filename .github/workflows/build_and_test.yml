@@ -35,15 +35,6 @@ jobs:
     - name: Test
       run: xvfb-run -a ctest --test-dir build --output-on-failure --parallel 2
 
-    - name: Generate Slint visual snapshots
-      run: xvfb-run -a cmake --build build --target slint-visual-snapshots-run -j2
-
-    - name: Upload Slint visual snapshots
-      uses: actions/upload-artifact@v4
-      with:
-        name: slint-visual-snapshots
-        path: build/visual-artifacts/*.bmp
-
   macos:
     runs-on: macos-latest
     timeout-minutes: 30
@@ -65,10 +56,22 @@ jobs:
 
   windows:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
+
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-binary-cache
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Cache vcpkg binaries
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+        key: vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
+        restore-keys: |
+          vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt') }}-
+          vcpkg-${{ runner.os }}-${{ runner.arch }}-
 
     - name: Install dependencies
       shell: pwsh

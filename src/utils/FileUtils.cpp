@@ -31,45 +31,115 @@ namespace Utils {
                 ) + "_" + std::to_string(++tempCounter);
                 return parent / (filename + "." + uniqueId + ".tmp");
             }
-
-            bool flushToDisk(const std::filesystem::path &filePath) {
-#ifdef _WIN32
-                HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-                if (hFile == INVALID_HANDLE_VALUE)
-                    return false;
-                BOOL success = FlushFileBuffers(hFile);
-                CloseHandle(hFile);
-                return success != FALSE;
-#else
-                int fd = open(filePath.c_str(), O_WRONLY);
-                if (fd < 0)
-                    return false;
-#if defined(__APPLE__)
-                int res = fcntl(fd, F_FULLFSYNC);
-#else
-                int res = fdatasync(fd);
-#endif
-                close(fd);
-                return res == 0;
-#endif
-            }
-
-            void syncParentDirectory(const std::filesystem::path &dirPath) {
-#ifndef _WIN32
-                int dirfd = open(dirPath.c_str(), O_RDONLY);
-                if (dirfd >= 0) {
-                    fsync(dirfd);
-                    close(dirfd);
-                }
-#endif
-            }
         }
 
-        bool durableWriteFile(const std::filesystem::path &target, const std::string &content, std::string &errorMessage) {
+        bool FileOperations::createDirectories(const std::filesystem::path &parent, std::error_code &ec) {
+            return std::filesystem::create_directories(parent, ec);
+        }
+
+        bool FileOperations::openAndWriteTemp(const std::filesystem::path &tempPath, const std::string &content, std::string &errorMessage) {
+            std::ofstream file(tempPath, std::ios::out | std::ios::binary | std::ios::trunc);
+            if (!file.is_open()) {
+                errorMessage = "Unable to open temporary file: " + tempPath.string();
+                return false;
+            }
+            file.write(content.data(), static_cast<std::streamsize>(content.size()));
+            file.flush();
+            if (!file.good()) {
+                errorMessage = "Failed to write content to temporary file";
+                std::error_code ec;
+                std::filesystem::remove(tempPath, ec);
+                return false;
+            }
+            return true;
+        }
+
+        bool FileOperations::flushToDisk(const std::filesystem::path &filePath) {
+#ifdef _WIN32
+            HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (hFile == INVALID_HANDLE_VALUE)
+                return false;
+            BOOL success = FlushFileBuffers(hFile);
+            CloseHandle(hFile);
+            return success != FALSE;
+#else
+            int fd = open(filePath.c_str(), O_WRONLY);
+            if (fd < 0)
+                return false;
+#if defined(__APPLE__)
+            int res = fcntl(fd, F_FULLFSYNC);
+#else
+            int res = fdatasync(fd);
+#endif
+            close(fd);
+            return res == 0;
+#endif
+        }
+
+        bool FileOperations::copyFile(const std::filesystem::path &from, const std::filesystem::path &to, std::filesystem::copy_options options, std::error_code &ec) {
+            return std::filesystem::copy_file(from, to, options, ec);
+        }
+
+        bool FileOperations::replaceOrRenameFile(const std::filesystem::path &from, const std::filesystem::path &to, std::string &errorMessage) {
+            std::error_code ec;
+#ifdef _WIN32
+            if (std::filesystem::exists(to, ec)) {
+                BOOL replaced = ReplaceFileW(to.c_str(), from.c_str(), NULL, REPLACEFILE_IGNORE_MERGE_ERRORS, NULL, NULL);
+                if (!replaced) {
+                    BOOL moved = MoveFileExW(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+                    if (!moved) {
+                        errorMessage = "Unable to replace file on Windows";
+                        return false;
+                    }
+                }
+            } else {
+                BOOL moved = MoveFileExW(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+                if (!moved) {
+                    errorMessage = "Unable to create destination file on Windows";
+                    return false;
+                }
+            }
+            return true;
+#else
+            std::filesystem::rename(from, to, ec);
+            if (ec) {
+                errorMessage = "Unable to replace file: " + ec.message();
+                return false;
+            }
+            return true;
+#endif
+        }
+
+        bool FileOperations::syncParentDirectory(const std::filesystem::path &dirPath) {
+#ifndef _WIN32
+            int dirfd = open(dirPath.c_str(), O_RDONLY);
+            if (dirfd < 0)
+                return false;
+            int res = fsync(dirfd);
+            close(dirfd);
+            return res == 0;
+#else
+            (void)dirPath;
+            return true;
+#endif
+        }
+
+        bool FileOperations::exists(const std::filesystem::path &p, std::error_code &ec) {
+            return std::filesystem::exists(p, ec);
+        }
+
+        bool FileOperations::remove(const std::filesystem::path &p, std::error_code &ec) {
+            return std::filesystem::remove(p, ec);
+        }
+
+        bool durableWriteFile(const std::filesystem::path &target, const std::string &content, std::string &errorMessage, FileOperations *ops) {
+            static FileOperations defaultOps;
+            FileOperations &fileOps = ops ? *ops : defaultOps;
+
             std::error_code error;
             const auto parent = target.parent_path();
             if (!parent.empty()) {
-                std::filesystem::create_directories(parent, error);
+                fileOps.createDirectories(parent, error);
                 if (error) {
                     errorMessage = "Unable to create target directory: " + error.message();
                     return false;
@@ -77,65 +147,41 @@ namespace Utils {
             }
 
             const auto temporary = generateTempPath(target);
-            {
-                std::ofstream file(temporary, std::ios::out | std::ios::binary | std::ios::trunc);
-                if (!file.is_open()) {
-                    errorMessage = "Unable to open temporary file: " + temporary.string();
-                    return false;
-                }
-                file.write(content.data(), static_cast<std::streamsize>(content.size()));
-                file.flush();
-                if (!file.good()) {
-                    errorMessage = "Failed to write content to temporary file";
-                    std::filesystem::remove(temporary, error);
-                    return false;
-                }
-            }
-
-            if (!flushToDisk(temporary)) {
-                errorMessage = "Failed to flush file buffers to disk";
-                std::filesystem::remove(temporary, error);
+            if (!fileOps.openAndWriteTemp(temporary, content, errorMessage)) {
+                fileOps.remove(temporary, error);
                 return false;
             }
 
-            if (std::filesystem::exists(target, error)) {
+            if (!fileOps.flushToDisk(temporary)) {
+                errorMessage = "Failed to flush file buffers to disk";
+                fileOps.remove(temporary, error);
+                return false;
+            }
+
+            if (fileOps.exists(target, error)) {
                 const auto backup = target.string() + ".bak";
-                std::filesystem::copy_file(target, backup, std::filesystem::copy_options::overwrite_existing, error);
+                fileOps.copyFile(target, backup, std::filesystem::copy_options::overwrite_existing, error);
                 if (error) {
                     errorMessage = "Unable to create configuration backup: " + error.message();
-                    std::filesystem::remove(temporary, error);
+                    fileOps.remove(temporary, error);
+                    return false;
+                }
+                if (!fileOps.flushToDisk(backup)) {
+                    errorMessage = "Failed to flush configuration backup to disk";
+                    fileOps.remove(temporary, error);
                     return false;
                 }
             }
 
-#ifdef _WIN32
-            if (std::filesystem::exists(target, error)) {
-                BOOL replaced = ReplaceFileW(target.c_str(), temporary.c_str(), NULL, REPLACEFILE_IGNORE_MERGE_ERRORS, NULL, NULL);
-                if (!replaced) {
-                    BOOL moved = MoveFileExW(temporary.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
-                    if (!moved) {
-                        errorMessage = "Unable to replace file on Windows";
-                        std::filesystem::remove(temporary, error);
-                        return false;
-                    }
-                }
-            } else {
-                BOOL moved = MoveFileExW(temporary.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
-                if (!moved) {
-                    errorMessage = "Unable to create destination file on Windows";
-                    std::filesystem::remove(temporary, error);
-                    return false;
-                }
-            }
-#else
-            std::filesystem::rename(temporary, target, error);
-            if (error) {
-                errorMessage = "Unable to replace file: " + error.message();
-                std::filesystem::remove(temporary, error);
+            if (!fileOps.replaceOrRenameFile(temporary, target, errorMessage)) {
+                fileOps.remove(temporary, error);
                 return false;
             }
-            syncParentDirectory(parent);
-#endif
+
+            if (!fileOps.syncParentDirectory(parent)) {
+                errorMessage = "Failed to sync parent directory";
+                return false;
+            }
 
             return true;
         }

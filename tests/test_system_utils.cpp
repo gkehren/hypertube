@@ -2,6 +2,7 @@
 #include "CredentialStore.hpp"
 #include "AppPaths.hpp"
 #include "SystemUtils.hpp"
+#include "FileUtils.hpp"
 #include "Logger.hpp"
 #include <cstdlib>
 #include <filesystem>
@@ -262,6 +263,111 @@ TEST(SystemOpenerTest, DestroysCleanlyWithPendingWork)
 
 	std::error_code error;
 	std::filesystem::remove(tempFile, error);
+}
+
+struct MockFileOperations : public Utils::FileUtils::FileOperations {
+	enum class FailStep {
+		None,
+		WriteTemp,
+		FlushTemp,
+		CopyBackup,
+		FlushBackup,
+		ReplaceRename,
+		SyncDir
+	};
+
+	FailStep failStep = FailStep::None;
+
+	bool openAndWriteTemp(const std::filesystem::path &tempPath, const std::string &content, std::string &errorMessage) override {
+		if (failStep == FailStep::WriteTemp) {
+			errorMessage = "Injected write temp failure";
+			return false;
+		}
+		return FileOperations::openAndWriteTemp(tempPath, content, errorMessage);
+	}
+
+	bool flushToDisk(const std::filesystem::path &filePath) override {
+		if (failStep == FailStep::FlushTemp && filePath.string().find(".tmp") != std::string::npos) {
+			return false;
+		}
+		if (failStep == FailStep::FlushBackup && filePath.string().find(".bak") != std::string::npos) {
+			return false;
+		}
+		return FileOperations::flushToDisk(filePath);
+	}
+
+	bool copyFile(const std::filesystem::path &from, const std::filesystem::path &to, std::filesystem::copy_options options, std::error_code &ec) override {
+		if (failStep == FailStep::CopyBackup && to.string().find(".bak") != std::string::npos) {
+			ec = std::make_error_code(std::errc::io_error);
+			return false;
+		}
+		return FileOperations::copyFile(from, to, options, ec);
+	}
+
+	bool replaceOrRenameFile(const std::filesystem::path &from, const std::filesystem::path &to, std::string &errorMessage) override {
+		if (failStep == FailStep::ReplaceRename) {
+			errorMessage = "Injected replace/rename failure";
+			return false;
+		}
+		return FileOperations::replaceOrRenameFile(from, to, errorMessage);
+	}
+
+	bool syncParentDirectory(const std::filesystem::path &dirPath) override {
+		if (failStep == FailStep::SyncDir) {
+			return false;
+		}
+		return FileOperations::syncParentDirectory(dirPath);
+	}
+};
+
+TEST(DurableWriteFailureInjectionTest, ValidatesInjectedFailuresLeaveValidPrimaryOrBackup)
+{
+	const auto dir = std::filesystem::temp_directory_path() / ("hypertube_durable_test_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+	std::filesystem::create_directories(dir);
+	const auto target = dir / "settings.json";
+	const auto backup = dir / "settings.json.bak";
+	const std::string originalContent = R"({"version":2,"valid":true})";
+	const std::string newContent = R"({"version":2,"updated":true})";
+
+	std::ofstream(target) << originalContent;
+
+	const std::vector<MockFileOperations::FailStep> steps = {
+		MockFileOperations::FailStep::WriteTemp,
+		MockFileOperations::FailStep::FlushTemp,
+		MockFileOperations::FailStep::CopyBackup,
+		MockFileOperations::FailStep::FlushBackup,
+		MockFileOperations::FailStep::ReplaceRename,
+		MockFileOperations::FailStep::SyncDir
+	};
+
+	for (const auto step : steps) {
+		MockFileOperations ops;
+		ops.failStep = step;
+		std::string errorMessage;
+		bool res = Utils::FileUtils::durableWriteFile(target, newContent, errorMessage, &ops);
+		EXPECT_FALSE(res);
+		EXPECT_FALSE(errorMessage.empty());
+
+		// Verify either target primary file or backup file remains valid with original content
+		bool primaryValid = false;
+		if (std::filesystem::exists(target)) {
+			std::ifstream in(target);
+			std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+			if (content == originalContent) primaryValid = true;
+		}
+
+		bool backupValid = false;
+		if (std::filesystem::exists(backup)) {
+			std::ifstream in(backup);
+			std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+			if (content == originalContent) backupValid = true;
+		}
+
+		EXPECT_TRUE(primaryValid || backupValid);
+	}
+
+	std::error_code ec;
+	std::filesystem::remove_all(dir, ec);
 }
 
 } // namespace

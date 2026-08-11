@@ -9,9 +9,13 @@ concurrency:
   group: hypertube-benchmarks-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   benchmark:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
     - uses: actions/checkout@v4
@@ -24,14 +28,20 @@ jobs:
     - name: Configure CMake
       run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DHYPERTUBE_ENABLE_SLINT_GPU_BENCHMARK=ON
 
-    - name: Build
-      run: cmake --build build --target slint-renderer-comparison --parallel 2
-
     - name: Compare Slint renderers
       run: xvfb-run -a cmake --build build --target slint-renderer-comparison -j2
+
+    - name: Generate Slint visual snapshots
+      run: xvfb-run -a cmake --build build --target slint-visual-snapshots-run -j2
 
     - name: Upload renderer benchmark reports
       uses: actions/upload-artifact@v4
       with:
         name: slint-renderer-reports
         path: build/renderer-reports/*.json
+
+    - name: Upload Slint visual snapshots
+      uses: actions/upload-artifact@v4
+      with:
+        name: slint-visual-snapshots
+        path: build/visual-artifacts/*.bmp

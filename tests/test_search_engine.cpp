@@ -574,3 +574,40 @@ TEST_F(SearchEngineTest, SearchCancelSearchAgainShutdownSequence) {
 	EXPECT_EQ(secondCompletion->requestId, secondRequest);
 	EXPECT_EQ(secondCompletion->result.code, ResultCode::Cancelled);
 }
+
+TEST_F(SearchEngineTest, LightweightRepeatedSearchBenchmark) {
+	ASSERT_TRUE(engine.registerSearchProvider(
+		"fast-fixture",
+		[](const SearchQuery &query, SearchResponse &response, const std::function<bool()> &) {
+			TorrentSearchResult item;
+			item.name = "Mocked Result " + query.query;
+			item.infoHash = "0123456789012345678901234567890123456789";
+			item.sizeBytes = 1048576;
+			item.seeders = 42;
+			item.leechers = 7;
+			response.torrents.push_back(item);
+			return Result::Success();
+		}));
+	ASSERT_TRUE(engine.setActiveSearchProvider("fast-fixture"));
+
+	constexpr int kIterations = 50;
+	const auto startTime = std::chrono::high_resolution_clock::now();
+
+	for (int i = 0; i < kIterations; ++i) {
+		SearchQuery query("benchmark_item_" + std::to_string(i));
+		SearchResponse response;
+		Result res = engine.searchTorrents(query, response);
+		ASSERT_TRUE(res.success);
+		ASSERT_EQ(response.torrents.size(), 1U);
+		EXPECT_EQ(response.torrents[0].name, "Mocked Result " + query.query);
+	}
+
+	const auto endTime = std::chrono::high_resolution_clock::now();
+	const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+
+	std::cout << "[ INFORMATIONAL ] Executed " << kIterations << " repeated mocked searches in "
+	          << elapsedMs << " ms (" << (static_cast<double>(elapsedMs) / kIterations) << " ms/search)" << std::endl;
+
+	EXPECT_FALSE(engine.isSearching());
+	engine.shutdown();
+}

@@ -55,9 +55,21 @@ jobs:
       if: runner.os == 'macOS'
       run: brew install boost libtorrent-rasterbar curl nlohmann-json ninja pkg-config
 
+    - name: Cache vcpkg binaries (Windows)
+      if: runner.os == 'Windows'
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/.vcpkg-binary-cache
+        key: vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
+        restore-keys: |
+          vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt') }}-
+          vcpkg-${{ runner.os }}-${{ runner.arch }}-
+
     - name: Install Windows dependencies
       if: runner.os == 'Windows'
       shell: pwsh
+      env:
+        VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-binary-cache
       run: vcpkg install libtorrent curl nlohmann-json --triplet x64-windows
 
     - name: Configure CMake (Linux/macOS)
@@ -99,12 +111,36 @@ jobs:
         $hash = (Get-FileHash -Path "${{ matrix.artifact_name }}" -Algorithm SHA256).Hash.ToLower()
         "$hash  ${{ matrix.artifact_name }}" | Out-File -FilePath "${{ matrix.sha_name }}" -Encoding ascii
 
-    - name: Smoke Test Packaged Runtime
+    - name: Smoke Test Packaged Runtime (Linux/macOS)
       if: runner.os != 'Windows'
       run: |
         mkdir -p test-extract
         unzip ${{ matrix.artifact_name }} -d test-extract
-        find test-extract -name hypertube -type f
+        EXE=$(find test-extract -name hypertube -type f)
+        "$EXE" --version
+        test -f test-extract/LICENSE || test -f $(dirname "$EXE")/LICENSE
+        test -f test-extract/THIRD_PARTY_NOTICES.md || test -f $(dirname "$EXE")/THIRD_PARTY_NOTICES.md
+        if [ "${{ runner.os }}" = "Linux" ]; then
+          if ldd "$EXE" | grep -i "not found"; then
+            echo "Error: Missing dynamic library dependencies found by ldd!"
+            exit 1
+          fi
+        elif [ "${{ runner.os }}" = "macOS" ]; then
+          otool -L "$EXE"
+        fi
+
+    - name: Smoke Test Packaged Runtime (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path test-extract
+        Expand-Archive -Path "${{ matrix.artifact_name }}" -DestinationPath test-extract
+        $exe = (Get-ChildItem -Path test-extract -Recurse -Filter "hypertube.exe").FullName
+        & $exe --version
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        $dir = Split-Path -Parent $exe
+        if (-not (Test-Path "$dir\LICENSE")) { Write-Error "LICENSE missing"; exit 1 }
+        if (-not (Test-Path "$dir\THIRD_PARTY_NOTICES.md")) { Write-Error "THIRD_PARTY_NOTICES.md missing"; exit 1 }
 
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
