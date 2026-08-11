@@ -442,7 +442,7 @@ PreferencesUiController::PreferencesUiController(Presentation::PreferencesContro
 void PreferencesUiController::changeTheme(Theme theme)
 {
 	auto state = currentState_();
-	state.theme = std::clamp(static_cast<int>(theme), 0, 4);
+	state.theme = std::clamp(static_cast<int>(theme), 0, 7);
 	window_.set_selected_theme(static_cast<Theme>(state.theme));
 	uiState_.request(state);
 }

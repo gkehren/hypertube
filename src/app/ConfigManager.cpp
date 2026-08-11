@@ -13,6 +13,8 @@
 
 namespace
 {
+constexpr int maxThemeIndex = 7;
+
 std::string encodeHex(const std::vector<char> &data)
 {
 	static constexpr char digits[] = "0123456789abcdef";
@@ -78,7 +80,7 @@ void applyPreferencesToJson(json &config, const PreferencesSettings &settings)
 		config = json::object();
 	if (!config.contains("version"))
 		config["version"] = ConfigManager::CURRENT_CONFIG_VERSION;
-	config["theme"] = settings.theme;
+	config["theme"] = std::clamp(settings.theme, 0, maxThemeIndex);
 	if (!config.contains("settings") || !config["settings"].is_object())
 		config["settings"] = json::object();
 	auto &target = config["settings"];
@@ -370,7 +372,7 @@ PreferencesSettings ConfigManager::getPreferencesSettings() const
 	settings.downloadSpeedLimit = std::max(speed.value("download", 0), 0);
 	settings.uploadSpeedLimit = std::max(speed.value("upload", 0), 0);
 	if (config.contains("theme") && config["theme"].is_number_integer())
-		settings.theme = config["theme"].get<int>();
+		settings.theme = std::clamp(config["theme"].get<int>(), 0, maxThemeIndex);
 	settings.downloadPath = root.value("download_path", "~/Downloads");
 	settings.enableDht = root.value("enable_dht", true);
 	settings.enableUpnp = root.value("enable_upnp", true);
@@ -993,7 +995,7 @@ void ConfigManager::loadFavoritesAndHistory(std::vector<TorrentSearchResult> &fa
 void ConfigManager::setTheme(int themeIndex)
 {
 	std::lock_guard<std::mutex> lock(configMutex);
-	config["theme"] = themeIndex;
+	config["theme"] = std::clamp(themeIndex, 0, maxThemeIndex);
 }
 
 int ConfigManager::getTheme() const
@@ -1015,11 +1017,17 @@ int ConfigManager::getTheme() const
 				return 3;
 			if (themeStr == "cyberpunk")
 				return 4;
+			if (themeStr == "system")
+				return 5;
+			if (themeStr == "light")
+				return 6;
+			if (themeStr == "high-contrast" || themeStr == "high_contrast")
+				return 7;
 			return 0; // Default to dark if unknown
 		}
-		else if (config["theme"].is_number())
+		else if (config["theme"].is_number_integer())
 		{
-			return config["theme"];
+			return std::clamp(config["theme"].get<int>(), 0, maxThemeIndex);
 		}
 	}
 	return 0; // Default to Dark theme

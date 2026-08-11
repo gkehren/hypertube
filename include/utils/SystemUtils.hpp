@@ -99,5 +99,9 @@ namespace Utils {
         // native Win32 clipboard, pbcopy, or the first available Linux
         // clipboard backend.
         Result copyToClipboard(const std::string &text);
+
+        // Returns the best available desktop color preference. Dark is the
+        // conservative fallback when no portable platform signal is present.
+        bool systemPrefersDarkTheme();
     }
 }

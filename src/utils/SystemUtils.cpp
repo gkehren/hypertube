@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <utility>
 #include <initializer_list>
+#include <charconv>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -28,6 +29,43 @@ namespace Utils {
     namespace SystemUtils {
 
         namespace {
+            bool equalsIgnoreCase(const std::string &left, const char *right) {
+                if (right == nullptr)
+                    return false;
+                const std::string expected(right);
+                if (left.size() != expected.size())
+                    return false;
+                for (std::size_t index = 0; index < left.size(); ++index) {
+                    if (std::tolower(static_cast<unsigned char>(left[index]))
+                        != std::tolower(static_cast<unsigned char>(expected[index])))
+                        return false;
+                }
+                return true;
+            }
+
+            bool containsIgnoreCase(const std::string &value, const char *needle) {
+                std::string lowered = value;
+                std::transform(lowered.begin(), lowered.end(), lowered.begin(),
+                    [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+                std::string expected = needle ? needle : "";
+                std::transform(expected.begin(), expected.end(), expected.begin(),
+                    [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+                return !expected.empty() && lowered.find(expected) != std::string::npos;
+            }
+
+            bool parseColorFgbgBackground(const std::string &value, bool &dark) {
+                const std::size_t separator = value.find_last_of(';');
+                if (separator == std::string::npos || separator + 1 >= value.size())
+                    return false;
+                const std::string background = value.substr(separator + 1);
+                int index = 0;
+                const auto parsed = std::from_chars(background.data(), background.data() + background.size(), index);
+                if (parsed.ec != std::errc{} || parsed.ptr != background.data() + background.size())
+                    return false;
+                dark = index < 8;
+                return true;
+            }
+
             Result validateOpenPath(OpenOperationKind kind, const std::string &path) {
                 std::error_code error;
                 if (path.empty() || (kind == OpenOperationKind::Explorer
@@ -307,6 +345,32 @@ namespace Utils {
 #else
             return Result::Failure("Clipboard support is not available on this platform", ResultCode::Unavailable);
 #endif
+        }
+
+        bool systemPrefersDarkTheme() {
+            if (const char *overrideTheme = std::getenv("HYPERTUBE_SYSTEM_THEME"); overrideTheme) {
+                const std::string value(overrideTheme);
+                if (equalsIgnoreCase(value, "light"))
+                    return false;
+                if (equalsIgnoreCase(value, "dark"))
+                    return true;
+            }
+
+            if (const char *gtkTheme = std::getenv("GTK_THEME"); gtkTheme) {
+                const std::string value(gtkTheme);
+                if (containsIgnoreCase(value, "dark"))
+                    return true;
+                if (containsIgnoreCase(value, "light"))
+                    return false;
+            }
+
+            if (const char *colorFgbg = std::getenv("COLORFGBG"); colorFgbg) {
+                bool dark = true;
+                if (parseColorFgbgBackground(colorFgbg, dark))
+                    return dark;
+            }
+
+            return true;
         }
 
     }

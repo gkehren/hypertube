@@ -108,7 +108,8 @@ int main(int argc, char **argv)
 
 	const std::vector<std::pair<const char *, Theme>> themes {
 		{ "dark", Theme::Dark }, { "ocean", Theme::Ocean }, { "nord", Theme::Nord },
-		{ "dracula", Theme::Dracula }, { "cyberpunk", Theme::Cyberpunk }
+		{ "dracula", Theme::Dracula }, { "cyberpunk", Theme::Cyberpunk },
+		{ "system", Theme::System }, { "light", Theme::Light }, { "high-contrast", Theme::HighContrast }
 	};
 	const std::vector<std::pair<unsigned, unsigned>> sizes {
 		{ 800, 600 }, { 900, 700 }, { 1024, 768 }, { 1280, 760 }, { 1440, 900 }, { 1920, 1080 }

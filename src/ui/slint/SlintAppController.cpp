@@ -6,6 +6,7 @@
 #include "CredentialStore.hpp"
 #include "Logger.hpp"
 #include "SlintString.hpp"
+#include "SystemUtils.hpp"
 
 #include <utility>
 
@@ -19,7 +20,7 @@ SlintAppController::SlintAppController(App &app, slint::ComponentHandle<MainWind
 	detailsPresenter(app.torrentManager(), app.systemOpener()), searchPresenter(app.searchEngine()),
 	logsPresenter(app.torrentManager()),
 	preferencesController(app.torrentManager(), app.searchEngine(), app.settingsConfigManager(),
-		[this](int theme) { this->window->set_selected_theme(static_cast<Theme>(std::clamp(theme, 0, 4))); }),
+		[this](int theme) { this->window->set_selected_theme(static_cast<Theme>(std::clamp(theme, 0, 7))); }),
 		uiStateController(preferencesController, uiStateFrom(preferencesController.current()),
 		[this](const Presentation::UiStateSnapshot &state) { applyUiState(state); },
 		[this](const Result &result) {
@@ -191,7 +192,8 @@ void SlintAppController::start()
 	window->set_logs_state_message(slint::SharedString("Diagnostics are updated from the bounded log buffer."));
 	const auto currentPreferences = preferencesController.current();
 	selectedDetailsTab_ = std::clamp(currentPreferences.ui.selectedDetailsTab, 0, 4);
-	window->set_selected_theme(static_cast<Theme>(std::clamp(currentPreferences.theme, 0, 4)));
+	window->set_system_dark(Utils::SystemUtils::systemPrefersDarkTheme());
+	window->set_selected_theme(static_cast<Theme>(std::clamp(currentPreferences.theme, 0, 7)));
 	window->set_preferences_state_message(slint::SharedString("Changes are saved transactionally."));
 	window->set_preference_download_limit(SlintUi::toSharedString(std::to_string(currentPreferences.downloadSpeedLimit)));
 	window->set_preference_upload_limit(SlintUi::toSharedString(std::to_string(currentPreferences.uploadSpeedLimit)));
@@ -334,7 +336,7 @@ Presentation::UiStateSnapshot SlintAppController::currentUiState() const
 
 void SlintAppController::applyUiState(const Presentation::UiStateSnapshot &state)
 {
-	window->set_selected_theme(static_cast<Theme>(std::clamp(state.theme, 0, 4)));
+	window->set_selected_theme(static_cast<Theme>(std::clamp(state.theme, 0, 7)));
 	window->set_sidebar_width(state.layout.sidebarWidth);
 	window->set_bottom_panel_height(state.layout.bottomPanelHeight);
 	window->set_sidebar_collapsed(state.layout.sidebarCollapsed);

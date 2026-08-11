@@ -122,6 +122,7 @@ export component MainWindow inherits Window {
 	in property <bool> log-show-error: true;
 	in property <bool> log-auto-scroll: true;
 	in property <Theme> selected-theme: Theme.dark;
+	in property <bool> system-dark: true;
 	in property <string> preferences-state-message;
 	in property <bool> preferences-saving: false;
 	in-out property <string> preference-download-limit;
@@ -164,7 +165,8 @@ export component MainWindow inherits Window {
 	background: ThemeTokens.background;
 	forward-focus: main-scope;
 
-	changed selected-theme => { ThemeTokens.apply-theme(root.selected-theme); }
+	changed selected-theme => { ThemeTokens.apply-theme(root.selected-theme, root.system-dark); }
+	changed system-dark => { ThemeTokens.apply-theme(root.selected-theme, root.system-dark); }
 	changed width => {
 		root.sidebar-width = clamp(root.sidebar-width, 120, min(600, round(root.maximum-sidebar-width / 1px)));
 	}

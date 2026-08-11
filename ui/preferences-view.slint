@@ -53,6 +53,11 @@ export component PreferencesView inherits Rectangle {
 					HorizontalBox {
 						Rectangle { height: 38px; min-width: 90px; border-width: root.selected-theme == Theme.dracula ? 2px : 1px; border-color: root.selected-theme == Theme.dracula ? ThemeTokens.accent : ThemeTokens.border; Button { text: "Dracula"; clicked => { root.change-theme(Theme.dracula); } } }
 						Rectangle { height: 38px; min-width: 110px; border-width: root.selected-theme == Theme.cyberpunk ? 2px : 1px; border-color: root.selected-theme == Theme.cyberpunk ? ThemeTokens.accent : ThemeTokens.border; Button { text: "CyberPunk"; clicked => { root.change-theme(Theme.cyberpunk); } } }
+						Rectangle { height: 38px; min-width: 90px; border-width: root.selected-theme == Theme.system ? 2px : 1px; border-color: root.selected-theme == Theme.system ? ThemeTokens.accent : ThemeTokens.border; Button { text: "System"; clicked => { root.change-theme(Theme.system); } } }
+					}
+					HorizontalBox {
+						Rectangle { height: 38px; min-width: 90px; border-width: root.selected-theme == Theme.light ? 2px : 1px; border-color: root.selected-theme == Theme.light ? ThemeTokens.accent : ThemeTokens.border; Button { text: "Light"; clicked => { root.change-theme(Theme.light); } } }
+						Rectangle { height: 38px; min-width: 130px; border-width: root.selected-theme == Theme.high-contrast ? 2px : 1px; border-color: root.selected-theme == Theme.high-contrast ? ThemeTokens.accent : ThemeTokens.border; Button { text: "High contrast"; clicked => { root.change-theme(Theme.high-contrast); } } }
 						Rectangle { }
 					}
 				}

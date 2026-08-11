@@ -13,8 +13,32 @@ export global ThemeTokens {
 	in-out property <color> warning: #f5c26b;
 	in-out property <color> error: #ff7b86;
 
-	public function apply-theme(theme: Theme) {
-		if (theme == Theme.ocean) {
+	public function apply-theme(theme: Theme, system-dark: bool) {
+		if (theme == Theme.light || (theme == Theme.system && !system-dark)) {
+			background = #f5f7fa;
+			surface = #ffffff;
+			surface-hover = #e8edf3;
+			foreground = #18202a;
+			muted-foreground = #526070;
+			accent = #245fb5;
+			accent-hover = #194989;
+			border = #c8d1dc;
+			success = #187a43;
+			warning = #8a5a00;
+			error = #b42318;
+		} else if (theme == Theme.high-contrast) {
+			background = #000000;
+			surface = #101010;
+			surface-hover = #242424;
+			foreground = #ffffff;
+			muted-foreground = #e6e6e6;
+			accent = #00e5ff;
+			accent-hover = #ffff00;
+			border = #ffffff;
+			success = #00ff66;
+			warning = #ffff00;
+			error = #ff5b5b;
+		} else if (theme == Theme.ocean) {
 			background = #101c2c;
 			surface = #16283c;
 			surface-hover = #244967;

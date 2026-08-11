@@ -72,16 +72,19 @@ investigation. The unchanged-revision path should remain below 1 ms.
 The `slint-visual-snapshots-run` target renders the production shell with mock
 data for Torrents, Search, Favorites, Logs, Preferences, and both torrent
 dialogs. It writes inspectable BMP artifacts for six viewport sizes and all
-five runtime themes under `build/visual-artifacts`:
+eight runtime themes (`Dark`, `Ocean`, `Nord`, `Dracula`, `CyberPunk`, `System`,
+`Light`, and `High contrast`) under `build/visual-artifacts`:
 
 ```sh
 cmake --build build --target slint-visual-snapshots-run
 ```
 
-On headless Linux, run the target through `xvfb-run -a`. CI uploads the 390
+On headless Linux, run the target through `xvfb-run -a`. CI uploads the 624
 generated images as the `slint-visual-snapshots` artifact. The matrix includes
 empty Torrent, Search, Favorites, Logs, and Details models plus a 10,000-row
 torrent model, in addition to long, Unicode, loading, error, v2, and hybrid examples.
+For deterministic system-theme smoke checks, set `HYPERTUBE_SYSTEM_THEME=dark`
+or `HYPERTUBE_SYSTEM_THEME=light` before launching the application.
 
 ## Accessibility smoke matrix
 

@@ -85,6 +85,30 @@ TEST_F(ConfigManagerTest, SaveAndLoadConfig)
 	EXPECT_TRUE(manager2.getEnableNATPMP());
 }
 
+TEST_F(ConfigManagerTest, PersistsExtendedThemeRangeAndLegacyNames)
+{
+	const std::string configPath = (testDir / "themes.json").string();
+	ConfigManager manager;
+	manager.setTheme(7);
+	manager.save(configPath);
+	manager.waitForAsyncOperations();
+
+	ConfigManager restored;
+	ASSERT_TRUE(restored.load(configPath));
+	EXPECT_EQ(restored.getTheme(), 7);
+	EXPECT_EQ(restored.getPreferencesSettings().theme, 7);
+
+	restored.setTheme(999);
+	EXPECT_EQ(restored.getTheme(), 7);
+	{
+		std::ofstream file(configPath);
+		file << R"({"version":2,"theme":"high-contrast","settings":{}})";
+	}
+	ConfigManager legacy;
+	ASSERT_TRUE(legacy.load(configPath));
+	EXPECT_EQ(legacy.getTheme(), 7);
+}
+
 TEST_F(ConfigManagerTest, PersistsUiLayoutAndMigratesMissingDefaults)
 {
 	const std::string configPath = (testDir / "ui-layout.json").string();
