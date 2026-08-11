@@ -3,10 +3,26 @@
 #include <curl/curl.h>
 #include <iostream>
 
+#include <string_view>
+
 #include "App.hpp"
 
-int main()
+int main(int argc, char **argv)
 {
+	for (int i = 1; i < argc; ++i)
+	{
+		const std::string_view arg(argv[i]);
+		if (arg == "--version" || arg == "-v")
+		{
+#ifdef HYPERTUBE_VERSION
+			std::cout << "Hypertube " << HYPERTUBE_VERSION << std::endl;
+#else
+			std::cout << "Hypertube 0.1.0" << std::endl;
+#endif
+			return 0;
+		}
+	}
+
 	if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
 	{
 		std::cerr << "Failed to initialize cURL" << std::endl;
@@ -17,7 +33,13 @@ int main()
 	try
 	{
 		App app;
-		app.initialize();
+		Result initResult = app.initialize();
+		if (!initResult)
+		{
+			std::cerr << "Fatal initialization error: " << initResult.message << std::endl;
+			curl_global_cleanup();
+			return 1;
+		}
 		int controllerExitCode = 0;
 		{
 			auto window = MainWindow::create();

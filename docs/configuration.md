@@ -12,17 +12,17 @@ Hypertube stores settings, torrent restoration state, search history, favorites,
 | macOS | `~/Library/Application Support/Hypertube` | `~/Library/Application Support/Hypertube` | `~/Library/Caches/Hypertube` |
 | Windows | `%APPDATA%/Hypertube` | `%LOCALAPPDATA%/Hypertube` | `%LOCALAPPDATA%/Hypertube/cache` |
 
-If the relevant environment variables are unavailable, the application uses safe platform or current-directory fallbacks. `AppPaths::ensureDirectories()` creates the required directories during startup.
+If the relevant environment variables are unavailable, the application uses safe platform or executable-directory fallbacks. `AppPaths::ensureDirectories()` creates the required directories during startup.
 
 ## Portable mode
 
-Portable mode is enabled when `HYPERTUBE_PORTABLE=1` or when `portable.mode` exists in the current working directory.
+Portable mode is enabled when `HYPERTUBE_PORTABLE=1` or when `portable.mode` exists next to the Hypertube executable.
 
 ```text
-./config/settings.json
-./config/torrents.json
-./data/hypertube.log
-./cache/
+<executable-directory>/config/settings.json
+<executable-directory>/config/torrents.json
+<executable-directory>/data/hypertube.log
+<executable-directory>/cache/
 ```
 
 Portable mode is intended for a self-contained distribution. It should not be used in a directory where the user cannot write configuration and data.

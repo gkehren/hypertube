@@ -4,6 +4,8 @@
 #include "presentation/TorrentAddController.hpp"
 #include "presentation/UiFormatters.hpp"
 #include "SlintString.hpp"
+#include "utils/AppPaths.hpp"
+#include "utils/Logger.hpp"
 #include "utils/TorrentIdentity.hpp"
 
 #include <algorithm>
@@ -681,6 +683,20 @@ void AppShellController::clearLogs()
 	logModel_.update({});
 	window_.set_log_rows(logModel_.model());
 	window_.set_logs_state_message(slint::SharedString("Diagnostics cleared"));
+}
+
+void AppShellController::exportDiagnostics()
+{
+	std::string error;
+	const auto targetPath = Utils::AppPaths::dataDirectory() / "hypertube-diagnostics.txt";
+	if (Utils::Logger::exportDiagnosticsToFile(targetPath, error))
+	{
+		window_.set_logs_state_message(slint::SharedString("Exported report to " + targetPath.string()));
+	}
+	else
+	{
+		window_.set_logs_state_message(slint::SharedString("Failed to export report: " + error));
+	}
 }
 
 void AppShellController::setLogFilter(LogLevel level, bool enabled)

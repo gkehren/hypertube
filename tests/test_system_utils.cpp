@@ -1,12 +1,23 @@
 #include <gtest/gtest.h>
+#include "CredentialStore.hpp"
 #include "AppPaths.hpp"
 #include "SystemUtils.hpp"
+#include "FileUtils.hpp"
+#include "Logger.hpp"
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <thread>
 
 namespace {
+
+TEST(CredentialStoreTest, AsyncRefreshHasAnExplicitShutdownPath)
+{
+	Utils::CredentialStore::asyncRefreshStatus({});
+	Utils::CredentialStore::asyncRefreshStatus({});
+	Utils::CredentialStore::shutdown();
+	SUCCEED();
+}
 
 std::filesystem::path configuredHome()
 {
@@ -51,6 +62,123 @@ TEST(AppPathsTest, PreservesWindowsAbsolutePaths)
 	EXPECT_EQ(Utils::AppPaths::expandUserPath(absolute), absolute);
 }
 #endif
+
+TEST(AppPathsTest, StablePortableRootAndDirectoryCreation)
+{
+	Utils::AppPaths::resetPortableCache();
+	const auto cwd = std::filesystem::current_path();
+	Utils::AppPaths::setOverrideExecutableDirectory(cwd);
+	const auto marker = cwd / "portable.mode";
+	std::ofstream(marker) << "";
+
+	EXPECT_TRUE(Utils::AppPaths::isPortable());
+	const auto configDir = Utils::AppPaths::configDirectory();
+	EXPECT_EQ(configDir, cwd / "config");
+
+	const auto tempSubdir = cwd / "temp_subdir_test";
+	std::filesystem::create_directories(tempSubdir);
+	std::filesystem::current_path(tempSubdir);
+
+	EXPECT_TRUE(Utils::AppPaths::isPortable());
+	EXPECT_EQ(Utils::AppPaths::configDirectory(), cwd / "config");
+
+	std::filesystem::current_path(cwd);
+	std::error_code ec;
+	std::filesystem::remove(marker, ec);
+	std::filesystem::remove_all(tempSubdir, ec);
+	Utils::AppPaths::resetPortableCache();
+}
+
+TEST(AppPathsTest, PortableModeUsesExecutableDirectoryWhenCwdDiffers)
+{
+	Utils::AppPaths::resetPortableCache();
+	const auto tempExeDir = std::filesystem::temp_directory_path() / "hypertube_test_exedir";
+	const auto tempCwd = std::filesystem::temp_directory_path() / "hypertube_test_cwd";
+	std::filesystem::create_directories(tempExeDir);
+	std::filesystem::create_directories(tempCwd);
+
+	const auto marker = tempExeDir / "portable.mode";
+	std::ofstream(marker) << "";
+
+	Utils::AppPaths::setOverrideExecutableDirectory(tempExeDir);
+	const auto originalCwd = std::filesystem::current_path();
+	std::filesystem::current_path(tempCwd);
+
+	EXPECT_TRUE(Utils::AppPaths::isPortable());
+	EXPECT_EQ(Utils::AppPaths::configDirectory(), tempExeDir / "config");
+	EXPECT_EQ(Utils::AppPaths::dataDirectory(), tempExeDir / "data");
+
+	std::filesystem::current_path(originalCwd);
+	std::error_code ec;
+	std::filesystem::remove_all(tempExeDir, ec);
+	std::filesystem::remove_all(tempCwd, ec);
+	Utils::AppPaths::resetPortableCache();
+}
+
+TEST(AppPathsTest, IgnoresPortableModeMarkerInCurrentWorkingDirectoryIfExecutableDirDiffers)
+{
+	Utils::AppPaths::resetPortableCache();
+	const auto tempExeDir = std::filesystem::temp_directory_path() / "hypertube_app_dir";
+	const auto tempCwd = std::filesystem::temp_directory_path() / "hypertube_unrelated_cwd";
+	std::filesystem::create_directories(tempExeDir);
+	std::filesystem::create_directories(tempCwd);
+
+	const auto cwdMarker = tempCwd / "portable.mode";
+	std::ofstream(cwdMarker) << "";
+
+	Utils::AppPaths::setOverrideExecutableDirectory(tempExeDir);
+	const auto originalCwd = std::filesystem::current_path();
+	std::filesystem::current_path(tempCwd);
+
+	EXPECT_FALSE(Utils::AppPaths::isPortable());
+
+	std::filesystem::current_path(originalCwd);
+	std::error_code ec;
+	std::filesystem::remove_all(tempExeDir, ec);
+	std::filesystem::remove_all(tempCwd, ec);
+	Utils::AppPaths::resetPortableCache();
+}
+
+TEST(LoggerRedactionTest, RedactsSensitiveTokensFromDiagnosticsExport)
+{
+	const auto tempLog = std::filesystem::temp_directory_path() / "hypertube_test_redaction.log";
+	Utils::Logger::initialize(tempLog);
+
+	const std::string secret1 = "SUPER_SECRET_API_TOKEN_123";
+	const std::string secret2 = "MY_PROXY_PASSWORD_456";
+	const std::string secret3 = "URL_SECRET_789";
+	const std::string secret4 = "BEARER_SECRET_abc";
+	const std::string secret5 = "BASIC_SECRET_def";
+	const std::string secret6 = "API_HEADER_SECRET_ghi";
+	const std::string secret7 = "ACCESS_TOKEN_SECRET_jkl";
+
+	Utils::Logger::info("test", "Connected with api_key=" + secret1);
+	Utils::Logger::info("test", "PROXY_PASSWORD=" + secret2);
+	Utils::Logger::info("test", "Endpoint https://user:" + secret3 + "@proxy.example.com");
+	Utils::Logger::info("test", "Authorization: Bearer " + secret4);
+	Utils::Logger::info("test", "Authorization: Basic " + secret5);
+	Utils::Logger::info("test", "X-API-Key: " + secret6);
+	Utils::Logger::info("test", "Request /lookup?access_token: " + secret7 + "&q=test");
+
+	const std::string diag = Utils::Logger::formatDiagnostics();
+
+	EXPECT_EQ(diag.find(secret1), std::string::npos);
+	EXPECT_EQ(diag.find(secret2), std::string::npos);
+	EXPECT_EQ(diag.find(secret3), std::string::npos);
+	EXPECT_EQ(diag.find(secret4), std::string::npos);
+	EXPECT_EQ(diag.find(secret5), std::string::npos);
+	EXPECT_EQ(diag.find(secret6), std::string::npos);
+	EXPECT_EQ(diag.find(secret7), std::string::npos);
+
+	std::error_code ec;
+	std::filesystem::remove(tempLog, ec);
+}
+
+TEST(AppPathsTest, EnsureDirectoriesReturnsSuccess)
+{
+	const auto res = Utils::AppPaths::ensureDirectories();
+	EXPECT_TRUE(res);
+}
 
 TEST(SystemOpenerTest, RejectsMissingPathsBeforeQueueing)
 {
@@ -135,6 +263,146 @@ TEST(SystemOpenerTest, DestroysCleanlyWithPendingWork)
 
 	std::error_code error;
 	std::filesystem::remove(tempFile, error);
+}
+
+struct MockFileOperations : public Utils::FileUtils::FileOperations {
+	enum class FailStep {
+		None,
+		WriteTemp,
+		FlushTemp,
+		CopyBackup,
+		FlushBackup,
+		ReplaceRename,
+		SyncDir
+	};
+
+	FailStep failStep = FailStep::None;
+
+	bool openAndWriteTemp(const std::filesystem::path &tempPath, const std::string &content, std::string &errorMessage) override {
+		if (failStep == FailStep::WriteTemp) {
+			errorMessage = "Injected write temp failure";
+			return false;
+		}
+		return FileOperations::openAndWriteTemp(tempPath, content, errorMessage);
+	}
+
+	bool flushToDisk(const std::filesystem::path &filePath) override {
+		if (failStep == FailStep::FlushTemp && filePath.string().find(".tmp") != std::string::npos) {
+			return false;
+		}
+		if (failStep == FailStep::FlushBackup && filePath.string().find(".bak") != std::string::npos) {
+			return false;
+		}
+		return FileOperations::flushToDisk(filePath);
+	}
+
+	bool copyFile(const std::filesystem::path &from, const std::filesystem::path &to, std::filesystem::copy_options options, std::error_code &ec) override {
+		if (failStep == FailStep::CopyBackup && to.string().find(".bak") != std::string::npos) {
+			ec = std::make_error_code(std::errc::io_error);
+			return false;
+		}
+		return FileOperations::copyFile(from, to, options, ec);
+	}
+
+	bool replaceOrRenameFile(const std::filesystem::path &from, const std::filesystem::path &to, std::string &errorMessage) override {
+		if (failStep == FailStep::ReplaceRename) {
+			errorMessage = "Injected replace/rename failure";
+			return false;
+		}
+		return FileOperations::replaceOrRenameFile(from, to, errorMessage);
+	}
+
+	bool syncParentDirectory(const std::filesystem::path &dirPath) override {
+		if (failStep == FailStep::SyncDir) {
+			return false;
+		}
+		return FileOperations::syncParentDirectory(dirPath);
+	}
+};
+
+TEST(DurableWriteFailureInjectionTest, ValidatesInjectedFailuresLeaveValidPrimaryOrBackup)
+{
+	const auto dir = std::filesystem::temp_directory_path() / ("hypertube_durable_test_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+	std::filesystem::create_directories(dir);
+	const auto target = dir / "settings.json";
+	const auto backup = dir / "settings.json.bak";
+	const std::string originalContent = R"({"version":2,"valid":true})";
+	const std::string newContent = R"({"version":2,"updated":true})";
+
+	std::ofstream(target) << originalContent;
+
+	const std::vector<MockFileOperations::FailStep> steps = {
+		MockFileOperations::FailStep::WriteTemp,
+		MockFileOperations::FailStep::FlushTemp,
+		MockFileOperations::FailStep::CopyBackup,
+		MockFileOperations::FailStep::FlushBackup,
+		MockFileOperations::FailStep::ReplaceRename,
+		MockFileOperations::FailStep::SyncDir
+	};
+
+	for (const auto step : steps) {
+		MockFileOperations ops;
+		ops.failStep = step;
+		std::string errorMessage;
+		bool res = Utils::FileUtils::durableWriteFile(target, newContent, errorMessage, &ops);
+		EXPECT_FALSE(res);
+		EXPECT_FALSE(errorMessage.empty());
+
+		// Verify either target primary file or backup file remains valid with original content
+		bool primaryValid = false;
+		if (std::filesystem::exists(target)) {
+			std::ifstream in(target);
+			std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+			if (content == originalContent) primaryValid = true;
+		}
+
+		bool backupValid = false;
+		if (std::filesystem::exists(backup)) {
+			std::ifstream in(backup);
+			std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+			if (content == originalContent) backupValid = true;
+		}
+
+		EXPECT_TRUE(primaryValid || backupValid);
+	}
+
+	std::error_code ec;
+	std::filesystem::remove_all(dir, ec);
+}
+
+TEST(FileUtilsTest, DurableWriteFileRelativePathSucceeds)
+{
+	struct ScopedCwd {
+		std::filesystem::path originalDir;
+		ScopedCwd(const std::filesystem::path &newDir) {
+			originalDir = std::filesystem::current_path();
+			std::filesystem::current_path(newDir);
+		}
+		~ScopedCwd() {
+			std::error_code ec;
+			std::filesystem::current_path(originalDir, ec);
+		}
+	};
+
+	const auto tempDir = std::filesystem::temp_directory_path() / ("hypertube_rel_path_test_" + std::to_string(
+		std::chrono::steady_clock::now().time_since_epoch().count()));
+	std::filesystem::create_directories(tempDir);
+
+	{
+		ScopedCwd scopedCwd(tempDir);
+		std::string errorMessage;
+		const std::string content = "{\"version\": 2}";
+		bool res = Utils::FileUtils::durableWriteFile("settings.json", content, errorMessage);
+		EXPECT_TRUE(res) << "ErrorMessage: " << errorMessage;
+		EXPECT_TRUE(std::filesystem::exists("settings.json"));
+
+		std::ifstream in("settings.json");
+		std::string readContent((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+		EXPECT_EQ(readContent, content);
+	}
+
+	std::error_code ec;
+	std::filesystem::remove_all(tempDir, ec);
 }
 
 } // namespace

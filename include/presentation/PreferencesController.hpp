@@ -11,6 +11,8 @@
 class TorrentManager;
 class SearchEngine;
 
+#include "CredentialStore.hpp"
+
 namespace Presentation
 {
 class PreferencesController
@@ -21,7 +23,7 @@ public:
 	{
 		std::function<Result(const std::string &, const std::string &)> store;
 		std::function<Result(const std::string &)> erase;
-		std::function<std::optional<std::string>(const std::string &)> load;
+		std::function<Utils::CredentialStore::CredentialLoadResult(const std::string &)> load;
 	};
 	enum class SaveKind
 	{
@@ -36,7 +38,7 @@ public:
 	~PreferencesController();
 
 	PreferencesSettings current() const;
-	bool isSaving() const { return pendingSave_.has_value(); }
+	bool isSaving() const { return pendingSave_.has_value() || pendingCredentialRollback_.has_value(); }
 	SaveKind saveKind() const { return pendingSave_ ? pendingSaveKind_ : SaveKind::None; }
 	SaveKind lastCompletedSaveKind() const { return lastCompletedSaveKind_; }
 	Result beginSave(const PreferencesSettings &settings,
@@ -49,7 +51,6 @@ public:
 	std::optional<Result> pollSave();
 	Result waitForSave();
 	Result applyRuntime(const PreferencesSettings &settings);
-	Result restoreCredentials();
 
 private:
 	TorrentManager &torrentManager;
@@ -59,6 +60,7 @@ private:
 	CredentialStoreOps credentialStore;
 	std::string settingsPath_;
 	std::optional<SaveHandle> pendingSave_;
+	std::optional<std::shared_future<Result>> pendingCredentialRollback_;
 	SaveKind pendingSaveKind_ = SaveKind::None;
 	SaveKind lastCompletedSaveKind_ = SaveKind::None;
 	std::optional<PreferencesSettings> queuedUiState_;
@@ -66,6 +68,8 @@ private:
 	PreferencesSettings previousPreferences_;
 	std::optional<std::string> previousTorznabCredential_;
 	std::optional<std::string> previousProxyCredential_;
+	std::optional<std::string> runtimeTorznabCredential_;
+	std::string runtimeProxyCredential_;
 	bool torznabCredentialChanged_ = false;
 	bool proxyCredentialChanged_ = false;
 

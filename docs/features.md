@@ -21,7 +21,7 @@ but the user-facing flow, persistence, or hardening is incomplete.
 | Search | Favorites and Add/Download actions | Implemented | Search controllers and persistence | Stored locally in settings data. |
 | Persistence | Versioned JSON settings, migrations, atomic saves, and backup recovery | Implemented | `ConfigManager`, `config_tests` | Future schema changes require migration tests. |
 | Persistence | Periodic torrent, search, favorites, history, settings, and UI-state saves | Implemented | `App`, Slint timers, persistence controllers | Resume data is bounded. |
-| Runtime | Per-user and portable data locations | Implemented | `AppPaths` | Portable mode uses the current working directory marker. |
+| Runtime | Per-user and portable data locations | Implemented | `AppPaths` | Portable mode uses a marker beside the executable. |
 | Diagnostics | Structured file logging and in-app recent diagnostics | Implemented | `Logger`, Slint Logs view | Retention and export workflows remain limited. |
 | Proxy | Validated SOCKS5/HTTP proxy for search and torrent traffic | Implemented | Preferences, `SearchEngine`, `TorrentManager` | End-to-end behavior depends on the configured proxy. |
 | Security | Native credential storage for API keys and proxy passwords | Implemented | `CredentialStore` | Linux requires an unlocked Secret Service keyring. |

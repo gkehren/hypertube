@@ -40,7 +40,16 @@ public:
 	static void clearRecent();
 	static std::filesystem::path logPath();
 
+	// Log rotation configuration
+	static void setMaxLogSize(std::size_t maxBytes);
+	static void setMaxBackupFiles(std::size_t count);
+
+	// Diagnostics export
+	static std::string formatDiagnostics();
+	static bool exportDiagnosticsToFile(const std::filesystem::path &targetPath, std::string &errorMessage);
+
 private:
 	static std::mutex &mutex();
+	static void rotateLogsIfNeededUnlocked();
 };
 } // namespace Utils

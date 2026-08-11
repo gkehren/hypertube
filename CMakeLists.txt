@@ -134,6 +134,20 @@ else()
     endif()
 endif()
 
+# pugixml dependency
+find_package(pugixml QUIET)
+if(NOT pugixml_FOUND AND NOT TARGET pugixml::pugixml AND NOT TARGET pugixml)
+    FetchContent_Declare(
+        pugixml
+        GIT_REPOSITORY https://github.com/zeux/pugixml.git
+        GIT_TAG v1.14
+    )
+    FetchContent_MakeAvailable(pugixml)
+    if(TARGET pugixml AND NOT TARGET pugixml::pugixml)
+        add_library(pugixml::pugixml ALIAS pugixml)
+    endif()
+endif()
+
 # 8. Slint dependency. Keep the version and backend choices explicit so a
 # local Qt installation cannot silently change the renderer.
 set(SLINT_FEATURE_BACKEND_QT OFF CACHE BOOL "" FORCE)
@@ -148,19 +162,60 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Slint)
 
+add_compile_definitions(HYPERTUBE_VERSION="${PROJECT_VERSION}")
+
+add_library(hypertube_slint_platform INTERFACE)
+
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    find_package(PkgConfig QUIET)
-    if(PKG_CONFIG_FOUND)
-        pkg_check_modules(HYPERTUBE_FONTCONFIG QUIET IMPORTED_TARGET fontconfig)
-    endif()
-    if(NOT TARGET PkgConfig::HYPERTUBE_FONTCONFIG)
-        message(FATAL_ERROR "Fontconfig development files are required for Slint")
-    endif()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(
+        HYPERTUBE_FONTCONFIG
+        REQUIRED
+        IMPORTED_TARGET
+        fontconfig
+    )
+
+    target_link_libraries(
+        hypertube_slint_platform
+        INTERFACE
+        PkgConfig::HYPERTUBE_FONTCONFIG
+    )
+
+elseif(APPLE)
+    find_library(APPKIT_FRAMEWORK AppKit REQUIRED)
+    find_library(CARBON_FRAMEWORK Carbon REQUIRED)
+    find_library(COREGRAPHICS_FRAMEWORK CoreGraphics REQUIRED)
+    find_library(CORETEXT_FRAMEWORK CoreText REQUIRED)
+    find_library(COREVIDEO_FRAMEWORK CoreVideo REQUIRED)
+    find_library(CORESERVICES_FRAMEWORK CoreServices REQUIRED)
+    find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
+    find_library(QUARTZCORE_FRAMEWORK QuartzCore REQUIRED)
+
+    target_link_libraries(
+        hypertube_slint_platform
+        INTERFACE
+        ${APPKIT_FRAMEWORK}
+        ${CARBON_FRAMEWORK}
+        ${COREGRAPHICS_FRAMEWORK}
+        ${CORETEXT_FRAMEWORK}
+        ${COREVIDEO_FRAMEWORK}
+        ${CORESERVICES_FRAMEWORK}
+        ${FOUNDATION_FRAMEWORK}
+        ${QUARTZCORE_FRAMEWORK}
+    )
+
+elseif(WIN32)
+    target_link_libraries(
+        hypertube_slint_platform
+        INTERFACE
+        imm32
+    )
 endif()
 
 # Create the utils library
 add_library(hypertube_utils STATIC
     src/utils/AppPaths.cpp
+    src/utils/FileUtils.cpp
     src/utils/Logger.cpp
     src/utils/StringUtils.cpp
     src/utils/SystemUtils.cpp
@@ -245,6 +300,7 @@ target_link_libraries(hypertube_search PUBLIC
     hypertube_utils
     nlohmann_json::nlohmann_json
     CURL::libcurl
+    pugixml::pugixml
 )
 
 # Toolkit-neutral presentation and controller layer.
@@ -272,13 +328,31 @@ target_link_libraries(hypertube_presentation PUBLIC
     LibtorrentRasterbar::torrent-rasterbar
 )
 
+# Application orchestration target
+add_library(hypertube_app STATIC
+    src/app/App.cpp
+)
+
+target_include_directories(hypertube_app PUBLIC
+    "include"
+    "include/app"
+    "include/utils"
+)
+
+target_link_libraries(hypertube_app PUBLIC
+    hypertube_torrent
+    hypertube_search
+    hypertube_config
+    hypertube_utils
+    CURL::libcurl
+)
+
 if(NOT SLINT_STYLE)
     set(SLINT_STYLE "fluent-dark" CACHE STRING "Slint widget style used by the application and previews" FORCE)
 endif()
 
 add_executable(hypertube
         src/main.cpp
-        src/app/App.cpp
         src/ui/slint/SlintAppController.cpp
         src/ui/slint/SlintControllerFacades.cpp
 		src/ui/slint/SlintRefreshCoordinators.cpp
@@ -297,18 +371,16 @@ add_executable(hypertube
     )
 
     target_link_libraries(hypertube PRIVATE
+        hypertube_app
         hypertube_utils
         hypertube_torrent
         hypertube_config
         hypertube_search
         hypertube_presentation
         Slint::Slint
+        hypertube_slint_platform
         CURL::libcurl
     )
-
-    if(TARGET PkgConfig::HYPERTUBE_FONTCONFIG)
-        target_link_libraries(hypertube PRIVATE PkgConfig::HYPERTUBE_FONTCONFIG)
-    endif()
 
     if(WIN32)
         target_link_libraries(hypertube PRIVATE ole32)
@@ -369,11 +441,17 @@ add_test(
 )
 
 add_executable(slint-visual-snapshots tools/slint_visual_snapshots.cpp)
-target_link_libraries(slint-visual-snapshots PRIVATE Slint::Slint)
+target_link_libraries(slint-visual-snapshots PRIVATE
+    Slint::Slint
+    hypertube_slint_platform
+)
 slint_target_sources(slint-visual-snapshots ui/snapshot-window.slint)
 
 add_executable(slint-renderer-benchmark EXCLUDE_FROM_ALL tools/slint_renderer_benchmark.cpp)
-target_link_libraries(slint-renderer-benchmark PRIVATE Slint::Slint)
+target_link_libraries(slint-renderer-benchmark PRIVATE
+    Slint::Slint
+    hypertube_slint_platform
+)
 if(WIN32)
     target_link_libraries(slint-renderer-benchmark PRIVATE psapi)
     target_compile_options(slint-renderer-benchmark PRIVATE /EHsc)

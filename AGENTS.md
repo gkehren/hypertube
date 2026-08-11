@@ -185,14 +185,14 @@ The current settings schema is version 2. Version 1 settings are migrated by add
 
 ### Paths and logging
 
-`Utils::AppPaths` determines platform-specific configuration, data, and cache locations. Portable mode is enabled by `HYPERTUBE_PORTABLE=1` or a `portable.mode` marker in the current working directory.
+`Utils::AppPaths` determines platform-specific configuration, data, and cache locations. Portable mode is enabled by `HYPERTUBE_PORTABLE=1` or a `portable.mode` marker beside the Hypertube executable.
 
 Default locations:
 
 - Linux: `XDG_CONFIG_HOME/hypertube` or `~/.config/hypertube`; data uses `XDG_DATA_HOME` or `~/.local/share/hypertube`.
 - macOS: `~/Library/Application Support/Hypertube` and `~/Library/Caches/Hypertube`.
 - Windows: `%APPDATA%/Hypertube` and `%LOCALAPPDATA%/Hypertube`.
-- Portable mode: configuration under `./config`, data under `./data`, and logs at `./data/hypertube.log`.
+- Portable mode: configuration under `<executable-directory>/config`, data under `<executable-directory>/data`, and logs at `<executable-directory>/data/hypertube.log`.
 
 `Utils::Logger` writes structured records to disk and keeps recent records for the diagnostics UI. Its state is mutex-protected. Use the logger for actionable subsystem context (`app`, `config`, `torrent`, `search`) and keep the Clear action synchronized with both the UI buffer and `Logger::recent()`.
 

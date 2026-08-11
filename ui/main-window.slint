@@ -50,6 +50,7 @@ export component MainWindow inherits Window {
 	callback set-speed-limits(string, string);
 	callback set-sequential(bool);
 	callback clear-logs();
+	callback export-diagnostics();
 	callback change-theme(Theme);
 	callback toggle-sidebar();
 	callback browse-preference-directory();
@@ -287,6 +288,7 @@ export component MainWindow inherits Window {
 			rows: root.log-rows;
 			state-message: root.logs-state-message;
 			clear-logs => { root.clear-logs(); }
+			export-diagnostics => { root.export-diagnostics(); }
 			show-debug: root.log-show-debug;
 			show-info: root.log-show-info;
 			show-warning: root.log-show-warning;
@@ -450,7 +452,7 @@ export component MainWindow inherits Window {
 			x: (parent.width - self.width) / 2;
 			y: (parent.height - self.height) / 2;
 			width: min(parent.width - 32px, 540px);
-			height: min(parent.height - 32px, 360px);
+			height: min(parent.height - 32px, 440px);
 			background: ThemeTokens.surface;
 			border-width: 2px;
 			border-color: ThemeTokens.accent;
@@ -462,28 +464,39 @@ export component MainWindow inherits Window {
 					keys: @keys(Escape);
 					activated => { root.cancel-add(); }
 				}
-				ScrollView { VerticalBox {
-				padding: 20px;
-				Text { text: "Add torrent"; color: ThemeTokens.foreground; font-size: 22px; }
-				Text { text: root.add-dialog-message; color: ThemeTokens.warning; }
-				Text { text: "Magnet URI"; color: ThemeTokens.muted-foreground; }
-					add-dialog-magnet := LineEdit { text <=> root.add-magnet-uri; placeholder-text: "magnet:?xt=urn:btih:..."; }
-				Text { text: "or torrent file path"; color: ThemeTokens.muted-foreground; }
-				HorizontalBox {
-					LineEdit { text <=> root.add-file-path; placeholder-text: "/path/to/file.torrent"; }
-					Button { text: "Browse file"; clicked => { root.browse-torrent-file(); } }
+				ScrollView {
+					width: 100%;
+					height: 100%;
+					VerticalBox {
+						padding: 20px;
+						spacing: 8px;
+						Text { text: "Add torrent"; color: ThemeTokens.foreground; font-size: 22px; }
+						if (root.add-dialog-message != "") : Text { text: root.add-dialog-message; color: ThemeTokens.warning; }
+						Text { text: "Magnet URI"; color: ThemeTokens.muted-foreground; }
+						add-dialog-magnet := LineEdit { text <=> root.add-magnet-uri; placeholder-text: "magnet:?xt=urn:btih:..."; }
+						Text { text: "or torrent file path"; color: ThemeTokens.muted-foreground; }
+						HorizontalBox {
+							padding: 0px;
+							spacing: 8px;
+							LineEdit { text <=> root.add-file-path; placeholder-text: "/path/to/file.torrent"; }
+							Button { text: "Browse file"; clicked => { root.browse-torrent-file(); } }
+						}
+						Text { text: "Save directory"; color: ThemeTokens.muted-foreground; }
+						HorizontalBox {
+							padding: 0px;
+							spacing: 8px;
+							LineEdit { text <=> root.add-save-path; }
+							Button { text: "Browse folder"; clicked => { root.browse-save-directory(); } }
+						}
+						HorizontalBox {
+							padding: 0px;
+							spacing: 8px;
+							Button { text: "Add magnet"; clicked => { root.submit-add-magnet(root.add-magnet-uri, root.add-save-path); } }
+							Button { text: "Add file"; clicked => { root.submit-add-file(root.add-file-path, root.add-save-path); } }
+							Button { text: "Cancel"; clicked => { root.cancel-add(); } }
+						}
+					}
 				}
-				Text { text: "Save directory"; color: ThemeTokens.muted-foreground; }
-				HorizontalBox {
-					LineEdit { text <=> root.add-save-path; }
-					Button { text: "Browse folder"; clicked => { root.browse-save-directory(); } }
-				}
-				HorizontalBox {
-					Button { text: "Add magnet"; clicked => { root.submit-add-magnet(root.add-magnet-uri, root.add-save-path); } }
-					Button { text: "Add file"; clicked => { root.submit-add-file(root.add-file-path, root.add-save-path); } }
-					Button { text: "Cancel"; clicked => { root.cancel-add(); } }
-				}
-				} }
 			}
 		}
 

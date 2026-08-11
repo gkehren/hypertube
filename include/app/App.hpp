@@ -11,7 +11,7 @@ public:
 	App();
 	~App();
 
-	void initialize();
+	Result initialize();
 	void shutdown();
 
 	ConfigManager &torrentsConfigManager() { return torrentsConfigManager_; }

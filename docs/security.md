@@ -39,13 +39,14 @@ Adding a provider requires:
 
 Validate paths before filesystem or OS integration operations. Do not concatenate untrusted values into shell commands. Prefer direct platform APIs or existing validated `SystemUtils` helpers.
 
-Atomic persistence protects against interruption and partial writes, but it is not encryption. Users who need confidentiality must protect their profile or portable directory using operating-system controls.
+Atomic persistence protects against interruption, process crashes, and partial writes by using unique temporary files on the destination filesystem, flushing OS file buffers (`fsync`/`fdatasync`/`FlushFileBuffers`), syncing directory metadata, maintaining `.bak` recovery candidates, and executing atomic replacement. However, it is not encryption. Users who need confidentiality must protect their profile or portable directory using operating-system controls.
 
 ## Credential stores
 
-- Windows uses Credential Manager generic credentials.
-- macOS uses Keychain generic passwords.
-- Linux invokes `secret-tool` directly without a shell and sends secrets over standard input. An unlocked Secret Service-compatible keyring is required.
+- Windows uses Credential Manager generic credentials (`CredReadA`, `CredWriteA`, `CredDeleteA`).
+- macOS uses Keychain Services (`SecItemCopyMatching`, `SecItemAdd`, `SecItemUpdate`, `SecItemDelete`).
+- Linux invokes `secret-tool` via direct binary execution (`posix_spawnp`) without a shell and sends secrets over standard input. An unlocked Secret Service-compatible keyring is required.
+- Access operations report typed status (`Stored`, `Missing`, `Unavailable`, `PermissionDenied`) and run off the UI event loop thread.
 
 Stored secrets are scoped to the `Hypertube` service and separate account names. They are not included in portable bundles or configuration backups.
 
@@ -54,6 +55,6 @@ Stored secrets are scoped to the `Hypertube` service and separate account names.
 - BitTorrent traffic and downloaded content are not made anonymous by Hypertube.
 - A proxy improves routing control but does not by itself guarantee anonymity or prevent all metadata leakage.
 - A valid HTTPS connection does not make third-party torrent metadata trustworthy.
-- The current release workflow does not yet provide automated artifact signing or checksums.
+- Automated multiplatform releases generate and publish cryptographic SHA256 checksums (`SHA256SUMS.txt`) for all release archives.
 
 Security fixes must include a regression test or a reproducible validation case and must update this document when the protection or limitation changes.

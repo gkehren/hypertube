@@ -31,7 +31,9 @@ flowchart TD
 `main.cpp` initializes cURL globally, constructs `App`, binds the Slint
 controller, runs the Slint event loop, and shuts services down in order. `App`
 creates runtime directories, initializes logging, loads settings and torrents,
-and waits for asynchronous persistence during shutdown.
+and is the sole owner of final service persistence during shutdown (`App::shutdown()`).
+`SlintAppController::stop()` is restricted to UI-specific finalization (stopping timers,
+flushing UI layout state, and completing pending preference transactions).
 
 ### UI layer
 

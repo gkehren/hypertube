@@ -10,7 +10,7 @@
 #include <queue>
 #include <atomic>
 #include <future>
-#include "TorrentManager.hpp"
+#include "PersistedTorrent.hpp"
 #include "Result.hpp"
 
 using json = nlohmann::json;
@@ -68,7 +68,7 @@ public:
 	Result commitPreferences(const PreferencesSettings &settings);
 	PreferencesSettings getPreferencesSettings() const;
 
-	void saveTorrents(const std::vector<ManagedTorrent> &torrents);
+	void saveTorrents(const std::vector<PersistedTorrent> &torrents);
 	Result loadTorrents(const std::string &path, std::vector<TorrentConfigData> &outTorrents);
 
 	// Favorites and search history

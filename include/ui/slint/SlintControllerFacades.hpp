@@ -151,6 +151,7 @@ public:
 
 	void setActiveTab(AppTab tab);
 	void clearLogs();
+	void exportDiagnostics();
 	void setLogFilter(LogLevel level, bool enabled);
 	void setLogAutoscroll(bool enabled);
 	void focusSearch();

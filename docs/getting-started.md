@@ -54,8 +54,7 @@ plain text.
 
 ## Portable mode
 
-Set the environment variable or create a marker next to the executable/current
-working directory:
+Set the environment variable or create a marker next to the executable:
 
 ```sh
 HYPERTUBE_PORTABLE=1 ./build/hypertube
@@ -64,12 +63,13 @@ HYPERTUBE_PORTABLE=1 ./build/hypertube
 or:
 
 ```sh
-touch portable.mode
+touch build/portable.mode
 ./build/hypertube
 ```
 
-Portable mode stores configuration under `./config`, runtime data under
-`./data`, cache files under `./cache`, and diagnostics at `./data/hypertube.log`.
+Portable mode stores configuration under the executable directory's `config`,
+runtime data under `data`, cache files under `cache`, and diagnostics at
+`data/hypertube.log`.
 
 ## User data and diagnostics
 

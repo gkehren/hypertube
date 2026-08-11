@@ -57,9 +57,12 @@ TEST(SlintControllerTest, RowCallbackSelectsTorrentAndPublishesDetails)
 
 	window->invoke_select_torrent(slint::SharedString(expectedId));
 	EXPECT_EQ(torrentPresenter.selectedId(), expectedId);
-	EXPECT_EQ(std::string(window->get_selected_torrent_id().begin(), window->get_selected_torrent_id().end()), expectedId);
-	EXPECT_EQ(std::string(window->get_selected_torrent_name().begin(), window->get_selected_torrent_name().end()), "fixture");
-	EXPECT_EQ(std::string(window->get_details_message().begin(), window->get_details_message().end()), "General");
+	const auto selectedId = window->get_selected_torrent_id();
+	const auto selectedName = window->get_selected_torrent_name();
+	const auto detailsMessage = window->get_details_message();
+	EXPECT_EQ(std::string(selectedId.begin(), selectedId.end()), expectedId);
+	EXPECT_EQ(std::string(selectedName.begin(), selectedName.end()), "fixture");
+	EXPECT_EQ(std::string(detailsMessage.begin(), detailsMessage.end()), "General");
 
 	std::error_code error;
 	std::filesystem::remove_all(directory, error);

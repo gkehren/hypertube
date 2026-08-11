@@ -13,6 +13,7 @@
 #include <optional>
 #include <cstdint>
 #include <chrono>
+#include <condition_variable>
 
 struct TorrentSearchResult
 {
@@ -99,6 +100,7 @@ public:
 	std::vector<TorrentSearchResult> getFavorites() const;
 	uint64_t getFavoritesRevision() const { return favoritesRevision; }
 	bool isFavorite(const std::string &infoHash) const;
+	std::unordered_set<std::string> getFavoriteHashesSet() const;
 
 	// Persistence
 	void saveFavoritesAndHistory(class ConfigManager &configManager);
@@ -132,9 +134,20 @@ private:
 	std::atomic<bool> shuttingDown{false};
 	std::atomic<uint64_t> nextRequestId{1};
 
-	std::mutex searchMutex;
-	std::mutex threadMutex;
-	std::thread searchThread;
+	std::mutex queueMutex_;
+	std::condition_variable queueCv_;
+	std::thread workerThread_;
+	bool stopWorker_ = false;
+	bool hasWork_ = false;
+	struct SearchTask
+	{
+		SearchQuery query{""};
+		uint64_t requestId = 0;
+	} pendingTask_;
+
+	std::mutex curlMutex_;
+	void *curlHandle_ = nullptr;
+
 	std::mutex completionMutex;
 	std::optional<CompletedSearch> completedSearch;
 
@@ -165,6 +178,8 @@ private:
 	Result performSearch(const SearchQuery &query, SearchResponse &response);
 	bool tryStartSearch();
 	void finishSearch();
+	void workerLoop();
+	void cleanupCurlHandle();
 
 	// Utility methods
 };
