@@ -7,6 +7,8 @@
 #include "Logger.hpp"
 #include "SlintString.hpp"
 
+#include <utility>
+
 Presentation::UiStateSnapshot SlintAppController::uiStateFrom(const PreferencesSettings &preferences)
 {
 	return {preferences.theme, preferences.ui};
@@ -27,9 +29,10 @@ SlintAppController::SlintAppController(App &app, slint::ComponentHandle<MainWind
 	categoryModel_(std::make_shared<slint::VectorModel<CategoryRow>>()),
 	recentSearchModel_(std::make_shared<slint::VectorModel<slint::SharedString>>())
 {
+	notificationController_ = std::make_unique<SlintUi::NotificationController>(app.systemOpener(), torrentPresenter, *window);
 	torrentUiController_ = std::make_unique<SlintUi::TorrentUiController>(torrentPresenter, *window, detailsPresenter,
 		[this] { refresh(); }, [this] { if (detailsRefreshCoordinator_) detailsRefreshCoordinator_->reset(); }, sortField_, sortAscending_, torrentViewDirty_,
-		pendingRemoveId_);
+		pendingRemoveId_, [this](Presentation::UiNotification notification) { notificationController_->notify(std::move(notification)); });
 	searchUiController_ = std::make_unique<SlintUi::SearchUiController>(searchPresenter, *window,
 		[this] { if (searchRefreshCoordinator_) searchRefreshCoordinator_->forceRefresh(); });
 	detailsUiController_ = std::make_unique<SlintUi::DetailsUiController>(detailsPresenter, *window,
@@ -38,14 +41,16 @@ SlintAppController::SlintAppController(App &app, slint::ComponentHandle<MainWind
 			auto state = currentUiState();
 			state.layout.selectedDetailsTab = tab;
 			uiStateController.request(state);
-		});
+		}, [this](Presentation::UiNotification notification) { notificationController_->notify(std::move(notification)); });
 	preferencesUiController_ = std::make_unique<SlintUi::PreferencesUiController>(preferencesController,
 		uiStateController, *window, [this] { return currentUiState(); });
 	dialogCoordinator_ = std::make_unique<SlintUi::DialogCoordinator>(app, addController, preferencesController,
-		searchPresenter, *dialogService, *window, [this] { refresh(); });
+		searchPresenter, *dialogService, *window, [this] { refresh(); },
+		[this](Presentation::UiNotification notification) { notificationController_->notify(std::move(notification)); });
 	appShellController_ = std::make_unique<SlintUi::AppShellController>(logsPresenter, logModelAdapter, *window,
 		uiStateController, [this] { return currentUiState(); }, torrentViewDirty_,
-		[this] { if (detailsRefreshCoordinator_) detailsRefreshCoordinator_->reset(); }, [this] { refresh(); }, searchFocusRequest_);
+		[this] { if (detailsRefreshCoordinator_) detailsRefreshCoordinator_->reset(); }, [this] { refresh(); }, searchFocusRequest_,
+		[this](Presentation::UiNotification notification) { notificationController_->notify(std::move(notification)); });
 	torrentRefreshCoordinator_ = std::make_unique<SlintUi::TorrentRefreshCoordinator>(app.torrentManager(),
 		torrentPresenter, modelAdapter, categoryModel_, *window, torrentViewDirty_, visibleTorrentRows_);
 	searchRefreshCoordinator_ = std::make_unique<SlintUi::SearchRefreshCoordinator>(searchPresenter,
@@ -53,7 +58,6 @@ SlintAppController::SlintAppController(App &app, slint::ComponentHandle<MainWind
 	logRefreshCoordinator_ = std::make_unique<SlintUi::LogRefreshCoordinator>(logsPresenter, logModelAdapter, *window);
 	detailsRefreshCoordinator_ = std::make_unique<SlintUi::DetailsRefreshCoordinator>(torrentPresenter,
 		detailsPresenter, detailsModelAdapter, *window, selectedDetailsTab_, visibleTorrentRows_);
-	notificationController_ = std::make_unique<SlintUi::NotificationController>(app.systemOpener(), torrentPresenter, *window);
 }
 
 SlintAppController::~SlintAppController()
@@ -157,6 +161,8 @@ void SlintAppController::bind()
 		dialogCoordinator_->cancelAdd();
 		torrentUiController_->cancelRemove();
 	});
+	window->on_dismiss_toast([this] { notificationController_->dismiss(); });
+	window->on_toast_action([this] { notificationController_->activateAction(); });
 }
 
 void SlintAppController::start()

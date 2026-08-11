@@ -117,6 +117,11 @@ The CMake project builds:
 - `slint-renderer-benchmark`: an opt-in redraw workload shared by the software and FemtoVG validation targets;
 - `torrent-presentation-benchmark`: an opt-in synthetic workload for cached torrent-row presentation.
 
+Transient user feedback uses `Presentation::UiNotification` and its bounded
+`NotificationQueue`. Slint projects the current notification into the shared
+toast overlay; contextual details and long-lived form state remain in their
+respective view models.
+
 New services should be isolated behind a small library when they need independent
 tests. UI code should depend on service interfaces and immutable snapshots, not
 implementation details of persistence or libtorrent internals.

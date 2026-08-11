@@ -82,11 +82,18 @@ namespace SlintUi
 TorrentUiController::TorrentUiController(Presentation::TorrentListPresenter &presenter, MainWindow &window,
 	Presentation::TorrentDetailsPresenter &detailsPresenter, std::function<void()> refresh,
 	std::function<void()> resetDetails, Presentation::TorrentSortField &sortField, bool &sortAscending,
-	bool &viewDirty, std::string &pendingRemoveId)
+	bool &viewDirty, std::string &pendingRemoveId,
+	std::function<void(Presentation::UiNotification)> notify)
 	: presenter_(presenter), window_(window), detailsPresenter_(detailsPresenter), refresh_(std::move(refresh)),
 	  resetDetails_(std::move(resetDetails)), sortField_(sortField), sortAscending_(sortAscending),
-	  viewDirty_(viewDirty), pendingRemoveId_(pendingRemoveId)
+	  viewDirty_(viewDirty), pendingRemoveId_(pendingRemoveId), notify_(std::move(notify))
 {
+}
+
+void TorrentUiController::notify(Presentation::NotificationSeverity severity, std::string title, std::string message)
+{
+	if (notify_)
+		notify_(Presentation::UiNotification{severity, std::move(title), std::move(message)});
 }
 
 void TorrentUiController::select(const std::string &id)
@@ -111,13 +118,15 @@ void TorrentUiController::executeCommand(const std::string &id, UiTorrentCommand
 	const auto mapped = torrentCommand(command, valid);
 	if (!valid)
 	{
-		window_.set_startup_state(slint::SharedString("Unsupported torrent command"));
+		notify(Presentation::NotificationSeverity::Error, "Torrent action failed", "Unsupported torrent command");
 		return;
 	}
 	const auto result = presenter_.executeCommand(id, mapped);
 	viewDirty_ = true;
 	if (!result)
-		window_.set_startup_state(SlintUi::toSharedString(result.message));
+		notify(Presentation::NotificationSeverity::Error, "Torrent action failed", result.message);
+	else
+		notify(Presentation::NotificationSeverity::Success, "Torrent action requested", "The torrent command was accepted.");
 	refresh_();
 }
 
@@ -149,10 +158,10 @@ void TorrentUiController::confirmRemove(RemovalMode mode)
 		: TorrentRemovalMode::KeepAllFiles;
 	const auto result = presenter_.removeTorrent(pendingRemoveId_, removalMode);
 	if (!result.success)
-		window_.set_startup_state(SlintUi::toSharedString(result.message));
+		notify(Presentation::NotificationSeverity::Error, "Torrent removal failed", result.message);
 	else
 	{
-		window_.set_startup_state(slint::SharedString("Torrent removed"));
+		notify(Presentation::NotificationSeverity::Success, "Torrent removed", "The torrent was removed.");
 		if (presenter_.selectedId() == pendingRemoveId_)
 			presenter_.setSelectedId({});
 	}
@@ -195,7 +204,7 @@ void TorrentUiController::copyMagnet(const std::string &id)
 {
 	if (id.empty())
 	{
-		window_.set_startup_state(slint::SharedString("No torrent is selected"));
+		notify(Presentation::NotificationSeverity::Warning, "No torrent selected", "Select a torrent first.");
 		return;
 	}
 	if (!validateId(id))
@@ -206,7 +215,8 @@ void TorrentUiController::copyMagnet(const std::string &id)
 	presenter_.setSelectedId(id);
 	detailsPresenter_.setSelectedTorrent(hash);
 	const Result result = detailsPresenter_.copyMagnetUri();
-	window_.set_details_message(SlintUi::toSharedString(result ? "Magnet URI copied" : result.message));
+	notify(result ? Presentation::NotificationSeverity::Success : Presentation::NotificationSeverity::Error,
+		result ? "Magnet copied" : "Magnet copy failed", result ? "Magnet URI copied to the clipboard." : result.message);
 }
 
 bool TorrentUiController::validateId(const std::string &id, bool allowLoading)
@@ -222,7 +232,8 @@ bool TorrentUiController::validateId(const std::string &id, bool allowLoading)
 		|| (allowLoading && availability.state == Presentation::TorrentAvailability::LoadingStatus)
 		|| availability.state == Presentation::TorrentAvailability::Error;
 	if (!accepted)
-		window_.set_startup_state(SlintUi::toSharedString(Presentation::availabilityMessage(availability)));
+		notify(Presentation::NotificationSeverity::Warning, "Torrent unavailable",
+			Presentation::availabilityMessage(availability));
 	return accepted;
 }
 
@@ -352,10 +363,16 @@ void SearchUiController::removeFavorite(const std::string &id)
 
 DetailsUiController::DetailsUiController(Presentation::TorrentDetailsPresenter &presenter, MainWindow &window,
 	std::function<void()> refresh, int &selectedTab, std::function<void()> resetRefresh,
-	std::function<void(int)> persistTab)
+	std::function<void(int)> persistTab, std::function<void(Presentation::UiNotification)> notify)
 	: presenter_(presenter), window_(window), refresh_(std::move(refresh)), selectedTab_(selectedTab),
-	  resetRefresh_(std::move(resetRefresh)), persistTab_(std::move(persistTab))
+	  resetRefresh_(std::move(resetRefresh)), persistTab_(std::move(persistTab)), notify_(std::move(notify))
 {
+}
+
+void DetailsUiController::notify(Presentation::NotificationSeverity severity, std::string title, std::string message)
+{
+	if (notify_)
+		notify_(Presentation::UiNotification{severity, std::move(title), std::move(message)});
 }
 
 void DetailsUiController::setTab(DetailsTab tab)
@@ -372,19 +389,22 @@ void DetailsUiController::action(DetailsAction action)
 {
 	const auto result = action == DetailsAction::OpenContainingFolder
 		? presenter_.openContainingFolder() : presenter_.previewLargestMediaFile();
-	window_.set_details_message(SlintUi::toSharedString(result ? "Action requested" : result.message));
+	notify(result ? Presentation::NotificationSeverity::Info : Presentation::NotificationSeverity::Error,
+		result ? "Action requested" : "Action failed", result ? "The operation was started." : result.message);
 }
 
 void DetailsUiController::previewFile(int fileIndex)
 {
 	const auto result = presenter_.previewFile(fileIndex);
-	window_.set_details_message(SlintUi::toSharedString(result ? "Action requested" : result.message));
+	notify(result ? Presentation::NotificationSeverity::Info : Presentation::NotificationSeverity::Error,
+		result ? "Preview requested" : "Preview failed", result ? "The preview was started." : result.message);
 }
 
 void DetailsUiController::setFilePriority(int fileIndex, int priority)
 {
 	const auto result = presenter_.setFilePriority(fileIndex, priority);
-	window_.set_details_message(SlintUi::toSharedString(result ? "File priority updated" : result.message));
+	notify(result ? Presentation::NotificationSeverity::Success : Presentation::NotificationSeverity::Error,
+		result ? "File priority updated" : "File priority failed", result ? "The file priority was updated." : result.message);
 	refresh_();
 }
 
@@ -397,7 +417,8 @@ void DetailsUiController::setSpeedLimits(const std::string &downloadLimit, const
 		result = parseSpeedLimit(uploadLimit, upload);
 	if (result)
 		result = presenter_.setSpeedLimits(download, upload);
-	window_.set_details_message(SlintUi::toSharedString(result ? "Speed limits updated" : result.message));
+	notify(result ? Presentation::NotificationSeverity::Success : Presentation::NotificationSeverity::Error,
+		result ? "Speed limits updated" : "Speed limits failed", result ? "The speed limits were updated." : result.message);
 	if (result)
 		refresh_();
 }
@@ -405,7 +426,9 @@ void DetailsUiController::setSpeedLimits(const std::string &downloadLimit, const
 void DetailsUiController::setSequential(bool enabled)
 {
 	const auto result = presenter_.setSequentialDownload(enabled);
-	window_.set_details_message(SlintUi::toSharedString(result ? "Sequential setting updated" : result.message));
+	notify(result ? Presentation::NotificationSeverity::Success : Presentation::NotificationSeverity::Error,
+		result ? "Sequential download updated" : "Sequential download failed",
+		result ? "The sequential-download setting was updated." : result.message);
 	refresh_();
 }
 
@@ -519,10 +542,17 @@ void PreferencesUiController::clearProxySecret()
 
 DialogCoordinator::DialogCoordinator(App &app, TorrentAddController &addController,
 	Presentation::PreferencesController &preferences, Presentation::SearchPresenter &searchPresenter,
-	DialogService &dialogs, MainWindow &window, std::function<void()> refresh)
+	DialogService &dialogs, MainWindow &window, std::function<void()> refresh,
+	std::function<void(Presentation::UiNotification)> notify)
 	: app_(app), addController_(addController), preferences_(preferences), searchPresenter_(searchPresenter),
-	 dialogs_(dialogs), window_(window), refresh_(std::move(refresh))
+	 dialogs_(dialogs), window_(window), refresh_(std::move(refresh)), notify_(std::move(notify))
 {
+}
+
+void DialogCoordinator::notify(Presentation::NotificationSeverity severity, std::string title, std::string message)
+{
+	if (notify_)
+		notify_(Presentation::UiNotification{severity, std::move(title), std::move(message)});
 }
 
 void DialogCoordinator::openAddDialog()
@@ -585,7 +615,7 @@ void DialogCoordinator::submitMagnet(const std::string &magnet, const std::strin
 		return;
 	}
 	cancelAdd();
-	window_.set_startup_state(slint::SharedString("Magnet added"));
+	notify(Presentation::NotificationSeverity::Success, "Magnet added", "The magnet was added to the torrent list.");
 	refresh_();
 }
 
@@ -608,7 +638,7 @@ void DialogCoordinator::submitTorrentFile(const std::string &path, const std::st
 		return;
 	}
 	cancelAdd();
-	window_.set_startup_state(slint::SharedString("Torrent file added"));
+	notify(Presentation::NotificationSeverity::Success, "Torrent added", "The torrent file was added to the torrent list.");
 	refresh_();
 }
 
@@ -656,10 +686,18 @@ void DialogCoordinator::browsePreferenceDirectory()
 
 AppShellController::AppShellController(Presentation::LogsPresenter &logs, LogModelAdapter &logModel, MainWindow &window,
 	Presentation::UiStateController &uiState, std::function<Presentation::UiStateSnapshot()> currentState,
-	bool &viewDirty, std::function<void()> resetDetails, std::function<void()> refresh, bool &focusRequest)
+	bool &viewDirty, std::function<void()> resetDetails, std::function<void()> refresh, bool &focusRequest,
+	std::function<void(Presentation::UiNotification)> notify)
 	: logs_(logs), logModel_(logModel), window_(window), uiState_(uiState), currentState_(std::move(currentState)),
-	  viewDirty_(viewDirty), resetDetails_(std::move(resetDetails)), refresh_(std::move(refresh)), focusRequest_(focusRequest)
+	  viewDirty_(viewDirty), resetDetails_(std::move(resetDetails)), refresh_(std::move(refresh)), focusRequest_(focusRequest),
+	  notify_(std::move(notify))
 {
+}
+
+void AppShellController::notify(Presentation::NotificationSeverity severity, std::string title, std::string message)
+{
+	if (notify_)
+		notify_(Presentation::UiNotification{severity, std::move(title), std::move(message)});
 }
 
 void AppShellController::setActiveTab(AppTab tab)
@@ -691,11 +729,12 @@ void AppShellController::exportDiagnostics()
 	const auto targetPath = Utils::AppPaths::dataDirectory() / "hypertube-diagnostics.txt";
 	if (Utils::Logger::exportDiagnosticsToFile(targetPath, error))
 	{
-		window_.set_logs_state_message(slint::SharedString("Exported report to " + targetPath.string()));
+		notify(Presentation::NotificationSeverity::Success, "Diagnostics exported",
+			"The diagnostic report was written to " + targetPath.string());
 	}
 	else
 	{
-		window_.set_logs_state_message(slint::SharedString("Failed to export report: " + error));
+		notify(Presentation::NotificationSeverity::Error, "Diagnostics export failed", error);
 	}
 }
 
@@ -724,6 +763,6 @@ void AppShellController::focusSearch()
 
 void AppShellController::showAbout()
 {
-	window_.set_startup_state(slint::SharedString("Hypertube - Slint frontend"));
+	notify(Presentation::NotificationSeverity::Info, "About Hypertube", "Hypertube - Slint frontend");
 }
 } // namespace SlintUi

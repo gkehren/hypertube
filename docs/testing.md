@@ -101,6 +101,10 @@ provider errors, cancellation, pagination, URL encoding, proxy validation,
 fallback, and cache behavior. UI boundary tests cover snapshot consistency,
 callback lifetime, model revisions, and non-blocking refresh behavior.
 
+Presentation unit tests also cover notification deduplication, bounded
+queueing, expiry, and dismissal. Slint preview validation covers the toast
+overlay through the production shell preview.
+
 Native file and directory pickers are OS-boundary calls from the Slint callback
 path. Their availability and cancellation behavior must be smoke-tested on the
 target desktop environment; automated tests use manual path fields where needed.

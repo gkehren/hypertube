@@ -3,6 +3,7 @@
 #include "presentation/SearchPresenter.hpp"
 #include "presentation/TorrentListPresenter.hpp"
 #include "presentation/UiFormatters.hpp"
+#include "presentation/UiNotifications.hpp"
 #include "presentation/TorrentAvailability.hpp"
 #include "utils/TorrentIdentity.hpp"
 
@@ -85,6 +86,32 @@ TEST(UiFormattersTest, MapsLibtorrentStateAtTheBoundary)
 	EXPECT_EQ(Presentation::UiFormatters::torrentStateToString(5, false, false), "Seeding");
 	EXPECT_EQ(Presentation::UiFormatters::torrentStateToString(3, true, false), "Paused");
 	EXPECT_EQ(Presentation::UiFormatters::torrentStateToString(3, false, true), "Finished");
+}
+
+TEST(UiNotificationTest, DeduplicatesAndAdvancesBoundedNotifications)
+{
+	Presentation::NotificationQueue queue(2);
+	Presentation::UiNotification first{Presentation::NotificationSeverity::Info, "Info", "First", {}, {}, std::chrono::milliseconds(1)};
+	Presentation::UiNotification second{Presentation::NotificationSeverity::Success, "Done", "Second", {}, {}, std::chrono::milliseconds(1)};
+	Presentation::UiNotification third{Presentation::NotificationSeverity::Warning, "Warning", "Third", {}, {}, std::chrono::milliseconds(1)};
+
+	queue.enqueue(first);
+	queue.enqueue(first);
+	EXPECT_TRUE(queue.current());
+	EXPECT_EQ(queue.current()->message, "First");
+	EXPECT_EQ(queue.pendingCount(), 0U);
+	queue.enqueue(second);
+	queue.enqueue(third);
+	EXPECT_EQ(queue.pendingCount(), 2U);
+
+	queue.tick(std::chrono::steady_clock::now() + std::chrono::seconds(1));
+	ASSERT_TRUE(queue.current());
+	EXPECT_EQ(queue.current()->message, "Second");
+	queue.dismiss();
+	ASSERT_TRUE(queue.current());
+	EXPECT_EQ(queue.current()->message, "Third");
+	queue.dismiss();
+	EXPECT_FALSE(queue.current());
 }
 
 TEST(TorrentListPresenterTest, EmptyManagerProducesStableEmptyModels)

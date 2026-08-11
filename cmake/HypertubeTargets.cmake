@@ -36,6 +36,7 @@ target_link_libraries(hypertube_search PUBLIC hypertube_config hypertube_utils n
 
 add_library(hypertube_presentation STATIC
     ${CMAKE_SOURCE_DIR}/src/presentation/UiFormatters.cpp
+    ${CMAKE_SOURCE_DIR}/src/presentation/UiNotifications.cpp
     ${CMAKE_SOURCE_DIR}/src/presentation/TorrentListPresenter.cpp
     ${CMAKE_SOURCE_DIR}/src/presentation/TorrentAvailability.cpp
     ${CMAKE_SOURCE_DIR}/src/presentation/TorrentDetailsPresenter.cpp

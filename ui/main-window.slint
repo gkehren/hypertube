@@ -14,6 +14,7 @@ import { AppTab, DetailsAction, DetailsTab, LogLevel, RemovalMode, Theme, Torren
 import { TorrentRow } from "torrent-types.slint";
 import { TorrentTable } from "components/torrent-table.slint";
 import { AppMenuBar } from "components/app-menu-bar.slint";
+import { ToastNotification } from "components/toast-notification.slint";
 
 export component MainWindow inherits Window {
 	callback request-close();
@@ -68,9 +69,16 @@ export component MainWindow inherits Window {
 	callback clear-search-history();
 	callback remove-favorite(string);
 	callback cancel-dialogs();
+	callback dismiss-toast();
+	callback toast-action();
 
 	in property <string> version-text;
 	in property <string> startup-state;
+	in property <bool> toast-visible: false;
+	in property <string> toast-title;
+	in property <string> toast-message;
+	in property <string> toast-severity: "info";
+	in property <string> toast-action-label;
 	in-out property <int> sidebar-width: 240;
 	in-out property <int> bottom-panel-height: 300;
 	in property <bool> sidebar-collapsed: false;
@@ -533,6 +541,18 @@ export component MainWindow inherits Window {
 				}
 				} }
 			}
+		}
+
+		if (root.toast-visible): ToastNotification {
+			width: min(parent.width - 32px, 460px);
+			x: parent.width - self.width - 16px;
+			y: parent.height - self.height - 16px;
+			title: root.toast-title;
+			message: root.toast-message;
+			severity: root.toast-severity;
+			action-label: root.toast-action-label;
+			dismiss => { root.dismiss-toast(); }
+			action => { root.toast-action(); }
 		}
 	}
 	}
