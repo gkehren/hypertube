@@ -597,3 +597,26 @@ TEST_F(ConfigManagerTest, DurableWriteFileBackupRecoveryOnTargetCorruption)
 	ASSERT_TRUE(manager.loadTorrents(target.string(), loaded));
 	EXPECT_EQ(loaded.size(), 0u);
 }
+
+TEST_F(ConfigManagerTest, CleansOrphanedTempFilesOnLoad)
+{
+	const auto target = testDir / "orphaned.json";
+	const auto orphanedTmp1 = testDir / "orphaned.json.tmp";
+	const auto orphanedTmp2 = testDir / "orphaned.json.tmp.12345";
+
+	{
+		std::ofstream(target) << R"({"version": 2})";
+		std::ofstream(orphanedTmp1) << "partial data 1";
+		std::ofstream(orphanedTmp2) << "partial data 2";
+	}
+
+	ASSERT_TRUE(fs::exists(orphanedTmp1));
+	ASSERT_TRUE(fs::exists(orphanedTmp2));
+
+	ConfigManager manager;
+	ASSERT_TRUE(manager.load(target.string(), true));
+
+	EXPECT_FALSE(fs::exists(orphanedTmp1));
+	EXPECT_FALSE(fs::exists(orphanedTmp2));
+	EXPECT_TRUE(fs::exists(target));
+}

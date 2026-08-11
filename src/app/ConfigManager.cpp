@@ -229,6 +229,25 @@ Result ConfigManager::load(const std::string &path, bool fullConfig)
 	std::vector<std::filesystem::path> candidates;
 	if (!path.empty())
 	{
+		std::filesystem::path targetPath(path);
+		std::error_code ec;
+		auto parent = targetPath.parent_path();
+		if (parent.empty()) parent = ".";
+		if (std::filesystem::exists(parent, ec))
+		{
+			const std::string baseName = targetPath.filename().string();
+			for (const auto &entry : std::filesystem::directory_iterator(parent, ec))
+			{
+				if (!entry.is_regular_file(ec)) continue;
+				const std::string filename = entry.path().filename().string();
+				if (filename.rfind(baseName + ".tmp", 0) == 0)
+				{
+					std::filesystem::remove(entry.path(), ec);
+					Utils::Logger::info("config", "Removed orphaned temporary write candidate: " + entry.path().string());
+				}
+			}
+		}
+
 		candidates.emplace_back(path);
 		candidates.emplace_back(std::filesystem::path(path).string() + ".bak");
 	}
