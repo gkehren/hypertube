@@ -78,6 +78,128 @@ void TorrentListPresenter::setSort(TorrentSortField field, bool ascending)
 void TorrentListPresenter::setSelectedId(std::string id)
 {
 	selectedId_ = std::move(id);
+	selectedIds_.clear();
+	if (!selectedId_.empty())
+		selectedIds_.push_back(selectedId_);
+	selectionAnchorId_ = selectedId_;
+}
+
+bool TorrentListPresenter::isSelected(const std::string &id) const
+{
+	return std::find(selectedIds_.begin(), selectedIds_.end(), id) != selectedIds_.end();
+}
+
+void TorrentListPresenter::choosePrimaryFromSelection(const std::vector<TorrentRowDto> &visibleRows)
+{
+	if (selectedIds_.empty())
+	{
+		selectedId_.clear();
+		return;
+	}
+
+	for (const auto &row : visibleRows)
+	{
+		if (row.id == selectedId_ && isSelected(row.id))
+			return;
+	}
+	for (const auto &row : visibleRows)
+	{
+		if (isSelected(row.id))
+		{
+			selectedId_ = row.id;
+			return;
+		}
+	}
+	if (!isSelected(selectedId_))
+		selectedId_ = selectedIds_.front();
+}
+
+void TorrentListPresenter::reconcileSelection()
+{
+	ensurePresentationCurrent();
+	selectedIds_.erase(std::remove_if(selectedIds_.begin(), selectedIds_.end(), [this](const std::string &id)
+	{
+		return hashesById_.find(id) == hashesById_.end();
+	}), selectedIds_.end());
+	if (selectedIds_.empty())
+	{
+		selectedId_.clear();
+		selectionAnchorId_.clear();
+		return;
+	}
+	if (!isSelected(selectedId_))
+		selectedId_ = selectedIds_.front();
+	if (selectionAnchorId_.empty() || hashesById_.find(selectionAnchorId_) == hashesById_.end())
+		selectionAnchorId_ = selectedId_;
+}
+
+void TorrentListPresenter::selectVisibleId(const std::string &id, bool toggle, bool range)
+{
+	const auto rows = buildRows();
+	const auto clicked = std::find_if(rows.begin(), rows.end(), [&id](const TorrentRowDto &row) { return row.id == id; });
+	if (clicked == rows.end())
+		return;
+
+	if (range && !selectionAnchorId_.empty())
+	{
+		const auto anchor = std::find_if(rows.begin(), rows.end(), [this](const TorrentRowDto &row)
+		{
+			return row.id == selectionAnchorId_;
+		});
+		if (anchor != rows.end())
+		{
+			const auto first = static_cast<std::ptrdiff_t>(std::distance(rows.begin(), anchor));
+			const auto last = static_cast<std::ptrdiff_t>(std::distance(rows.begin(), clicked));
+			const auto begin = std::min(first, last);
+			const auto end = std::max(first, last);
+			selectedIds_.clear();
+			for (auto index = begin; index <= end; ++index)
+				selectedIds_.push_back(rows[static_cast<std::size_t>(index)].id);
+			selectedId_ = id;
+			return;
+		}
+	}
+
+	if (toggle)
+	{
+		const auto found = std::find(selectedIds_.begin(), selectedIds_.end(), id);
+		if (found == selectedIds_.end())
+			selectedIds_.push_back(id);
+		else
+			selectedIds_.erase(found);
+	}
+	else
+	{
+		selectedIds_.assign(1, id);
+	}
+	selectedId_ = id;
+	choosePrimaryFromSelection(rows);
+	selectionAnchorId_ = id;
+}
+
+void TorrentListPresenter::selectAllVisible()
+{
+	const auto rows = buildRows();
+	selectedIds_.clear();
+	selectedIds_.reserve(rows.size());
+	for (const auto &row : rows)
+		selectedIds_.push_back(row.id);
+	if (selectedIds_.empty())
+	{
+		selectedId_.clear();
+		selectionAnchorId_.clear();
+		return;
+	}
+	if (!isSelected(selectedId_))
+		selectedId_ = selectedIds_.front();
+	selectionAnchorId_ = selectedId_;
+}
+
+void TorrentListPresenter::clearSelection()
+{
+	selectedIds_.clear();
+	selectedId_.clear();
+	selectionAnchorId_.clear();
 }
 
 const std::vector<TorrentRowDto> &TorrentListPresenter::buildUnfilteredRows()
@@ -266,6 +388,7 @@ bool TorrentListPresenter::matchesTextFilter(const TorrentRowDto &row) const
 std::vector<TorrentRowDto> TorrentListPresenter::buildRows()
 {
 	auto rows = buildUnfilteredRows();
+	reconcileSelection();
 	rows.erase(std::remove_if(rows.begin(), rows.end(), [this](const TorrentRowDto &row)
 	{
 		return !matchesCategory(row) || !matchesTextFilter(row);
@@ -279,6 +402,8 @@ std::vector<TorrentRowDto> TorrentListPresenter::buildRows()
 			return left.id < right.id;
 		return sortAscending_ ? less : greater;
 	});
+	for (auto &row : rows)
+		row.selected = isSelected(row.id);
 	return rows;
 }
 
@@ -353,11 +478,58 @@ Result TorrentListPresenter::executeCommand(const std::string &id, TorrentComman
 	return torrentManager.executeCommand(*hash, command);
 }
 
+TorrentBatchResult TorrentListPresenter::executeCommand(const std::vector<std::string> &ids, TorrentCommand command)
+{
+	TorrentBatchResult result;
+	result.requested = ids.size();
+	std::vector<lt::info_hash_t> hashes;
+	hashes.reserve(ids.size());
+	for (const auto &id : ids)
+	{
+		const auto hash = hashForId(id);
+		if (!hash)
+		{
+			result.failures.push_back({id, availabilityMessage(availabilityForId(id))});
+			continue;
+		}
+		hashes.push_back(*hash);
+	}
+	const auto operations = torrentManager.executeCommand(hashes, command);
+	result.succeeded = operations.succeeded;
+	for (const auto &failure : operations.failures)
+		result.failures.push_back({idForHash(failure.hash), failure.message});
+	return result;
+}
+
 Result TorrentListPresenter::removeTorrent(const std::string &id, TorrentRemovalMode mode)
 {
 	const auto hash = hashForId(id);
 	if (!hash)
 		return availabilityFailure(availabilityForId(id));
 	return torrentManager.removeTorrent(*hash, mode);
+}
+
+TorrentBatchResult TorrentListPresenter::removeTorrents(const std::vector<std::string> &ids, TorrentRemovalMode mode)
+{
+	TorrentBatchResult result;
+	result.requested = ids.size();
+	std::vector<lt::info_hash_t> hashes;
+	hashes.reserve(ids.size());
+	for (const auto &id : ids)
+	{
+		const auto hash = hashForId(id);
+		if (!hash)
+		{
+			result.failures.push_back({id, availabilityMessage(availabilityForId(id))});
+			continue;
+		}
+		hashes.push_back(*hash);
+	}
+	const auto operations = torrentManager.removeTorrents(hashes, mode);
+	result.succeeded = operations.succeeded;
+	for (const auto &failure : operations.failures)
+		result.failures.push_back({idForHash(failure.hash), failure.message});
+	reconcileSelection();
+	return result;
 }
 } // namespace Presentation

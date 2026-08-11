@@ -94,7 +94,7 @@ accessibility inspector enabled:
 | Surface | Expected behavior |
 | --- | --- |
 | Sidebar, categories, menu, and dialogs | Controls expose names and roles; Tab and Shift+Tab reach every action; Escape closes an open dialog. |
-| Torrent table and search results | Lists expose item counts and labels; Up/Down changes the selected item; Enter/Space activates the focused action. |
+| Torrent table and search results | Lists expose item counts and labels; Up/Down changes the primary torrent; Ctrl/Cmd-click toggles, Shift-click ranges, Ctrl/Cmd+A selects visible torrents, and Enter/Space activates the focused action. |
 | Details tabs and data lists | Tabs expose the selected tab and lists expose item labels; file, peer, and tracker actions remain keyboard reachable. |
 | Toast overlay | Severity is conveyed by the accessible title/message and visible color; Dismiss and any action button are keyboard reachable. |
 

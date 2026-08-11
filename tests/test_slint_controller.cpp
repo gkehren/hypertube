@@ -47,7 +47,7 @@ TEST(SlintControllerTest, RowCallbackSelectsTorrentAndPublishesDetails)
 	int selectedTab = 0;
 	SlintUi::DetailsRefreshCoordinator coordinator(torrentPresenter, detailsPresenter, detailsModel,
 		*window, selectedTab, visibleRows);
-	window->on_select_torrent([&](const slint::SharedString &sharedId)
+	window->on_select_torrent([&](const slint::SharedString &sharedId, bool, bool)
 	{
 		const std::string id(sharedId.begin(), sharedId.end());
 		torrentPresenter.setSelectedId(id);
@@ -55,7 +55,7 @@ TEST(SlintControllerTest, RowCallbackSelectsTorrentAndPublishesDetails)
 		coordinator.refresh(AppTab::Torrents);
 	});
 
-	window->invoke_select_torrent(slint::SharedString(expectedId));
+	window->invoke_select_torrent(slint::SharedString(expectedId), false, false);
 	EXPECT_EQ(torrentPresenter.selectedId(), expectedId);
 	const auto selectedId = window->get_selected_torrent_id();
 	const auto selectedName = window->get_selected_torrent_name();

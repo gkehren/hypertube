@@ -62,6 +62,28 @@ Presentation::TorrentSortField sortField(TorrentSort field, bool &valid)
 	valid = false;
 	return ::TorrentCommand::Pause;
 }
+
+std::string batchResultMessage(const std::string &action, const Presentation::TorrentBatchResult &result)
+{
+	std::string message = action + " completed for " + std::to_string(result.succeeded) + " of "
+		+ std::to_string(result.requested) + " torrent(s).";
+	if (!result.failures.empty())
+	{
+		message += " Failed: ";
+		for (std::size_t index = 0; index < result.failures.size(); ++index)
+		{
+			if (index > 0)
+				message += "; ";
+			message += result.failures[index].id + " (" + result.failures[index].message + ")";
+			if (index == 2 && result.failures.size() > 3)
+			{
+				message += "; and " + std::to_string(result.failures.size() - 3) + " more";
+				break;
+			}
+		}
+	}
+	return message;
+}
 } // namespace
 
 namespace SlintUi
@@ -69,11 +91,11 @@ namespace SlintUi
 TorrentUiController::TorrentUiController(Presentation::TorrentListPresenter &presenter, MainWindow &window,
 	Presentation::TorrentDetailsPresenter &detailsPresenter, std::function<void()> refresh,
 	std::function<void()> resetDetails, Presentation::TorrentSortField &sortField, bool &sortAscending,
-	bool &viewDirty, std::string &pendingRemoveId,
+	bool &viewDirty, std::string &pendingRemoveId, std::vector<std::string> &pendingRemoveIds,
 	std::function<void(Presentation::UiNotification)> notify)
 	: presenter_(presenter), window_(window), detailsPresenter_(detailsPresenter), refresh_(std::move(refresh)),
 	  resetDetails_(std::move(resetDetails)), sortField_(sortField), sortAscending_(sortAscending),
-	  viewDirty_(viewDirty), pendingRemoveId_(pendingRemoveId), notify_(std::move(notify))
+	  viewDirty_(viewDirty), pendingRemoveId_(pendingRemoveId), pendingRemoveIds_(pendingRemoveIds), notify_(std::move(notify))
 {
 }
 
@@ -83,15 +105,26 @@ void TorrentUiController::notify(Presentation::NotificationSeverity severity, st
 		notify_(Presentation::UiNotification{severity, std::move(title), std::move(message)});
 }
 
-void TorrentUiController::select(const std::string &id)
+void TorrentUiController::select(const std::string &id, bool toggle, bool range)
 {
 	if (!validateId(id))
 		return;
-	presenter_.setSelectedId(id);
-	const auto availability = presenter_.availabilityForId(id);
+	presenter_.selectVisibleId(id, toggle, range);
+	const auto primaryId = presenter_.selectedId();
+	viewDirty_ = true;
+	const auto availability = presenter_.availabilityForId(primaryId);
 	const auto message = Presentation::availabilityMessage(availability);
 	if (!message.empty())
 		window_.set_details_message(SlintUi::toSharedString(message));
+	if (resetDetails_)
+		resetDetails_();
+	refresh_();
+}
+
+void TorrentUiController::selectAll()
+{
+	presenter_.selectAllVisible();
+	viewDirty_ = true;
 	if (resetDetails_)
 		resetDetails_();
 	refresh_();
@@ -117,11 +150,35 @@ void TorrentUiController::executeCommand(const std::string &id, UiTorrentCommand
 	refresh_();
 }
 
+void TorrentUiController::executeSelected(UiTorrentCommand command)
+{
+	const auto ids = presenter_.selectedIds();
+	if (ids.empty())
+	{
+		notify(Presentation::NotificationSeverity::Warning, "No torrents selected", "Select one or more torrents first.");
+		return;
+	}
+	bool valid = false;
+	const auto mapped = torrentCommand(command, valid);
+	if (!valid)
+	{
+		notify(Presentation::NotificationSeverity::Error, "Bulk action failed", "Unsupported torrent command");
+		return;
+	}
+	const auto result = presenter_.executeCommand(ids, mapped);
+	viewDirty_ = true;
+	notify(result.success() ? Presentation::NotificationSeverity::Success : Presentation::NotificationSeverity::Warning,
+		result.success() ? "Bulk action completed" : "Bulk action partially completed",
+		batchResultMessage("Bulk action", result));
+	refresh_();
+}
+
 void TorrentUiController::remove(const std::string &id)
 {
 	if (!validateId(id))
 		return;
 	pendingRemoveId_ = id;
+	pendingRemoveIds_.clear();
 	std::string name = id;
 	for (const auto &row : presenter_.buildRows())
 	{
@@ -135,8 +192,37 @@ void TorrentUiController::remove(const std::string &id)
 	window_.set_remove_dialog_open(true);
 }
 
+void TorrentUiController::removeSelected()
+{
+	pendingRemoveIds_ = presenter_.selectedIds();
+	if (pendingRemoveIds_.empty())
+	{
+		notify(Presentation::NotificationSeverity::Warning, "No torrents selected", "Select one or more torrents first.");
+		return;
+	}
+	pendingRemoveId_.clear();
+	window_.set_bulk_remove_count(static_cast<int>(pendingRemoveIds_.size()));
+	window_.set_bulk_remove_dialog_open(true);
+}
+
 void TorrentUiController::confirmRemove(RemovalMode mode)
 {
+	if (!pendingRemoveIds_.empty())
+	{
+		const auto removalMode = mode == RemovalMode::DeleteData ? TorrentRemovalMode::DeleteData
+			: mode == RemovalMode::DeleteSource ? TorrentRemovalMode::DeleteSourceTorrent
+			: mode == RemovalMode::DeleteDataAndSource ? TorrentRemovalMode::DeleteDataAndSourceTorrent
+			: TorrentRemovalMode::KeepAllFiles;
+		const auto result = presenter_.removeTorrents(pendingRemoveIds_, removalMode);
+		notify(result.success() ? Presentation::NotificationSeverity::Success : Presentation::NotificationSeverity::Warning,
+			result.success() ? "Torrents removed" : "Removal partially completed",
+			batchResultMessage("Bulk removal", result));
+		viewDirty_ = true;
+		pendingRemoveIds_.clear();
+		window_.set_bulk_remove_dialog_open(false);
+		refresh_();
+		return;
+	}
 	if (pendingRemoveId_.empty())
 		return;
 	const auto removalMode = mode == RemovalMode::DeleteData ? TorrentRemovalMode::DeleteData
@@ -161,7 +247,9 @@ void TorrentUiController::confirmRemove(RemovalMode mode)
 void TorrentUiController::cancelRemove()
 {
 	pendingRemoveId_.clear();
+	pendingRemoveIds_.clear();
 	window_.set_remove_dialog_open(false);
+	window_.set_bulk_remove_dialog_open(false);
 }
 
 void TorrentUiController::navigate(int direction)

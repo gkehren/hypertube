@@ -392,6 +392,38 @@ Result TorrentManager::executeCommand(const lt::info_hash_t &hash, TorrentComman
 	}
 }
 
+TorrentBatchResult TorrentManager::removeTorrents(const std::vector<lt::info_hash_t> &hashes, TorrentRemovalMode removeMode)
+{
+	TorrentBatchResult result;
+	result.requested = hashes.size();
+	result.failures.reserve(hashes.size());
+	for (const auto &hash : hashes)
+	{
+		const Result operation = removeTorrent(hash, removeMode);
+		if (operation)
+			++result.succeeded;
+		else
+			result.failures.push_back({hash, operation.message});
+	}
+	return result;
+}
+
+TorrentBatchResult TorrentManager::executeCommand(const std::vector<lt::info_hash_t> &hashes, TorrentCommand command)
+{
+	TorrentBatchResult result;
+	result.requested = hashes.size();
+	result.failures.reserve(hashes.size());
+	for (const auto &hash : hashes)
+	{
+		const Result operation = executeCommand(hash, command);
+		if (operation)
+			++result.succeeded;
+		else
+			result.failures.push_back({hash, operation.message});
+	}
+	return result;
+}
+
 std::vector<ManagedTorrent> TorrentManager::getTorrentSnapshot() const
 {
 	std::vector<ManagedTorrent> snapshot;

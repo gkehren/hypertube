@@ -34,7 +34,7 @@ SlintAppController::SlintAppController(App &app, slint::ComponentHandle<MainWind
 	notificationController_ = std::make_unique<SlintUi::NotificationController>(app.systemOpener(), torrentPresenter, *window);
 	torrentUiController_ = std::make_unique<SlintUi::TorrentUiController>(torrentPresenter, *window, detailsPresenter,
 		[this] { refresh(); }, [this] { if (detailsRefreshCoordinator_) detailsRefreshCoordinator_->reset(); }, sortField_, sortAscending_, torrentViewDirty_,
-		pendingRemoveId_, [this](Presentation::UiNotification notification) { notificationController_->notify(std::move(notification)); });
+		pendingRemoveId_, pendingRemoveIds_, [this](Presentation::UiNotification notification) { notificationController_->notify(std::move(notification)); });
 	searchUiController_ = std::make_unique<SlintUi::SearchUiController>(searchPresenter, *window,
 		[this] { if (searchRefreshCoordinator_) searchRefreshCoordinator_->forceRefresh(); });
 	detailsUiController_ = std::make_unique<SlintUi::DetailsUiController>(detailsPresenter, *window,
@@ -78,15 +78,18 @@ void SlintAppController::bind()
 		return slint::CloseRequestResponse::HideWindow;
 	});
 	window->on_refresh_torrents([this] { refresh(); });
-	window->on_select_torrent([this](const slint::SharedString &id) {
-		torrentUiController_->select(std::string(id.begin(), id.end()));
+	window->on_select_torrent([this](const slint::SharedString &id, bool toggle, bool range) {
+		torrentUiController_->select(std::string(id.begin(), id.end()), toggle, range);
 	});
+	window->on_select_all_torrents([this] { torrentUiController_->selectAll(); });
 	window->on_execute_torrent_command([this](const slint::SharedString &id, UiTorrentCommand command) {
 		torrentUiController_->executeCommand(std::string(id.begin(), id.end()), command);
 	});
+	window->on_execute_selected_torrents([this](UiTorrentCommand command) { torrentUiController_->executeSelected(command); });
 	window->on_remove_torrent([this](const slint::SharedString &id) {
 		torrentUiController_->remove(std::string(id.begin(), id.end()));
 	});
+	window->on_remove_selected_torrents([this] { torrentUiController_->removeSelected(); });
 	window->on_confirm_remove([this](RemovalMode mode) { torrentUiController_->confirmRemove(mode); });
 	window->on_cancel_remove([this] { torrentUiController_->cancelRemove(); });
 	window->on_torrents_tab([this] { appShellController_->setActiveTab(AppTab::Torrents); });
@@ -230,6 +233,9 @@ void SlintAppController::start()
 	window->set_selected_details_tab(static_cast<DetailsTab>(selectedDetailsTab_));
 	window->set_add_dialog_open(false);
 	window->set_remove_dialog_open(false);
+	window->set_bulk_remove_dialog_open(false);
+	window->set_bulk_remove_count(0);
+	window->set_selected_torrent_count(0);
 	window->set_search_query(slint::SharedString());
 	started = true;
 	std::weak_ptr<bool> weakAlive = isAlive_;
@@ -312,6 +318,7 @@ void SlintAppController::refresh()
 	window->set_preferences_saving(preferencesController.isSaving());
 	logRefreshCoordinator_->refresh(activeTab);
 	torrentRefreshCoordinator_->refresh(activeTab);
+	window->set_selected_torrent_count(static_cast<int>(torrentPresenter.selectedCount()));
 	detailsRefreshCoordinator_->refresh(activeTab);
 }
 void SlintAppController::refreshCredentialIndicators()

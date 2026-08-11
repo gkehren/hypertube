@@ -34,7 +34,7 @@ ctest --test-dir build --output-on-failure
 1. Start Hypertube.
 2. Use the torrent file dialog to select a `.torrent` file, or use the magnet dialog to paste a magnet URI.
 3. Select the directory where data should be saved.
-4. Use the torrent table to pause, resume, inspect, filter, or remove torrents.
+4. Use the torrent table to pause, resume, inspect, filter, or remove torrents. Ctrl/Cmd-click toggles selection, Shift-click selects a visible range, and Ctrl/Cmd+A selects all visible torrents for bulk actions.
 5. Open the details view to inspect files, peers, trackers, speeds, and progress.
 
 Torrent state and bounded fast-resume data are persisted periodically and during

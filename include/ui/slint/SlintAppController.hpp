@@ -81,5 +81,6 @@ private:
 	bool sortAscending_ = true;
 	int selectedDetailsTab_ = 0;
 	std::string pendingRemoveId_;
+	std::vector<std::string> pendingRemoveIds_;
 	std::shared_ptr<bool> isAlive_ = std::make_shared<bool>(true);
 };

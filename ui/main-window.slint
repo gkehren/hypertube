@@ -19,9 +19,12 @@ import { ToastNotification } from "components/toast-notification.slint";
 export component MainWindow inherits Window {
 	callback request-close();
 	callback refresh-torrents();
-	callback select-torrent(string);
+	callback select-torrent(string, bool, bool);
+	callback select-all-torrents();
 	callback execute-torrent-command(string, UiTorrentCommand);
+	callback execute-selected-torrents(UiTorrentCommand);
 	callback remove-torrent(string);
+	callback remove-selected-torrents();
 	callback confirm-remove(RemovalMode);
 	callback cancel-remove();
 	callback torrents-tab();
@@ -87,6 +90,7 @@ export component MainWindow inherits Window {
 	in property <TorrentCategory> category-filter: TorrentCategory.all;
 	in property <[CategoryRow]> categories: [];
 	in property <string> selected-torrent-id;
+	in property <int> selected-torrent-count: 0;
 	in property <string> selected-torrent-name;
 	in property <string> selected-torrent-state;
 	in property <string> selected-torrent-progress;
@@ -159,6 +163,8 @@ export component MainWindow inherits Window {
 	in property <string> add-dialog-message;
 	in property <bool> remove-dialog-open: false;
 	in property <string> remove-dialog-name;
+	in property <bool> bulk-remove-dialog-open: false;
+	in property <int> bulk-remove-count: 0;
 	private property <length> maximum-sidebar-width: max(120px, content.width - 528px);
 	private property <length> main-content-width: max(0px, content.width - (root.sidebar-collapsed ? 56px : root.sidebar-width * 1px) - 8px);
 	private property <int> maximum-details-height: max(120, round((content.height - 294px) / 1px));
@@ -203,27 +209,45 @@ export component MainWindow inherits Window {
 		}
 		KeyBinding {
 			keys: @keys(UpArrow);
-			enabled: root.active-tab == AppTab.torrents && !root.add-dialog-open && !root.remove-dialog-open;
+			enabled: root.active-tab == AppTab.torrents && !root.add-dialog-open && !root.remove-dialog-open && !root.bulk-remove-dialog-open;
 			activated => { root.navigate-torrent(-1); }
 		}
 		KeyBinding {
 			keys: @keys(DownArrow);
-			enabled: root.active-tab == AppTab.torrents && !root.add-dialog-open && !root.remove-dialog-open;
+			enabled: root.active-tab == AppTab.torrents && !root.add-dialog-open && !root.remove-dialog-open && !root.bulk-remove-dialog-open;
 			activated => { root.navigate-torrent(1); }
 		}
 		KeyBinding {
 			keys: @keys(Space);
-			enabled: root.active-tab == AppTab.torrents && root.selected-torrent-id != "" && !root.add-dialog-open && !root.remove-dialog-open;
-			activated => { root.execute-torrent-command(root.selected-torrent-id, root.selected-torrent-paused ? UiTorrentCommand.resume : UiTorrentCommand.pause); }
+			enabled: root.active-tab == AppTab.torrents && root.selected-torrent-count > 0 && !root.add-dialog-open && !root.remove-dialog-open && !root.bulk-remove-dialog-open;
+			activated => {
+				if (root.selected-torrent-count > 1)
+				{
+					root.execute-selected-torrents(root.selected-torrent-paused ? UiTorrentCommand.resume : UiTorrentCommand.pause);
+				}
+				else
+				{
+					root.execute-torrent-command(root.selected-torrent-id, root.selected-torrent-paused ? UiTorrentCommand.resume : UiTorrentCommand.pause);
+				}
+			}
 		}
 		KeyBinding {
 			keys: @keys(Delete);
-			enabled: root.active-tab == AppTab.torrents && root.selected-torrent-id != "" && !root.add-dialog-open && !root.remove-dialog-open;
-			activated => { root.remove-torrent(root.selected-torrent-id); }
+			enabled: root.active-tab == AppTab.torrents && root.selected-torrent-count > 0 && !root.add-dialog-open && !root.remove-dialog-open && !root.bulk-remove-dialog-open;
+			activated => {
+				if (root.selected-torrent-count > 1)
+				{
+					root.remove-selected-torrents();
+				}
+				else
+				{
+					root.remove-torrent(root.selected-torrent-id);
+				}
+			}
 		}
 		KeyBinding {
 			keys: @keys(Escape);
-			enabled: root.add-dialog-open || root.remove-dialog-open;
+			enabled: root.add-dialog-open || root.remove-dialog-open || root.bulk-remove-dialog-open;
 			activated => { root.cancel-dialogs(); }
 		}
 
@@ -377,8 +401,8 @@ export component MainWindow inherits Window {
 				}
 			}
 
-			HorizontalBox {
-				LineEdit {
+				HorizontalBox {
+					LineEdit {
 					placeholder-text: "Filter torrents";
 					edited(text) => { root.filter-torrents(text); }
 				}
@@ -388,6 +412,24 @@ export component MainWindow inherits Window {
 				}
 			}
 
+				if (root.selected-torrent-count > 0): VerticalBox {
+					spacing: 4px;
+					HorizontalBox {
+						Text { text: root.selected-torrent-count; color: ThemeTokens.foreground; }
+						Text { text: "selected"; color: ThemeTokens.muted-foreground; }
+						Rectangle { }
+						Button { text: "Pause"; clicked => { root.execute-selected-torrents(UiTorrentCommand.pause); } }
+						Button { text: "Resume"; clicked => { root.execute-selected-torrents(UiTorrentCommand.resume); } }
+						Button { text: "Recheck"; clicked => { root.execute-selected-torrents(UiTorrentCommand.force-recheck); } }
+						Button { text: "Announce"; clicked => { root.execute-selected-torrents(UiTorrentCommand.force-reannounce); } }
+					}
+					HorizontalBox {
+						Rectangle { }
+						Button { text: "Queue up"; clicked => { root.execute-selected-torrents(UiTorrentCommand.queue-up); } }
+						Button { text: "Queue down"; clicked => { root.execute-selected-torrents(UiTorrentCommand.queue-down); } }
+						Button { text: "Remove selected"; clicked => { root.remove-selected-torrents(); } }
+					}
+				}
 			HorizontalBox {
 				Text { text: root.startup-state; color: ThemeTokens.muted-foreground; }
 				Rectangle { }
@@ -397,10 +439,11 @@ export component MainWindow inherits Window {
 			TorrentTable {
 				min-height: 180px;
 				available-width: root.main-content-width - 40px;
-				rows: root.torrent-rows;
-				selected-id: root.selected-torrent-id;
-				empty-message: root.startup-state == "Ready" ? "No torrents yet" : root.startup-state;
-							select(id) => { root.select-torrent(id); }
+					rows: root.torrent-rows;
+					selected-id: root.selected-torrent-id;
+					empty-message: root.startup-state == "Ready" ? "No torrents yet" : root.startup-state;
+							select(id, toggle, range) => { root.select-torrent(id, toggle, range); }
+							select-all => { root.select-all-torrents(); }
 							navigate(direction) => { root.navigate-torrent(direction); }
 							sort(value) => { root.sort-torrents(value); }
 				execute(id, command) => { root.execute-torrent-command(id, command); }
@@ -470,7 +513,7 @@ export component MainWindow inherits Window {
 			}
 		}
 
-		if (root.add-dialog-open || root.remove-dialog-open): Rectangle {
+		if (root.add-dialog-open || root.remove-dialog-open || root.bulk-remove-dialog-open): Rectangle {
 			width: parent.width;
 			height: parent.height;
 			background: #00000088;
@@ -560,6 +603,44 @@ export component MainWindow inherits Window {
 					remove-dialog-cancel := Button { text: "Cancel"; clicked => { root.cancel-remove(); } }
 					}
 				}
+				} }
+			}
+		}
+
+		if (root.bulk-remove-dialog-open): Rectangle {
+			x: (parent.width - self.width) / 2;
+			y: (parent.height - self.height) / 2;
+			width: min(parent.width - 32px, 560px);
+			height: min(parent.height - 32px, 300px);
+			background: ThemeTokens.surface;
+			border-width: 2px;
+			border-color: ThemeTokens.warning;
+			FocusScope {
+				width: parent.width;
+				height: parent.height;
+				forward-focus: bulk-remove-dialog-cancel;
+				KeyBinding {
+					keys: @keys(Escape);
+					activated => { root.cancel-remove(); }
+				}
+				ScrollView { VerticalBox {
+					padding: 20px;
+					spacing: 8px;
+					Text { text: "Remove selected torrents"; color: ThemeTokens.foreground; font-size: 22px; }
+						HorizontalBox {
+							Text { text: root.bulk-remove-count; color: ThemeTokens.foreground; }
+							Text { text: "torrents selected"; color: ThemeTokens.foreground; }
+						}
+					Text { text: "This action applies to every selected torrent. Choose whether downloaded data and source files are removed."; color: ThemeTokens.muted-foreground; wrap: word-wrap; }
+					HorizontalBox {
+						Button { text: "Keep files"; clicked => { root.confirm-remove(RemovalMode.keep-files); } }
+						Button { text: "Delete data"; clicked => { root.confirm-remove(RemovalMode.delete-data); } }
+					}
+					HorizontalBox {
+						Button { text: "Delete source"; clicked => { root.confirm-remove(RemovalMode.delete-source); } }
+						Button { text: "Delete data + source"; clicked => { root.confirm-remove(RemovalMode.delete-data-and-source); } }
+					}
+					bulk-remove-dialog-cancel := Button { text: "Cancel"; clicked => { root.cancel-remove(); } }
 				} }
 			}
 		}

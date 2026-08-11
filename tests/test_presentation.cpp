@@ -13,9 +13,22 @@
 #include <thread>
 #include <algorithm>
 #include <cctype>
+#include <vector>
 
 namespace
 {
+std::filesystem::path writeNamedTorrent(const std::filesystem::path &directory, const std::string &name)
+{
+	const auto path = directory / (name + ".torrent");
+	std::string content = "d4:infod6:lengthi1e4:name" + std::to_string(name.size()) + ":" + name
+		+ "12:piece lengthi16384e6:pieces20:";
+	content.append(20, '\0');
+	content += "ee";
+	std::ofstream file(path, std::ios::binary);
+	file.write(content.data(), static_cast<std::streamsize>(content.size()));
+	return path;
+}
+
 template <typename Digest>
 Digest digestWithBinaryBytes()
 {
@@ -266,6 +279,52 @@ TEST(TorrentListPresenterTest, SelectionSurvivesRefreshAndSortUntilTorrentIsRemo
 	EXPECT_EQ(presenter.availabilityForId(id).state, Presentation::TorrentAvailability::Removed);
 	EXPECT_EQ(Presentation::availabilityMessage(presenter.availabilityForId(id)),
 		"The selected torrent was removed.");
+
+	std::error_code error;
+	std::filesystem::remove_all(testDirectory, error);
+}
+
+TEST(TorrentListPresenterTest, SupportsRangeToggleSelectAllAndPartialBatchResults)
+{
+	const auto testDirectory = std::filesystem::temp_directory_path()
+		/ ("hypertube-presenter-multi-selection-" + std::to_string(
+			std::chrono::steady_clock::now().time_since_epoch().count()));
+	std::filesystem::create_directories(testDirectory / "downloads");
+	TorrentManager manager;
+	for (const auto &name : {std::string("alpha"), std::string("bravo"), std::string("charlie")})
+		ASSERT_TRUE(manager.addTorrent(writeNamedTorrent(testDirectory, name).string(),
+			(testDirectory / "downloads").string()));
+
+	manager.requestStatusRefresh();
+	for (int attempt = 0; attempt < 100 && (!manager.getStatusCache() || manager.getStatusCache()->size() < 3); ++attempt)
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+	Presentation::TorrentListPresenter presenter(manager);
+	presenter.setSort(Presentation::TorrentSortField::Name, true);
+	const auto rows = presenter.buildRows();
+	ASSERT_EQ(rows.size(), 3U);
+
+	presenter.selectVisibleId(rows[0].id, false, false);
+	presenter.selectVisibleId(rows[2].id, false, true);
+	EXPECT_EQ(presenter.selectedCount(), 3U);
+	EXPECT_EQ(presenter.selectedId(), rows[2].id);
+
+	presenter.selectVisibleId(rows[1].id, true, false);
+	EXPECT_EQ(presenter.selectedCount(), 2U);
+	EXPECT_FALSE(presenter.isSelected(rows[1].id));
+	presenter.selectAllVisible();
+	EXPECT_EQ(presenter.selectedCount(), 3U);
+
+	const auto partial = presenter.executeCommand({rows[0].id, "not-a-torrent-id"}, TorrentCommand::Pause);
+	EXPECT_EQ(partial.requested, 2U);
+	EXPECT_EQ(partial.succeeded, 1U);
+	ASSERT_EQ(partial.failures.size(), 1U);
+	EXPECT_EQ(partial.failures.front().id, "not-a-torrent-id");
+
+	ASSERT_TRUE(manager.removeTorrent(manager.getTorrentSnapshot().front().hash, TorrentRemovalMode::KeepAllFiles));
+	presenter.buildRows();
+	EXPECT_EQ(presenter.selectedCount(), 2U);
+	EXPECT_EQ(presenter.selectedIds().size(), 2U);
 
 	std::error_code error;
 	std::filesystem::remove_all(testDirectory, error);

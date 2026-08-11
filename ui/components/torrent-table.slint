@@ -11,7 +11,8 @@ export component TorrentTable inherits Rectangle {
 	in property <string> selected-id;
 	in property <string> empty-message: "No torrents yet";
 	in property <length> available-width: root.width;
-	callback select(string);
+	callback select(string, bool, bool);
+	callback select-all();
 	callback sort(TorrentSort);
 	callback execute(string, UiTorrentCommand);
 	callback remove(string);
@@ -33,6 +34,10 @@ export component TorrentTable inherits Rectangle {
 			keys: @keys(DownArrow);
 			activated => { root.navigate(1); }
 		}
+		KeyBinding {
+			keys: @keys(Control + A);
+			activated => { root.select-all(); }
+		}
 		key-pressed(event) => {
 			if (event.text == "\n" && root.selected-id != "") {
 				root.execute(root.selected-id, UiTorrentCommand.pause);
@@ -49,12 +54,13 @@ export component TorrentTable inherits Rectangle {
 				accessible-item-count: root.rows.length;
 				for torrent in root.rows: TorrentTableRow {
 					torrent: torrent;
-					selected: torrent.id == root.selected-id;
+					selected: torrent.selected;
+					primary: torrent.id == root.selected-id;
 					compact: root.compact;
 					narrow: root.narrow;
 					progress-width: root.progress-width;
 					status-width: root.status-width;
-					select(id) => { focus-scope.focus(); root.select(id); }
+					select(id, toggle, range) => { focus-scope.focus(); root.select(id, toggle, range); }
 					execute(id, command) => { root.execute(id, command); }
 					remove(id) => { root.remove(id); }
 					copy-magnet(id) => { root.copy-magnet(id); }

@@ -14,6 +14,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <vector>
 
 class App;
 class TorrentAddController;
@@ -27,12 +28,15 @@ public:
 	TorrentUiController(Presentation::TorrentListPresenter &presenter, MainWindow &window,
 		Presentation::TorrentDetailsPresenter &detailsPresenter, std::function<void()> refresh,
 		std::function<void()> resetDetails, Presentation::TorrentSortField &sortField, bool &sortAscending,
-		bool &viewDirty, std::string &pendingRemoveId,
+		bool &viewDirty, std::string &pendingRemoveId, std::vector<std::string> &pendingRemoveIds,
 		std::function<void(Presentation::UiNotification)> notify);
 
-	void select(const std::string &id);
+	void select(const std::string &id, bool toggle = false, bool range = false);
+	void selectAll();
 	void executeCommand(const std::string &id, UiTorrentCommand command);
+	void executeSelected(UiTorrentCommand command);
 	void remove(const std::string &id);
+	void removeSelected();
 	void confirmRemove(RemovalMode mode);
 	void cancelRemove();
 	void navigate(int direction);
@@ -53,6 +57,7 @@ private:
 	bool &sortAscending_;
 	bool &viewDirty_;
 	std::string &pendingRemoveId_;
+	std::vector<std::string> &pendingRemoveIds_;
 	std::function<void(Presentation::UiNotification)> notify_;
 };
 
