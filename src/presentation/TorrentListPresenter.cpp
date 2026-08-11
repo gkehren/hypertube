@@ -7,7 +7,6 @@
 #include <array>
 #include <cctype>
 #include <cstdint>
-#include <limits>
 #include <type_traits>
 #include <utility>
 
@@ -16,11 +15,6 @@ namespace
 std::string torrentId(const lt::info_hash_t &hash)
 {
 	return Utils::TorrentIdentity::id(hash);
-}
-
-bool matchesTorrentId(const lt::info_hash_t &hash, const std::string &id)
-{
-	return Utils::TorrentIdentity::matches(hash, id);
 }
 
 bool lessOrEqual(const Presentation::TorrentRowDto &left, const Presentation::TorrentRowDto &right,
@@ -86,13 +80,29 @@ void TorrentListPresenter::setSelectedId(std::string id)
 	selectedId_ = std::move(id);
 }
 
-std::vector<TorrentRowDto> TorrentListPresenter::buildUnfilteredRows()
+const std::vector<TorrentRowDto> &TorrentListPresenter::buildUnfilteredRows()
 {
+	ensurePresentationCurrent();
+	if (!selectedId_.empty() && hashesById_.find(selectedId_) == hashesById_.end())
+		selectedId_.clear();
+	return presentation_.allRows;
+}
+
+void TorrentListPresenter::ensurePresentationCurrent() const
+{
+	const auto collectionRevision = torrentManager.getTorrentCollectionRevision();
+	const auto statusRevision = torrentManager.getStatusRevision();
+	if (presentationValid_ && presentation_.collectionRevision == collectionRevision
+		&& presentation_.statusRevision == statusRevision)
+		return;
+
 	const auto torrents = torrentManager.getTorrentSnapshot();
 	const auto statusCache = torrentManager.getStatusCache();
-	std::vector<TorrentRowDto> rows;
-	rows.reserve(torrents.size());
-	ensureRegistryCurrent();
+	PresentationSnapshot next;
+	next.collectionRevision = collectionRevision;
+	next.statusRevision = statusRevision;
+	next.allRows.reserve(torrents.size());
+	next.hashesById.reserve(torrents.size());
 
 	for (const auto &torrent : torrents)
 	{
@@ -102,8 +112,8 @@ std::vector<TorrentRowDto> TorrentListPresenter::buildUnfilteredRows()
 		const auto id = torrentId(torrent.hash);
 		if (id.empty())
 			continue;
-		const auto status = statusCache ? statusCache->find(torrent.hash) : statusCache->end();
-		if (!statusCache || status == statusCache->end())
+		next.hashesById.emplace(id, torrent.hash);
+		if (!statusCache || statusCache->find(torrent.hash) == statusCache->end())
 		{
 			TorrentRowDto row;
 			row.id = id;
@@ -131,11 +141,11 @@ std::vector<TorrentRowDto> TorrentListPresenter::buildUnfilteredRows()
 			row.etaLabel = UiFormatters::formatEta(-1);
 			row.metadataPending = true;
 			row.commandsAvailable = true;
-			rows.push_back(std::move(row));
+			next.allRows.push_back(std::move(row));
 			continue;
 		}
 
-		const auto &value = status->second;
+		const auto &value = statusCache->find(torrent.hash)->second;
 		TorrentRowDto row;
 		row.id = id;
 		row.name = !value.name.empty() ? value.name : (!torrent.displayName.empty() ? torrent.displayName : "Loading torrent...");
@@ -179,21 +189,34 @@ std::vector<TorrentRowDto> TorrentListPresenter::buildUnfilteredRows()
 		}
 		row.etaLabel = UiFormatters::formatEta(row.etaSeconds);
 
-		rows.push_back(std::move(row));
+		next.allRows.push_back(std::move(row));
 	}
 
-	if (!selectedId_.empty() && hashesById_.find(selectedId_) == hashesById_.end()
-		&& std::none_of(torrents.begin(), torrents.end(), [this](const ManagedTorrent &torrent)
-		{
-			return matchesTorrentId(torrent.hash, selectedId_);
-		}))
-		selectedId_.clear();
-	return rows;
+	for (const auto &row : next.allRows)
+	{
+		if (row.state == TorrentUiState::Downloading)
+			++next.categoryCounts[1];
+		if (row.state == TorrentUiState::Seeding)
+			++next.categoryCounts[2];
+		if (row.state == TorrentUiState::Completed)
+			++next.categoryCounts[3];
+		if (row.state == TorrentUiState::Paused)
+			++next.categoryCounts[4];
+		if (row.active)
+			++next.categoryCounts[5];
+		else
+			++next.categoryCounts[6];
+	}
+	next.categoryCounts[0] = static_cast<int>(next.allRows.size());
+
+	presentation_ = std::move(next);
+	hashesById_ = presentation_.hashesById;
+	presentationValid_ = true;
 }
 
-bool TorrentListPresenter::matchesCategory(const TorrentRowDto &row) const
+bool TorrentListPresenter::matchesCategory(const TorrentRowDto &row, int filter)
 {
-	switch (categoryFilter_)
+	switch (filter)
 	{
 	case 0:
 		return true;
@@ -212,6 +235,11 @@ bool TorrentListPresenter::matchesCategory(const TorrentRowDto &row) const
 	default:
 		return true;
 	}
+}
+
+bool TorrentListPresenter::matchesCategory(const TorrentRowDto &row) const
+{
+	return matchesCategory(row, categoryFilter_);
 }
 
 bool TorrentListPresenter::matchesTextFilter(const TorrentRowDto &row) const
@@ -254,24 +282,6 @@ std::vector<TorrentRowDto> TorrentListPresenter::buildRows()
 	return rows;
 }
 
-void TorrentListPresenter::ensureRegistryCurrent() const
-{
-	const auto revision = torrentManager.getTorrentCollectionRevision();
-	if (revision == registryRevision_)
-		return;
-	auto torrents = torrentManager.getTorrentSnapshot();
-	hashesById_.clear();
-	for (const auto &torrent : torrents)
-	{
-		if (!torrent.handle.is_valid())
-			continue;
-		const auto id = torrentId(torrent.hash);
-		if (!id.empty())
-			hashesById_.emplace(id, torrent.hash);
-	}
-	registryRevision_ = revision;
-}
-
 std::optional<TorrentRowDto> TorrentListPresenter::findRowById(const std::string &id)
 {
 	if (id.empty())
@@ -280,7 +290,7 @@ std::optional<TorrentRowDto> TorrentListPresenter::findRowById(const std::string
 	// Resolve selections against the unfiltered source of truth. The visible
 	// model can be filtered, reordered, or intentionally left untouched until
 	// its next status revision without making an existing torrent unavailable.
-	for (auto &row : buildUnfilteredRows())
+	for (const auto &row : buildUnfilteredRows())
 	{
 		if (row.id == id)
 			return row;
@@ -288,33 +298,12 @@ std::optional<TorrentRowDto> TorrentListPresenter::findRowById(const std::string
 
 	// Status refreshes are asynchronous. A live magnet may briefly be absent
 	// from the latest status snapshot, but it must remain selectable.
-	for (const auto &torrent : torrentManager.getTorrentSnapshot())
-	{
-		if (!torrent.handle.is_valid() || !matchesTorrentId(torrent.hash, id))
-			continue;
-		hashesById_[id] = torrent.hash;
-		TorrentRowDto row;
-		row.id = id;
-		row.name = !torrent.displayName.empty() ? torrent.displayName : "Loading torrent...";
-		row.stateLabel = "Loading";
-		row.progressLabel = UiFormatters::formatProgress(0.0f);
-		row.sizeLabel = UiFormatters::formatBytes(0);
-		row.downloadRateLabel = UiFormatters::formatRate(0);
-		row.uploadRateLabel = UiFormatters::formatRate(0);
-		row.peersLabel = UiFormatters::formatCount(0);
-		row.seedsLabel = UiFormatters::formatCount(0);
-		row.etaLabel = UiFormatters::formatEta(-1);
-		return row;
-	}
 	return std::nullopt;
 }
 
 std::vector<CategoryDto> TorrentListPresenter::buildCategories()
 {
-	const int previousFilter = categoryFilter_;
-	categoryFilter_ = 0;
-	auto rows = buildUnfilteredRows();
-	categoryFilter_ = previousFilter;
+	ensurePresentationCurrent();
 
 	const std::array<const char *, 7> labels = {
 		"All Torrents", "Downloading", "Seeding", "Completed", "Paused", "Active", "Inactive"};
@@ -322,15 +311,7 @@ std::vector<CategoryDto> TorrentListPresenter::buildCategories()
 	categories.reserve(labels.size());
 	for (int id = 0; id < static_cast<int>(labels.size()); ++id)
 	{
-		CategoryDto category{id, labels[static_cast<std::size_t>(id)], 0};
-		for (const auto &row : rows)
-		{
-			const int savedFilter = categoryFilter_;
-			categoryFilter_ = id;
-			if (matchesCategory(row))
-				++category.count;
-			categoryFilter_ = savedFilter;
-		}
+		CategoryDto category{id, labels[static_cast<std::size_t>(id)], presentation_.categoryCounts[static_cast<std::size_t>(id)]};
 		categories.push_back(std::move(category));
 	}
 	return categories;
@@ -338,13 +319,10 @@ std::vector<CategoryDto> TorrentListPresenter::buildCategories()
 
 std::optional<lt::info_hash_t> TorrentListPresenter::hashForId(const std::string &id) const
 {
-	ensureRegistryCurrent();
+	ensurePresentationCurrent();
 	const auto found = hashesById_.find(id);
 	if (found != hashesById_.end())
 		return found->second;
-	for (const auto &torrent : torrentManager.getTorrentSnapshot())
-		if (torrent.handle.is_valid() && matchesTorrentId(torrent.hash, id))
-			return torrent.hash;
 	return std::nullopt;
 }
 

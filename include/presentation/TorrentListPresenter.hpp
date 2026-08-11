@@ -6,7 +6,8 @@
 #include "presentation/TorrentAvailability.hpp"
 
 #include <optional>
-#include <limits>
+#include <array>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -48,11 +49,20 @@ public:
 	Result removeTorrent(const std::string &id, TorrentRemovalMode mode);
 	std::optional<lt::info_hash_t> hashForId(const std::string &id) const;
 	TorrentAvailabilityInfo availabilityForId(const std::string &id);
-	std::size_t registrySize() const { ensureRegistryCurrent(); return hashesById_.size(); }
+	std::size_t registrySize() const { ensurePresentationCurrent(); return hashesById_.size(); }
 	std::uint64_t collectionRevision() const { return torrentManager.getTorrentCollectionRevision(); }
 	static std::string idForHash(const lt::info_hash_t &hash);
 
 private:
+	struct PresentationSnapshot
+	{
+		std::uint64_t collectionRevision = 0;
+		std::uint64_t statusRevision = 0;
+		std::vector<TorrentRowDto> allRows;
+		std::unordered_map<std::string, lt::info_hash_t> hashesById;
+		std::array<int, 7> categoryCounts{};
+	};
+
 	TorrentManager &torrentManager;
 	int categoryFilter_ = 0;
 	TorrentSortField sortField_ = TorrentSortField::Queue;
@@ -60,10 +70,12 @@ private:
 	std::string textFilter_;
 	std::string selectedId_;
 	mutable std::unordered_map<std::string, lt::info_hash_t> hashesById_;
-	mutable std::uint64_t registryRevision_ = std::numeric_limits<std::uint64_t>::max();
+	mutable PresentationSnapshot presentation_;
+	mutable bool presentationValid_ = false;
 
-	std::vector<TorrentRowDto> buildUnfilteredRows();
-	void ensureRegistryCurrent() const;
+	const std::vector<TorrentRowDto> &buildUnfilteredRows();
+	void ensurePresentationCurrent() const;
+	static bool matchesCategory(const TorrentRowDto &row, int filter);
 	bool matchesCategory(const TorrentRowDto &row) const;
 	bool matchesTextFilter(const TorrentRowDto &row) const;
 };

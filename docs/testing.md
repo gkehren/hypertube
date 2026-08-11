@@ -50,6 +50,23 @@ scheduled cycle within the stability timeout. GPU presentation timing remains
 backend-owned and is not inferred from Slint's software-only snapshot API.
 The reports are measurements, not an automatic renderer-selection policy.
 
+## Torrent presentation benchmark
+
+The cached torrent presenter has a small opt-in workload for checking rebuild,
+filter, sort, and unchanged-revision paths:
+
+```sh
+cmake --build build --target torrent-presentation-benchmark
+./build/torrent-presentation-benchmark
+```
+
+It prints CSV measurements for 100, 1,000, and 10,000 synthetic rows. The
+numbers are machine- and build-dependent; on the reference Debug build, the
+10,000-row workload measured approximately 16 ms for a full rebuild, 8 ms for
+filtering, and 70 ms for sorting. Treat a sustained result above 50 ms for a
+rebuild, 25 ms for filtering, or 100 ms for sorting as a regression requiring
+investigation. The unchanged-revision path should remain below 1 ms.
+
 ## Visual snapshots
 
 The `slint-visual-snapshots-run` target renders the production shell with mock

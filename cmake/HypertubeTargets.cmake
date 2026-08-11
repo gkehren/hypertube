@@ -50,3 +50,7 @@ target_link_libraries(hypertube_presentation PUBLIC hypertube_torrent hypertube_
 add_library(hypertube_app STATIC ${CMAKE_SOURCE_DIR}/src/app/App.cpp)
 target_include_directories(hypertube_app PUBLIC ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/include/app ${CMAKE_SOURCE_DIR}/include/utils)
 target_link_libraries(hypertube_app PUBLIC hypertube_torrent hypertube_search hypertube_config hypertube_utils CURL::libcurl)
+
+add_executable(torrent-presentation-benchmark EXCLUDE_FROM_ALL
+    ${CMAKE_SOURCE_DIR}/tests/benchmark_torrent_presentation.cpp)
+target_include_directories(torrent-presentation-benchmark PRIVATE ${CMAKE_SOURCE_DIR}/include)
