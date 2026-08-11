@@ -370,4 +370,39 @@ TEST(DurableWriteFailureInjectionTest, ValidatesInjectedFailuresLeaveValidPrimar
 	std::filesystem::remove_all(dir, ec);
 }
 
+TEST(FileUtilsTest, DurableWriteFileRelativePathSucceeds)
+{
+	struct ScopedCwd {
+		std::filesystem::path originalDir;
+		ScopedCwd(const std::filesystem::path &newDir) {
+			originalDir = std::filesystem::current_path();
+			std::filesystem::current_path(newDir);
+		}
+		~ScopedCwd() {
+			std::error_code ec;
+			std::filesystem::current_path(originalDir, ec);
+		}
+	};
+
+	const auto tempDir = std::filesystem::temp_directory_path() / ("hypertube_rel_path_test_" + std::to_string(
+		std::chrono::steady_clock::now().time_since_epoch().count()));
+	std::filesystem::create_directories(tempDir);
+
+	{
+		ScopedCwd scopedCwd(tempDir);
+		std::string errorMessage;
+		const std::string content = "{\"version\": 2}";
+		bool res = Utils::FileUtils::durableWriteFile("settings.json", content, errorMessage);
+		EXPECT_TRUE(res) << "ErrorMessage: " << errorMessage;
+		EXPECT_TRUE(std::filesystem::exists("settings.json"));
+
+		std::ifstream in("settings.json");
+		std::string readContent((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+		EXPECT_EQ(readContent, content);
+	}
+
+	std::error_code ec;
+	std::filesystem::remove_all(tempDir, ec);
+}
+
 } // namespace

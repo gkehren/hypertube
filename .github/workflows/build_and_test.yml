@@ -64,8 +64,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Cache vcpkg binaries
-      uses: actions/cache@v4
+    - name: Restore vcpkg binaries cache
+      id: cache-vcpkg-restore
+      uses: actions/cache/restore@v4
       with:
         path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
         key: vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
@@ -73,9 +74,20 @@ jobs:
           vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt') }}-
           vcpkg-${{ runner.os }}-${{ runner.arch }}-
 
+    - name: Create vcpkg cache directory
+      shell: pwsh
+      run: New-Item -ItemType Directory -Force -Path $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+
     - name: Install dependencies
       shell: pwsh
       run: vcpkg install libtorrent curl nlohmann-json --triplet x64-windows
+
+    - name: Save vcpkg binaries cache
+      uses: actions/cache/save@v4
+      if: steps.cache-vcpkg-restore.outputs.cache-hit != 'true'
+      with:
+        path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+        key: vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
 
     - name: Configure CMake
       shell: pwsh

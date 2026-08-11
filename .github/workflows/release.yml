@@ -55,9 +55,10 @@ jobs:
       if: runner.os == 'macOS'
       run: brew install boost libtorrent-rasterbar curl nlohmann-json ninja pkg-config
 
-    - name: Cache vcpkg binaries (Windows)
+    - name: Restore vcpkg binaries cache (Windows)
       if: runner.os == 'Windows'
-      uses: actions/cache@v4
+      id: cache-vcpkg-restore
+      uses: actions/cache/restore@v4
       with:
         path: ${{ github.workspace }}/.vcpkg-binary-cache
         key: vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
@@ -65,12 +66,24 @@ jobs:
           vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt') }}-
           vcpkg-${{ runner.os }}-${{ runner.arch }}-
 
+    - name: Create vcpkg cache directory (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/.vcpkg-binary-cache" | Out-Null
+
     - name: Install Windows dependencies
       if: runner.os == 'Windows'
       shell: pwsh
       env:
         VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-binary-cache
       run: vcpkg install libtorrent curl nlohmann-json --triplet x64-windows
+
+    - name: Save vcpkg binaries cache (Windows)
+      if: runner.os == 'Windows' && steps.cache-vcpkg-restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ github.workspace }}/.vcpkg-binary-cache
+        key: vcpkg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
 
     - name: Configure CMake (Linux/macOS)
       if: runner.os != 'Windows'

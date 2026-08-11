@@ -178,7 +178,8 @@ namespace Utils {
                 return false;
             }
 
-            if (!fileOps.syncParentDirectory(parent)) {
+            const auto directoryToSync = parent.empty() ? std::filesystem::path(".") : parent;
+            if (!fileOps.syncParentDirectory(directoryToSync)) {
                 errorMessage = "Failed to sync parent directory";
                 return false;
             }

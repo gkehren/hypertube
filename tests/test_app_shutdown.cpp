@@ -11,13 +11,17 @@ namespace {
 
 struct AppShutdownTestFixture {
 	AppShutdownTestFixture() {
+		Utils::AppPaths::resetPortableCache();
 		testDir = std::filesystem::temp_directory_path() / ("hypertube_app_shutdown_test_" + std::to_string(
 			std::chrono::steady_clock::now().time_since_epoch().count()));
 		std::filesystem::create_directories(testDir);
-		Utils::AppPaths::setOverrideExecutableDirectory(testDir);
 		const auto marker = testDir / "portable.mode";
 		std::ofstream(marker) << "";
-		Utils::AppPaths::resetPortableCache();
+		Utils::AppPaths::setOverrideExecutableDirectory(testDir);
+
+		EXPECT_TRUE(Utils::AppPaths::isPortable());
+		EXPECT_EQ(Utils::AppPaths::configDirectory(), testDir / "config");
+		EXPECT_EQ(Utils::AppPaths::dataDirectory(), testDir / "data");
 	}
 	~AppShutdownTestFixture() {
 		Utils::AppPaths::resetPortableCache();
@@ -34,13 +38,17 @@ TEST(AppShutdownTest, CleanShutdownIsIdempotent)
 	Result res = app.initialize();
 	ASSERT_TRUE(res);
 
-	// First shutdown call
+	// First shutdown call - performs persistence
 	app.shutdown();
+	const auto torrentsJson = fixture.testDir / "config" / "torrents.json";
+	ASSERT_TRUE(std::filesystem::exists(torrentsJson));
+	const auto firstWriteTime = std::filesystem::last_write_time(torrentsJson);
 
-	// Second shutdown call must be harmless and idempotent
+	// Second and third shutdown calls must be harmless and idempotent
 	app.shutdown();
 	app.shutdown();
-	SUCCEED();
+	const auto thirdWriteTime = std::filesystem::last_write_time(torrentsJson);
+	EXPECT_EQ(firstWriteTime, thirdWriteTime);
 }
 
 TEST(AppShutdownTest, ShutdownWithPendingPreferencesAndUiStateSave)
