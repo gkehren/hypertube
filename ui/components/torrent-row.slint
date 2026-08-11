@@ -20,6 +20,8 @@ export component TorrentTableRow inherits Rectangle {
 	callback remove(string);
 	callback copy-magnet(string);
 	height: root.narrow ? 88px : 48px;
+	accessible-role: list-item;
+	accessible-label: root.torrent.name + ", " + root.torrent.state-label + ", " + root.torrent.progress-label;
 	background: root.selected || root.hovered ? ThemeTokens.surface-hover : ThemeTokens.surface;
 	border-width: root.selected ? 2px : 1px;
 	border-color: root.selected ? ThemeTokens.accent : root.torrent.error ? ThemeTokens.error : ThemeTokens.border;
@@ -41,6 +43,8 @@ export component TorrentTableRow inherits Rectangle {
 				if (!root.compact): Text { text: root.torrent.eta-label; color: ThemeTokens.muted-foreground; width: TorrentTableGeometry.eta-width; wrap: no-wrap; overflow: elide; }
 			}
 			TouchArea {
+				accessible-role: list-item;
+				accessible-label: root.torrent.name + ", " + root.torrent.state-label;
 				clicked => { root.select(root.torrent.id); }
 				changed has-hover => { root.hovered = self.has-hover; }
 			}
@@ -64,6 +68,8 @@ export component TorrentTableRow inherits Rectangle {
 			}
 		}
 		TouchArea {
+			accessible-role: list-item;
+			accessible-label: root.torrent.name + ", " + root.torrent.state-label;
 			width: parent.width - TorrentTableGeometry.actions-width;
 			height: parent.height;
 			clicked => { root.select(root.torrent.id); }

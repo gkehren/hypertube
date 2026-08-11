@@ -83,6 +83,21 @@ generated images as the `slint-visual-snapshots` artifact. The matrix includes
 empty Torrent, Search, Favorites, Logs, and Details models plus a 10,000-row
 torrent model, in addition to long, Unicode, loading, error, v2, and hybrid examples.
 
+## Accessibility smoke matrix
+
+Run the following on each desktop target with the platform screen reader or
+accessibility inspector enabled:
+
+| Surface | Expected behavior |
+| --- | --- |
+| Sidebar, categories, menu, and dialogs | Controls expose names and roles; Tab and Shift+Tab reach every action; Escape closes an open dialog. |
+| Torrent table and search results | Lists expose item counts and labels; Up/Down changes the selected item; Enter/Space activates the focused action. |
+| Details tabs and data lists | Tabs expose the selected tab and lists expose item labels; file, peer, and tracker actions remain keyboard reachable. |
+| Toast overlay | Severity is conveyed by the accessible title/message and visible color; Dismiss and any action button are keyboard reachable. |
+
+The `slint-preview-check` target validates the semantic markup at build time;
+screen-reader announcements and focus order remain target-desktop smoke tests.
+
 ## Test design rules
 
 - Use isolated temporary directories for every persistence test.

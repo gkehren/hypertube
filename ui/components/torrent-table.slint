@@ -16,6 +16,7 @@ export component TorrentTable inherits Rectangle {
 	callback execute(string, UiTorrentCommand);
 	callback remove(string);
 	callback copy-magnet(string);
+	callback navigate(int);
 	private property <bool> compact: root.available-width < 1050px;
 	private property <bool> narrow: root.available-width < 720px;
 	private property <length> progress-width: root.narrow ? 130px : TorrentTableGeometry.progress-width;
@@ -24,6 +25,14 @@ export component TorrentTable inherits Rectangle {
 	min-width: 0px;
 	preferred-width: 0px;
 	focus-scope := FocusScope {
+		KeyBinding {
+			keys: @keys(UpArrow);
+			activated => { root.navigate(-1); }
+		}
+		KeyBinding {
+			keys: @keys(DownArrow);
+			activated => { root.navigate(1); }
+		}
 		key-pressed(event) => {
 			if (event.text == "\n" && root.selected-id != "") {
 				root.execute(root.selected-id, UiTorrentCommand.pause);

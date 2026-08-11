@@ -11,6 +11,8 @@ export component SearchResultListRow inherits Rectangle {
 	callback remove-favorite(string);
 	callback add(string);
 	height: root.width < 720px ? 92px : 62px;
+	accessible-role: list-item;
+	accessible-label: root.result.name + ", " + root.result.category + ", " + root.result.size-label;
 	background: root.selected ? ThemeTokens.surface-hover : ThemeTokens.surface;
 	border-width: root.selected ? 2px : 1px;
 	border-color: root.selected ? ThemeTokens.accent : ThemeTokens.border;
@@ -22,7 +24,11 @@ export component SearchResultListRow inherits Rectangle {
 				Text { text: root.result.name; color: ThemeTokens.foreground; wrap: no-wrap; overflow: elide; }
 				Text { text: root.result.size-label + "  •  S " + root.result.seeders-label + " / L " + root.result.leechers-label + "  •  " + root.result.category + "  •  " + root.result.published-label; color: ThemeTokens.muted-foreground; wrap: no-wrap; overflow: elide; }
 			}
-			TouchArea { clicked => { root.select(root.result.id); } }
+			TouchArea {
+				accessible-role: list-item;
+				accessible-label: root.result.name + ", " + root.result.category;
+				clicked => { root.select(root.result.id); }
+			}
 		}
 		actions-container := Rectangle {
 			width: 152px;

@@ -245,8 +245,10 @@ export component MainWindow inherits Window {
 			background: ThemeTokens.border;
 			TouchArea {
 				property <length> drag-start-width;
-				width: parent.width;
-				height: parent.height;
+								width: parent.width;
+								height: parent.height;
+								accessible-role: slider;
+								accessible-label: "Resize sidebar";
 				pointer-event(event) => {
 					if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down)
 					{
@@ -380,8 +382,9 @@ export component MainWindow inherits Window {
 				rows: root.torrent-rows;
 				selected-id: root.selected-torrent-id;
 				empty-message: root.startup-state == "Ready" ? "No torrents yet" : root.startup-state;
-				select(id) => { root.select-torrent(id); }
-				sort(value) => { root.sort-torrents(value); }
+							select(id) => { root.select-torrent(id); }
+							navigate(direction) => { root.navigate-torrent(direction); }
+							sort(value) => { root.sort-torrents(value); }
 				execute(id, command) => { root.execute-torrent-command(id, command); }
 				remove(id) => { root.remove-torrent(id); }
 				copy-magnet(id) => { root.copy-magnet(id); }

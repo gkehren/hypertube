@@ -15,7 +15,11 @@ export component HtButton inherits Rectangle {
 }
 
 export component HtIconButton inherits HtButton { min-width: 36px; width: 36px; }
-export component HtTabButton inherits HtButton { min-width: 86px; }
+export component HtTabButton inherits HtButton {
+	min-width: 86px;
+	accessible-role: tab;
+	accessible-label: root.text;
+}
 
 export component HtToggle inherits CheckBox {
 	in-out property <bool> active <=> self.checked;
