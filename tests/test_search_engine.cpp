@@ -440,6 +440,17 @@ TEST_F(SearchEngineTest, ValidatesPreferencesWithoutMutatingRuntimeState) {
 	EXPECT_TRUE(SearchEngine::validateProxyConfig(false, "socks5", "", 1080).success);
 }
 
+TEST_F(SearchEngineTest, ValidatesConnectionTestInputsBeforeNetworkAccess) {
+	Result invalidUrl = engine.testTorznabConnection("localhost:9117/api", "", false, "socks5", "", 1080, "", "");
+	EXPECT_FALSE(invalidUrl);
+	EXPECT_EQ(invalidUrl.code, ResultCode::InvalidInput);
+
+	Result invalidProxy = engine.testTorznabConnection(
+		"https://localhost:9117/api", "", true, "http", "", 8080, "", "");
+	EXPECT_FALSE(invalidProxy);
+	EXPECT_EQ(invalidProxy.code, ResultCode::InvalidInput);
+}
+
 TEST_F(SearchEngineTest, TorznabXmlParsesCdataAndCustomNamespaces) {
 	const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
 	<rss version="2.0" xmlns:t="http://torznab.com/schemas/2015/feed">

@@ -16,19 +16,6 @@
 
 namespace
 {
-Result parseSpeedLimit(const std::string &value, int &output)
-{
-	if (value.empty())
-		return Result::Failure("A speed limit is required; use 0 for unlimited", ResultCode::InvalidInput);
-	long long parsed = 0;
-	const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), parsed);
-	if (error != std::errc{} || end != value.data() + value.size() || parsed < 0
-		|| parsed > std::numeric_limits<int>::max())
-		return Result::Failure("Speed limits must be whole numbers between 0 and 2147483647", ResultCode::InvalidInput);
-	output = static_cast<int>(parsed);
-	return Result::Success();
-}
-
 Result parseProxyPort(const std::string &value, int &output)
 {
 	long long parsed = 0;
@@ -412,9 +399,9 @@ void DetailsUiController::setSpeedLimits(const std::string &downloadLimit, const
 {
 	int download = 0;
 	int upload = 0;
-	Result result = parseSpeedLimit(downloadLimit, download);
+	Result result = Presentation::UiFormatters::parseSpeedLimit(downloadLimit, download);
 	if (result)
-		result = parseSpeedLimit(uploadLimit, upload);
+		result = Presentation::UiFormatters::parseSpeedLimit(uploadLimit, upload);
 	if (result)
 		result = presenter_.setSpeedLimits(download, upload);
 	notify(result ? Presentation::NotificationSeverity::Success : Presentation::NotificationSeverity::Error,
@@ -465,32 +452,63 @@ void PreferencesUiController::resizeLayout(int sidebarWidth, int bottomPanelHeig
 	uiState_.request(state);
 }
 
-void PreferencesUiController::apply()
+void PreferencesUiController::clearValidationErrors()
+{
+	window_.set_preference_download_error(slint::SharedString());
+	window_.set_preference_upload_error(slint::SharedString());
+	window_.set_preference_torznab_url_error(slint::SharedString());
+	window_.set_preference_proxy_type_error(slint::SharedString());
+	window_.set_preference_proxy_host_error(slint::SharedString());
+	window_.set_preference_proxy_port_error(slint::SharedString());
+}
+
+void PreferencesUiController::setValidationError(const char *field, const std::string &message)
+{
+	const auto text = SlintUi::toSharedString(message);
+	const std::string fieldName(field);
+	if (fieldName == "download")
+		window_.set_preference_download_error(text);
+	else if (fieldName == "upload")
+		window_.set_preference_upload_error(text);
+	else if (fieldName == "torznab-url")
+		window_.set_preference_torznab_url_error(text);
+	else if (fieldName == "proxy-type")
+		window_.set_preference_proxy_type_error(text);
+	else if (fieldName == "proxy-host")
+		window_.set_preference_proxy_host_error(text);
+	else if (fieldName == "proxy-port")
+		window_.set_preference_proxy_port_error(text);
+}
+
+bool PreferencesUiController::collectPreferences(PreferencesSettings &preferences,
+	std::optional<std::string> &torznabSecret, std::optional<std::string> &proxySecret)
 {
 	const auto stringProperty = [](const slint::SharedString &value)
 	{
 		return std::string(value.begin(), value.end());
 	};
 
+	clearValidationErrors();
+	preferences = preferences_.current();
 	int downloadLimit = 0;
 	int uploadLimit = 0;
-	int proxyPort = preferences_.current().proxyPort;
-	Result result = parseSpeedLimit(stringProperty(window_.get_preference_download_limit()), downloadLimit);
-	if (result)
-		result = parseSpeedLimit(stringProperty(window_.get_preference_upload_limit()), uploadLimit);
-	if (result)
-	{
-		const std::string proxyPortText = stringProperty(window_.get_preference_proxy_port());
-		if (!proxyPortText.empty())
-			result = parseProxyPort(proxyPortText, proxyPort);
-	}
+	Result result = Presentation::UiFormatters::parseSpeedLimit(
+		stringProperty(window_.get_preference_download_limit()), downloadLimit);
 	if (!result)
 	{
+		setValidationError("download", result.message);
 		window_.set_preferences_state_message(SlintUi::toSharedString(result.message));
-		return;
+		return false;
+	}
+	result = Presentation::UiFormatters::parseSpeedLimit(
+		stringProperty(window_.get_preference_upload_limit()), uploadLimit);
+	if (!result)
+	{
+		setValidationError("upload", result.message);
+		window_.set_preferences_state_message(SlintUi::toSharedString(result.message));
+		return false;
 	}
 
-	auto preferences = preferences_.current();
 	preferences.downloadSpeedLimit = downloadLimit;
 	preferences.uploadSpeedLimit = uploadLimit;
 	preferences.downloadPath = stringProperty(window_.get_preference_download_path());
@@ -502,19 +520,68 @@ void PreferencesUiController::apply()
 	preferences.proxyEnabled = window_.get_preference_proxy_enabled();
 	preferences.proxyType = stringProperty(window_.get_preference_proxy_type());
 	preferences.proxyHost = stringProperty(window_.get_preference_proxy_host());
-	preferences.proxyPort = proxyPort;
 	preferences.proxyUsername = stringProperty(window_.get_preference_proxy_username());
-	const auto torznabSecret = window_.get_preference_clear_torznab_secret()
-		? std::optional<std::string>("") : std::nullopt;
-	const auto proxySecret = window_.get_preference_clear_proxy_secret()
-		? std::optional<std::string>("") : std::nullopt;
-	const std::string torznabInput = stringProperty(window_.get_preference_torznab_secret());
-	const std::string proxyInput = stringProperty(window_.get_preference_proxy_secret());
-	const std::optional<std::string> torznabValue = torznabSecret ? torznabSecret
+
+	if (preferences.torznabEnabled)
+	{
+		result = SearchEngine::validateTorznabConfig(preferences.torznabUrl);
+		if (!result)
+		{
+			setValidationError("torznab-url", result.message);
+			window_.set_preferences_state_message(SlintUi::toSharedString(result.message));
+			return false;
+		}
+	}
+
+	const std::string proxyPortText = stringProperty(window_.get_preference_proxy_port());
+	if (preferences.proxyEnabled)
+	{
+		if (proxyPortText.empty())
+		{
+			const std::string message = "Proxy port is required when the proxy is enabled";
+			setValidationError("proxy-port", message);
+			window_.set_preferences_state_message(SlintUi::toSharedString(message));
+			return false;
+		}
+		result = parseProxyPort(proxyPortText, preferences.proxyPort);
+		if (!result)
+		{
+			setValidationError("proxy-port", result.message);
+			window_.set_preferences_state_message(SlintUi::toSharedString(result.message));
+			return false;
+		}
+		result = SearchEngine::validateProxyConfig(true, preferences.proxyType, preferences.proxyHost,
+			preferences.proxyPort);
+		if (!result)
+		{
+			const char *field = result.message.find("type") != std::string::npos ? "proxy-type"
+				: result.message.find("host") != std::string::npos ? "proxy-host" : "proxy-port";
+			setValidationError(field, result.message);
+			window_.set_preferences_state_message(SlintUi::toSharedString(result.message));
+			return false;
+		}
+	}
+
+	const auto torznabInput = stringProperty(window_.get_preference_torznab_secret());
+	const auto proxyInput = stringProperty(window_.get_preference_proxy_secret());
+	torznabSecret = window_.get_preference_clear_torznab_secret()
+		? std::optional<std::string>("")
 		: (torznabInput.empty() ? std::nullopt : std::optional<std::string>(torznabInput));
-	const std::optional<std::string> proxyValue = proxySecret ? proxySecret
+	proxySecret = window_.get_preference_clear_proxy_secret()
+		? std::optional<std::string>("")
 		: (proxyInput.empty() ? std::nullopt : std::optional<std::string>(proxyInput));
-	result = preferences_.beginSave(preferences, torznabValue, proxyValue);
+	return true;
+}
+
+void PreferencesUiController::apply()
+{
+	PreferencesSettings preferences;
+	std::optional<std::string> torznabValue;
+	std::optional<std::string> proxyValue;
+	if (!collectPreferences(preferences, torznabValue, proxyValue))
+		return;
+
+	const Result result = preferences_.beginSave(preferences, torznabValue, proxyValue);
 	window_.set_preferences_state_message(SlintUi::toSharedString(result
 		? "Saving preferences..." : result.message));
 	if (result)
@@ -523,6 +590,32 @@ void PreferencesUiController::apply()
 		window_.set_preference_clear_proxy_secret(false);
 		window_.set_preference_torznab_secret(slint::SharedString());
 		window_.set_preference_proxy_secret(slint::SharedString());
+	}
+}
+
+void PreferencesUiController::testConnection()
+{
+	if (preferences_.isConnectionTestRunning())
+		return;
+
+	PreferencesSettings preferences;
+	std::optional<std::string> torznabValue;
+	std::optional<std::string> proxyValue;
+	if (!collectPreferences(preferences, torznabValue, proxyValue))
+		return;
+	const Result result = preferences_.beginConnectionTest(preferences, torznabValue, proxyValue);
+	window_.set_preference_test_running(static_cast<bool>(result));
+	window_.set_preferences_state_message(SlintUi::toSharedString(result
+		? "Testing Torznab connection..." : result.message));
+}
+
+void PreferencesUiController::pollConnectionTest()
+{
+	if (const auto result = preferences_.pollConnectionTest())
+	{
+		window_.set_preference_test_running(false);
+		window_.set_preferences_state_message(SlintUi::toSharedString(result->success
+			? "Torznab connection succeeded" : result->message));
 	}
 }
 

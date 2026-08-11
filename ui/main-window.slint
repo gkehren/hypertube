@@ -56,6 +56,7 @@ export component MainWindow inherits Window {
 	callback toggle-sidebar();
 	callback browse-preference-directory();
 	callback apply-preferences();
+	callback test-preferences-connection();
 	callback resize-layout(int, int);
 	callback navigate-torrent(int);
 	callback focus-search();
@@ -125,20 +126,27 @@ export component MainWindow inherits Window {
 	in property <bool> system-dark: true;
 	in property <string> preferences-state-message;
 	in property <bool> preferences-saving: false;
+	in property <bool> preference-test-running: false;
 	in-out property <string> preference-download-limit;
 	in-out property <string> preference-upload-limit;
+	in property <string> preference-download-error;
+	in property <string> preference-upload-error;
 	in-out property <string> preference-download-path;
 	in-out property <bool> preference-enable-dht: true;
 	in-out property <bool> preference-enable-upnp: true;
 	in-out property <bool> preference-enable-natpmp: true;
 	in-out property <bool> preference-torznab-enabled: false;
 	in-out property <string> preference-torznab-url;
+	in property <string> preference-torznab-url-error;
 	in property <bool> preference-torznab-secret-stored: false;
 	in-out property <string> preference-torznab-secret;
 	in-out property <bool> preference-proxy-enabled: false;
 	in-out property <string> preference-proxy-type: "socks5";
+	in property <string> preference-proxy-type-error;
 	in-out property <string> preference-proxy-host;
+	in property <string> preference-proxy-host-error;
 	in-out property <string> preference-proxy-port;
+	in property <string> preference-proxy-port-error;
 	in-out property <string> preference-proxy-username;
 	in property <bool> preference-proxy-secret-stored: false;
 	in-out property <string> preference-proxy-secret;
@@ -315,20 +323,27 @@ export component MainWindow inherits Window {
 			sidebar-collapsed: root.sidebar-collapsed;
 			state-message: root.preferences-state-message;
 			saving: root.preferences-saving;
+			test-running: root.preference-test-running;
 			download-limit <=> root.preference-download-limit;
 			upload-limit <=> root.preference-upload-limit;
+			download-error: root.preference-download-error;
+			upload-error: root.preference-upload-error;
 			download-path <=> root.preference-download-path;
 			enable-dht <=> root.preference-enable-dht;
 			enable-upnp <=> root.preference-enable-upnp;
 			enable-natpmp <=> root.preference-enable-natpmp;
 			torznab-enabled <=> root.preference-torznab-enabled;
 			torznab-url <=> root.preference-torznab-url;
+			torznab-url-error: root.preference-torznab-url-error;
 			torznab-secret-stored: root.preference-torznab-secret-stored;
 			torznab-secret <=> root.preference-torznab-secret;
 			proxy-enabled <=> root.preference-proxy-enabled;
 			proxy-type <=> root.preference-proxy-type;
+			proxy-type-error: root.preference-proxy-type-error;
 			proxy-host <=> root.preference-proxy-host;
+			proxy-host-error: root.preference-proxy-host-error;
 			proxy-port <=> root.preference-proxy-port;
+			proxy-port-error: root.preference-proxy-port-error;
 			proxy-username <=> root.preference-proxy-username;
 			proxy-secret-stored: root.preference-proxy-secret-stored;
 			proxy-secret <=> root.preference-proxy-secret;
@@ -336,6 +351,7 @@ export component MainWindow inherits Window {
 			toggle-sidebar => { root.toggle-sidebar(); }
 			browse-download-directory => { root.browse-preference-directory(); }
 			apply-preferences => { root.apply-preferences(); }
+			test-connection => { root.test-preferences-connection(); }
 			clear-torznab-secret => { root.clear-torznab-secret(); }
 			clear-proxy-secret => { root.clear-proxy-secret(); }
 		}

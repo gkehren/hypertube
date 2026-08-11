@@ -89,6 +89,28 @@ TEST(PreferencesControllerTest, UiStateSaveSkipsInvalidNetworkValidation)
 	EXPECT_EQ(configManager.getPreferencesSettings().ui.sidebarWidth, settings.ui.sidebarWidth);
 }
 
+TEST(PreferencesControllerTest, ConnectionTestRejectsInvalidCandidateWithoutSaving)
+{
+	TempDirectory temp;
+	std::map<std::string, std::string> secrets;
+	TorrentManager torrentManager;
+	SearchEngine searchEngine;
+	ConfigManager configManager;
+	const PreferencesSettings before = configManager.getPreferencesSettings();
+	PreferencesSettings candidate = before;
+	candidate.torznabEnabled = true;
+	candidate.torznabUrl = "localhost:9117/api";
+
+	Presentation::PreferencesController controller(torrentManager, searchEngine, configManager,
+		{}, fakeStore(secrets), (temp.path / "settings.json").string());
+	const Result result = controller.beginConnectionTest(candidate);
+	EXPECT_FALSE(result);
+	EXPECT_EQ(result.code, ResultCode::InvalidInput);
+	EXPECT_FALSE(controller.isConnectionTestRunning());
+	EXPECT_EQ(configManager.getPreferencesSettings().torznabEnabled, before.torznabEnabled);
+	EXPECT_EQ(configManager.getPreferencesSettings().torznabUrl, before.torznabUrl);
+}
+
 TEST(PreferencesControllerTest, PreservesReplacesAndExplicitlyClearsSecrets)
 {
 	TempDirectory temp;

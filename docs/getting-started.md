@@ -50,7 +50,9 @@ save-path flow before the torrent is added.
 Preferences can switch search to a local Jackett/Prowlarr Torznab endpoint or
 route search and BitTorrent traffic through an HTTP or SOCKS5 proxy. Secrets
 are stored in the operating-system credential store and are never displayed in
-plain text.
+plain text. Speed limits accept `B/s`, `KiB/s`, `MiB/s`, or `GiB/s`; use the
+Preferences **Test connection** action to check the Torznab endpoint and proxy
+before applying a configuration.
 
 ## Portable mode
 

@@ -39,11 +39,17 @@ public:
 
 	PreferencesSettings current() const;
 	bool isSaving() const { return pendingSave_.has_value() || pendingCredentialRollback_.has_value(); }
+	bool isConnectionTestRunning() const { return pendingConnectionTest_.has_value(); }
 	SaveKind saveKind() const { return pendingSave_ ? pendingSaveKind_ : SaveKind::None; }
 	SaveKind lastCompletedSaveKind() const { return lastCompletedSaveKind_; }
 	Result beginSave(const PreferencesSettings &settings,
 		std::optional<std::string> torznabApiKey = std::nullopt,
 		std::optional<std::string> proxyPassword = std::nullopt);
+	Result beginConnectionTest(const PreferencesSettings &settings,
+		std::optional<std::string> torznabApiKey = std::nullopt,
+		std::optional<std::string> proxyPassword = std::nullopt);
+	std::optional<Result> pollConnectionTest();
+	Result waitForConnectionTest();
 	// UI-only saves deliberately skip network validation and credential access.
 	// If a network transaction is already in flight, the newest UI snapshot is
 	// queued and committed immediately after it completes.
@@ -60,6 +66,7 @@ private:
 	CredentialStoreOps credentialStore;
 	std::string settingsPath_;
 	std::optional<SaveHandle> pendingSave_;
+	std::optional<std::future<Result>> pendingConnectionTest_;
 	std::optional<std::shared_future<Result>> pendingCredentialRollback_;
 	SaveKind pendingSaveKind_ = SaveKind::None;
 	SaveKind lastCompletedSaveKind_ = SaveKind::None;

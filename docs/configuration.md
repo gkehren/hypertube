@@ -77,6 +77,12 @@ The current settings schema is version 2. Version 1 files are migrated by adding
 
 Torznab API keys and proxy passwords are not stored in this file. Preferences writes them to Windows Credential Manager, macOS Keychain, or Linux Secret Service. Linux needs the `secret-tool` command and an unlocked keyring. `HYPERTUBE_TORZNAB_API_KEY` remains a startup-only fallback when no stored Torznab key exists.
 
+The Preferences view accepts speed limits as raw `B/s` values or binary units
+(`KiB/s`, `MiB/s`, and `GiB/s`); `0` means unlimited. Torznab and proxy fields
+are validated before saving. The **Test connection** action requests the
+Torznab capabilities endpoint using the current form values and stored secrets,
+including the current proxy settings, without committing those values.
+
 Older unversioned configurations are treated as version 0 and migrated to the current structure. Missing defaults are filled by `ConfigManager`; invalid values do not replace a valid backup candidate with defaults without first attempting recovery.
 
 ## `torrents.json`

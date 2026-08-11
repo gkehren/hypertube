@@ -71,6 +71,30 @@ TEST(UiFormattersTest, FormatsSharedValues)
 	EXPECT_EQ(Presentation::UiFormatters::formatEta(-1), "N/A");
 }
 
+TEST(UiFormattersTest, ParsesAndFormatsBinarySpeedLimits)
+{
+	int bytesPerSecond = 0;
+	EXPECT_TRUE(Presentation::UiFormatters::parseSpeedLimit("2048", bytesPerSecond));
+	EXPECT_EQ(bytesPerSecond, 2048);
+	EXPECT_TRUE(Presentation::UiFormatters::parseSpeedLimit("1.5 MiB/s", bytesPerSecond));
+	EXPECT_EQ(bytesPerSecond, 1572864);
+	EXPECT_TRUE(Presentation::UiFormatters::parseSpeedLimit("1.5 GiB", bytesPerSecond));
+	EXPECT_EQ(bytesPerSecond, 1610612736);
+	EXPECT_EQ(Presentation::UiFormatters::formatSpeedLimit(0), "0");
+	EXPECT_EQ(Presentation::UiFormatters::formatSpeedLimit(1024), "1 KiB/s");
+	EXPECT_EQ(Presentation::UiFormatters::formatSpeedLimit(1572864), "1.5 MiB/s");
+	EXPECT_EQ(Presentation::UiFormatters::formatSpeedLimit(std::numeric_limits<int>::max()), "2147483647 B/s");
+}
+
+TEST(UiFormattersTest, RejectsMalformedAndOverflowingSpeedLimits)
+{
+	int bytesPerSecond = 0;
+	EXPECT_FALSE(Presentation::UiFormatters::parseSpeedLimit("", bytesPerSecond));
+	EXPECT_FALSE(Presentation::UiFormatters::parseSpeedLimit("-1 MiB/s", bytesPerSecond));
+	EXPECT_FALSE(Presentation::UiFormatters::parseSpeedLimit("12 Mbps", bytesPerSecond));
+	EXPECT_FALSE(Presentation::UiFormatters::parseSpeedLimit("2 GiB/s", bytesPerSecond));
+}
+
 TEST(UiFormattersTest, FormatsRatiosAndTimestamps)
 {
 	EXPECT_EQ(Presentation::UiFormatters::formatRatio(10, 4), "2.5");

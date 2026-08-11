@@ -7,6 +7,7 @@
 #include "Logger.hpp"
 #include "SlintString.hpp"
 #include "SystemUtils.hpp"
+#include "presentation/UiFormatters.hpp"
 
 #include <utility>
 
@@ -132,6 +133,9 @@ void SlintAppController::bind()
 		preferencesUiController_->apply();
 		window->set_preferences_saving(preferencesController.isSaving());
 	});
+	window->on_test_preferences_connection([this] {
+		preferencesUiController_->testConnection();
+	});
 	window->on_resize_layout([this](int sidebarWidth, int bottomPanelHeight) {
 		preferencesUiController_->resizeLayout(sidebarWidth, bottomPanelHeight);
 	});
@@ -195,8 +199,10 @@ void SlintAppController::start()
 	window->set_system_dark(Utils::SystemUtils::systemPrefersDarkTheme());
 	window->set_selected_theme(static_cast<Theme>(std::clamp(currentPreferences.theme, 0, 7)));
 	window->set_preferences_state_message(slint::SharedString("Changes are saved transactionally."));
-	window->set_preference_download_limit(SlintUi::toSharedString(std::to_string(currentPreferences.downloadSpeedLimit)));
-	window->set_preference_upload_limit(SlintUi::toSharedString(std::to_string(currentPreferences.uploadSpeedLimit)));
+	window->set_preference_download_limit(SlintUi::toSharedString(
+		Presentation::UiFormatters::formatSpeedLimit(currentPreferences.downloadSpeedLimit)));
+	window->set_preference_upload_limit(SlintUi::toSharedString(
+		Presentation::UiFormatters::formatSpeedLimit(currentPreferences.uploadSpeedLimit)));
 	window->set_preference_download_path(SlintUi::toSharedString(currentPreferences.downloadPath));
 	window->set_preference_enable_dht(currentPreferences.enableDht);
 	window->set_preference_enable_upnp(currentPreferences.enableUpnp);
@@ -214,6 +220,13 @@ void SlintAppController::start()
 	window->set_preference_proxy_secret(slint::SharedString());
 	window->set_preference_clear_torznab_secret(false);
 	window->set_preference_clear_proxy_secret(false);
+	window->set_preference_test_running(false);
+	window->set_preference_download_error(slint::SharedString());
+	window->set_preference_upload_error(slint::SharedString());
+	window->set_preference_torznab_url_error(slint::SharedString());
+	window->set_preference_proxy_type_error(slint::SharedString());
+	window->set_preference_proxy_host_error(slint::SharedString());
+	window->set_preference_proxy_port_error(slint::SharedString());
 	window->set_selected_details_tab(static_cast<DetailsTab>(selectedDetailsTab_));
 	window->set_add_dialog_open(false);
 	window->set_remove_dialog_open(false);
@@ -247,6 +260,9 @@ Result SlintAppController::stop()
 	started = false;
 
 	Result result = uiStateController.flush();
+	const Result connectionTest = preferencesController.waitForConnectionTest();
+	if (!connectionTest)
+		Utils::Logger::info("search", "Preferences connection test finished during shutdown: " + connectionTest.message);
 	const Result preferences = preferencesController.waitForSave();
 	if (!preferences)
 		result = preferences;
@@ -263,6 +279,7 @@ Result SlintAppController::stop()
 
 void SlintAppController::refresh()
 {
+	preferencesUiController_->pollConnectionTest();
 	window->set_preferences_saving(preferencesController.isSaving());
 	const auto activeTab = window->get_active_tab();
 	searchRefreshCoordinator_->refreshIfNeeded(activeTab);

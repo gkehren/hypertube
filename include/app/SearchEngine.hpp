@@ -83,6 +83,9 @@ public:
 	std::vector<std::string> getSearchProviders() const;
 	Result configureTorznabProvider(const std::string &url, const std::string &apiKey = "");
 	static Result validateTorznabConfig(const std::string &url);
+	Result testTorznabConnection(const std::string &url, const std::string &apiKey,
+		bool proxyEnabled, const std::string &proxyType, const std::string &proxyHost,
+		int proxyPort, const std::string &proxyUsername, const std::string &proxyPassword) const;
 	void clearSearchCache();
 
 	// Async searches publish owned completions for the UI thread to consume.

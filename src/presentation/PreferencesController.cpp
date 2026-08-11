@@ -64,6 +64,7 @@ PreferencesController::PreferencesController(TorrentManager &torrentManager, Sea
 
 PreferencesController::~PreferencesController()
 {
+	waitForConnectionTest();
 	while (isSaving())
 		waitForSave();
 }
@@ -164,6 +165,53 @@ Result PreferencesController::beginSave(const PreferencesSettings &settings,
 	});
 
 	return Result::Success();
+}
+
+Result PreferencesController::beginConnectionTest(const PreferencesSettings &settings,
+	std::optional<std::string> torznabApiKey, std::optional<std::string> proxyPassword)
+{
+	if (pendingConnectionTest_)
+		return Result::Failure("A connection test is already running", ResultCode::Busy, true);
+	if (!settings.torznabEnabled)
+		return Result::Failure("Enable Torznab before testing the connection", ResultCode::InvalidInput);
+	const Result providerValidation = SearchEngine::validateTorznabConfig(settings.torznabUrl);
+	if (!providerValidation)
+		return providerValidation;
+	const std::string proxyType = settings.proxyType.empty() ? "socks5" : settings.proxyType;
+	const Result proxyValidation = SearchEngine::validateProxyConfig(settings.proxyEnabled, proxyType,
+		settings.proxyHost, settings.proxyPort);
+	if (!proxyValidation)
+		return proxyValidation;
+
+	const auto torznabLoad = credentialStore.load("torznab_api_key");
+	const auto proxyLoad = credentialStore.load("proxy_password");
+	const std::string apiKey = torznabApiKey.value_or(torznabLoad.hasSecret() ? torznabLoad.secret : "");
+	const std::string proxySecret = proxyPassword.value_or(proxyLoad.hasSecret() ? proxyLoad.secret : "");
+	SearchEngine *engine = &searchEngine;
+	pendingConnectionTest_ = std::async(std::launch::async,
+		[engine, settings, proxyType, apiKey, proxySecret]() {
+			return engine->testTorznabConnection(settings.torznabUrl, apiKey, settings.proxyEnabled,
+				proxyType, settings.proxyHost, settings.proxyPort, settings.proxyUsername, proxySecret);
+		});
+	return Result::Success();
+}
+
+std::optional<Result> PreferencesController::pollConnectionTest()
+{
+	if (!pendingConnectionTest_ || pendingConnectionTest_->wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+		return std::nullopt;
+	Result result = pendingConnectionTest_->get();
+	pendingConnectionTest_.reset();
+	return result;
+}
+
+Result PreferencesController::waitForConnectionTest()
+{
+	if (!pendingConnectionTest_)
+		return Result::Success();
+	Result result = pendingConnectionTest_->get();
+	pendingConnectionTest_.reset();
+	return result;
 }
 
 Result PreferencesController::beginUiStateSave(const PreferencesSettings &settings)

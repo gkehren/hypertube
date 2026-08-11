@@ -4,6 +4,7 @@ import { Theme } from "enums.slint";
 
 component SectionTitle inherits Text { color: ThemeTokens.foreground; font-size: 18px; }
 component FieldLabel inherits Text { color: ThemeTokens.muted-foreground; width: 180px; vertical-alignment: center; wrap: word-wrap; }
+component FieldError inherits Text { color: ThemeTokens.error; font-size: 12px; wrap: word-wrap; visible: self.text != ""; }
 
 export component PreferencesView inherits Rectangle {
 	in property <Theme> selected-theme: Theme.dark;
@@ -27,10 +28,18 @@ export component PreferencesView inherits Rectangle {
 	in property <bool> proxy-secret-stored: false;
 	in-out property <string> proxy-secret;
 	in property <bool> saving: false;
+	in property <bool> test-running: false;
+	in property <string> download-error;
+	in property <string> upload-error;
+	in property <string> torznab-url-error;
+	in property <string> proxy-type-error;
+	in property <string> proxy-host-error;
+	in property <string> proxy-port-error;
 	callback change-theme(Theme);
 	callback toggle-sidebar();
 	callback browse-download-directory();
 	callback apply-preferences();
+	callback test-connection();
 	callback clear-torznab-secret();
 	callback clear-proxy-secret();
 
@@ -62,8 +71,10 @@ export component PreferencesView inherits Rectangle {
 					}
 				}
 				SectionTitle { text: "Downloads"; }
-				HorizontalBox { FieldLabel { text: "Download limit (bytes/s, 0 = unlimited)"; } LineEdit { text <=> root.download-limit; placeholder-text: "0"; } }
-				HorizontalBox { FieldLabel { text: "Upload limit (bytes/s, 0 = unlimited)"; } LineEdit { text <=> root.upload-limit; placeholder-text: "0"; } }
+				HorizontalBox { FieldLabel { text: "Download limit (B/s, KiB/s, MiB/s, or GiB/s; 0 = unlimited)"; } LineEdit { text <=> root.download-limit; placeholder-text: "0"; } }
+				FieldError { text: root.download-error; }
+				HorizontalBox { FieldLabel { text: "Upload limit (B/s, KiB/s, MiB/s, or GiB/s; 0 = unlimited)"; } LineEdit { text <=> root.upload-limit; placeholder-text: "0"; } }
+				FieldError { text: root.upload-error; }
 				HorizontalBox { FieldLabel { text: "Default download directory"; } LineEdit { text <=> root.download-path; placeholder-text: "~/Downloads"; } Button { text: "Browse"; width: 70px; clicked => { root.browse-download-directory(); } } }
 				SectionTitle { text: "Network discovery"; }
 				HorizontalBox {
@@ -73,20 +84,25 @@ export component PreferencesView inherits Rectangle {
 				}
 				SectionTitle { text: "Torznab search"; }
 				CheckBox { text: "Enable Torznab"; checked <=> root.torznab-enabled; }
-				HorizontalBox { FieldLabel { text: "Endpoint URL"; } LineEdit { text <=> root.torznab-url; placeholder-text: "http://127.0.0.1:9696/..."; } }
-				HorizontalBox { FieldLabel { text: "API key"; } LineEdit { text <=> root.torznab-secret; input-type: password; placeholder-text: root.torznab-secret-stored ? "Stored — enter to replace" : "API key"; } Button { text: "Clear stored secret"; enabled: root.torznab-secret-stored; clicked => { root.clear-torznab-secret(); } } }
+				HorizontalBox { FieldLabel { text: "Endpoint URL"; } LineEdit { text <=> root.torznab-url; enabled: root.torznab-enabled; placeholder-text: "http://127.0.0.1:9696/..."; } Button { text: root.test-running ? "Testing…" : "Test connection"; enabled: root.torznab-enabled && !root.test-running; clicked => { root.test-connection(); } } }
+				FieldError { text: root.torznab-url-error; }
+				Text { text: "The test uses the current fields and stored secrets without saving them."; color: ThemeTokens.muted-foreground; wrap: word-wrap; visible: root.torznab-enabled; }
+				HorizontalBox { FieldLabel { text: "API key"; } LineEdit { text <=> root.torznab-secret; enabled: root.torznab-enabled; input-type: password; placeholder-text: root.torznab-secret-stored ? "Stored — enter to replace" : "API key"; } Button { text: "Clear stored secret"; enabled: root.torznab-enabled && root.torznab-secret-stored; clicked => { root.clear-torznab-secret(); } } }
 				Text { text: root.torznab-secret-stored ? "A Torznab secret is stored securely." : "No Torznab secret is stored."; color: ThemeTokens.muted-foreground; }
 				SectionTitle { text: "Proxy"; }
 				CheckBox { text: "Enable proxy"; checked <=> root.proxy-enabled; }
 				HorizontalBox {
 					FieldLabel { text: "Proxy type"; }
-					Rectangle { height: 38px; width: 100px; border-width: root.proxy-type == "socks5" ? 2px : 1px; border-color: root.proxy-type == "socks5" ? ThemeTokens.accent : ThemeTokens.border; Button { text: "SOCKS5"; clicked => { root.proxy-type = "socks5"; } } }
-					Rectangle { height: 38px; width: 100px; border-width: root.proxy-type == "http" ? 2px : 1px; border-color: root.proxy-type == "http" ? ThemeTokens.accent : ThemeTokens.border; Button { text: "HTTP"; clicked => { root.proxy-type = "http"; } } }
+					Rectangle { height: 38px; width: 100px; border-width: root.proxy-type == "socks5" ? 2px : 1px; border-color: root.proxy-type == "socks5" ? ThemeTokens.accent : ThemeTokens.border; Button { text: "SOCKS5"; enabled: root.proxy-enabled; clicked => { root.proxy-type = "socks5"; } } }
+					Rectangle { height: 38px; width: 100px; border-width: root.proxy-type == "http" ? 2px : 1px; border-color: root.proxy-type == "http" ? ThemeTokens.accent : ThemeTokens.border; Button { text: "HTTP"; enabled: root.proxy-enabled; clicked => { root.proxy-type = "http"; } } }
 				}
-				HorizontalBox { FieldLabel { text: "Host"; } LineEdit { text <=> root.proxy-host; placeholder-text: "127.0.0.1"; } }
-				HorizontalBox { FieldLabel { text: "Port"; } LineEdit { text <=> root.proxy-port; placeholder-text: "1080"; } }
-				HorizontalBox { FieldLabel { text: "Username"; } LineEdit { text <=> root.proxy-username; } }
-				HorizontalBox { FieldLabel { text: "Password"; } LineEdit { text <=> root.proxy-secret; input-type: password; placeholder-text: root.proxy-secret-stored ? "Stored — enter to replace" : "Proxy password"; } Button { text: "Clear stored secret"; enabled: root.proxy-secret-stored; clicked => { root.clear-proxy-secret(); } } }
+				FieldError { text: root.proxy-type-error; }
+				HorizontalBox { FieldLabel { text: "Host"; } LineEdit { text <=> root.proxy-host; enabled: root.proxy-enabled; placeholder-text: "127.0.0.1"; } }
+				FieldError { text: root.proxy-host-error; }
+				HorizontalBox { FieldLabel { text: "Port"; } LineEdit { text <=> root.proxy-port; enabled: root.proxy-enabled; placeholder-text: "1080"; } }
+				FieldError { text: root.proxy-port-error; }
+				HorizontalBox { FieldLabel { text: "Username"; } LineEdit { text <=> root.proxy-username; enabled: root.proxy-enabled; } }
+				HorizontalBox { FieldLabel { text: "Password"; } LineEdit { text <=> root.proxy-secret; enabled: root.proxy-enabled; input-type: password; placeholder-text: root.proxy-secret-stored ? "Stored — enter to replace" : "Proxy password"; } Button { text: "Clear stored secret"; enabled: root.proxy-enabled && root.proxy-secret-stored; clicked => { root.clear-proxy-secret(); } } }
 				Text { text: root.proxy-secret-stored ? "A proxy secret is stored securely." : "No proxy secret is stored."; color: ThemeTokens.muted-foreground; }
 			}
 		}

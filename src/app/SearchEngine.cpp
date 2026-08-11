@@ -378,6 +378,80 @@ Result SearchEngine::validateTorznabConfig(const std::string &url)
 	return Result::Success();
 }
 
+Result SearchEngine::testTorznabConnection(const std::string &url, const std::string &apiKey,
+	bool useProxy, const std::string &configuredProxyType, const std::string &configuredProxyHost,
+	int configuredProxyPort, const std::string &configuredProxyUsername,
+	const std::string &configuredProxyPassword) const
+{
+	const Result providerValidation = validateTorznabConfig(url);
+	if (!providerValidation)
+		return providerValidation;
+	const Result proxyValidation = validateProxyConfig(useProxy, configuredProxyType, configuredProxyHost,
+		configuredProxyPort);
+	if (!proxyValidation)
+		return proxyValidation;
+
+	int timeout = 30;
+	{
+		std::lock_guard<std::mutex> lock(settingsMutex);
+		timeout = timeoutSeconds;
+	}
+
+	std::string endpoint = url;
+	while (!endpoint.empty() && endpoint.back() == '/')
+		endpoint.pop_back();
+	std::string requestUrl = endpoint + (endpoint.find('?') == std::string::npos ? "?" : "&") + "t=caps";
+	if (!apiKey.empty())
+		requestUrl += "&apikey=" + Utils::urlEncode(apiKey);
+
+	CURL *curl = curl_easy_init();
+	if (!curl)
+		return Result::Failure("Failed to initialize cURL");
+	std::string response;
+	long responseCode = 0;
+	CURLcode result = CURLE_OK;
+	curl_easy_setopt(curl, CURLOPT_URL, requestUrl.c_str());
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout));
+	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, static_cast<long>(std::min(timeout, 10)));
+	curl_easy_setopt(curl, CURLOPT_USERAGENT, "Hypertube/1.0");
+	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+	curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "http,https");
+	curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
+	if (useProxy)
+	{
+		curl_easy_setopt(curl, CURLOPT_PROXY, configuredProxyHost.c_str());
+		curl_easy_setopt(curl, CURLOPT_PROXYPORT, static_cast<long>(configuredProxyPort));
+		curl_easy_setopt(curl, CURLOPT_PROXYTYPE,
+			configuredProxyType == "http" ? CURLPROXY_HTTP : CURLPROXY_SOCKS5_HOSTNAME);
+		if (!configuredProxyUsername.empty())
+		{
+			curl_easy_setopt(curl, CURLOPT_PROXYUSERNAME, configuredProxyUsername.c_str());
+			curl_easy_setopt(curl, CURLOPT_PROXYPASSWORD, configuredProxyPassword.c_str());
+		}
+	}
+	result = curl_easy_perform(curl);
+	if (result == CURLE_OK)
+		curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
+	curl_easy_cleanup(curl);
+
+	if (result != CURLE_OK)
+		return Result::Failure("Connection test failed: " + std::string(curl_easy_strerror(result)),
+			ResultCode::Network, true);
+	if (responseCode == 401 || responseCode == 403)
+		return Result::Failure("Connection test received HTTP " + std::to_string(responseCode),
+			ResultCode::Unauthorized);
+	if (responseCode == 429)
+		return Result::Failure("Connection test received HTTP 429", ResultCode::RateLimited, true);
+	if (responseCode < 200 || responseCode >= 400)
+		return Result::Failure("Connection test received HTTP " + std::to_string(responseCode),
+			ResultCode::Network, responseCode >= 500);
+	return Result::Success();
+}
+
 void SearchEngine::clearSearchCache()
 {
 	std::lock_guard<std::mutex> lock(cacheMutex);

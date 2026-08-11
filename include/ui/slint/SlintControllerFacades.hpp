@@ -12,6 +12,7 @@
 #include "LogModelAdapter.hpp"
 
 #include <functional>
+#include <optional>
 #include <string>
 
 class App;
@@ -112,10 +113,16 @@ public:
 	void toggleSidebar();
 	void resizeLayout(int sidebarWidth, int bottomPanelHeight);
 	void apply();
+	void testConnection();
+	void pollConnectionTest();
 	void clearTorznabSecret();
 	void clearProxySecret();
 
 private:
+	bool collectPreferences(PreferencesSettings &preferences,
+		std::optional<std::string> &torznabSecret, std::optional<std::string> &proxySecret);
+	void clearValidationErrors();
+	void setValidationError(const char *field, const std::string &message);
 	Presentation::PreferencesController &preferences_;
 	Presentation::UiStateController &uiState_;
 	MainWindow &window_;
