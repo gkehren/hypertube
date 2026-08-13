@@ -156,6 +156,34 @@ seed `config/` directory. Generate a ZIP package with:
 cpack --config build-release/CPackConfig.cmake -G ZIP
 ```
 
+## Build architecture
+
+The root `CMakeLists.txt` orchestrates clean modular sub-scripts located in `cmake/`:
+
+- `CompilerOptions.cmake`: Target-based compiler flags, warnings, LTO, native tuning, and sanitizers.
+- `Dependencies.cmake`: Apple prefix paths, `SLINT_STYLE` cache defaults, third-party package lookup (nlohmann_json, libtorrent, cURL, pugixml, Slint), and platform system libraries.
+- `HypertubeTargets.cmake`: Core static libraries (`hypertube_utils`, `hypertube_config`, `hypertube_torrent`, `hypertube_search`, `hypertube_presentation`, `hypertube_app`).
+- `SlintFrontend.cmake`: Production frontend libraries (`hypertube_slint_models`, `hypertube_slint_controller`) and the main executable (`hypertube`).
+- `SlintTools.cmake`: Slint preview compilation target (`slint-preview-check`), snapshot runner, and renderer benchmarks.
+- `Packaging.cmake`: Portable installation rules (`runtime` component) and CPack archive generation.
+
+### Target hierarchy
+
+```text
+hypertube
+  └── hypertube_slint_controller
+        ├── hypertube_app
+        │     ├── hypertube_torrent
+        │     ├── hypertube_search
+        │     ├── hypertube_config
+        │     └── hypertube_presentation
+        │           └── hypertube_utils
+        └── hypertube_slint_models
+              └── hypertube_utils
+```
+
+Test targets link against these modular production libraries (`hypertube_slint_models`, `hypertube_slint_controller`, `hypertube_app`, etc.) to prevent duplicate compilation of frontend source files.
+
 ## Common configure failures
 
 | Symptom | Likely cause | Action |

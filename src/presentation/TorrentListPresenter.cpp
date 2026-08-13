@@ -79,14 +79,18 @@ void TorrentListPresenter::setSelectedId(std::string id)
 {
 	selectedId_ = std::move(id);
 	selectedIds_.clear();
+	selectedIdSet_.clear();
 	if (!selectedId_.empty())
+	{
 		selectedIds_.push_back(selectedId_);
+		selectedIdSet_.insert(selectedId_);
+	}
 	selectionAnchorId_ = selectedId_;
 }
 
 bool TorrentListPresenter::isSelected(const std::string &id) const
 {
-	return std::find(selectedIds_.begin(), selectedIds_.end(), id) != selectedIds_.end();
+	return selectedIdSet_.contains(id);
 }
 
 void TorrentListPresenter::choosePrimaryFromSelection(const std::vector<TorrentRowDto> &visibleRows)
@@ -121,6 +125,8 @@ void TorrentListPresenter::reconcileSelection()
 	{
 		return hashesById_.find(id) == hashesById_.end();
 	}), selectedIds_.end());
+	selectedIdSet_.clear();
+	selectedIdSet_.insert(selectedIds_.begin(), selectedIds_.end());
 	if (selectedIds_.empty())
 	{
 		selectedId_.clear();
@@ -153,8 +159,13 @@ void TorrentListPresenter::selectVisibleId(const std::string &id, bool toggle, b
 			const auto begin = std::min(first, last);
 			const auto end = std::max(first, last);
 			selectedIds_.clear();
+			selectedIdSet_.clear();
 			for (auto index = begin; index <= end; ++index)
-				selectedIds_.push_back(rows[static_cast<std::size_t>(index)].id);
+			{
+				const auto &rowId = rows[static_cast<std::size_t>(index)].id;
+				selectedIds_.push_back(rowId);
+				selectedIdSet_.insert(rowId);
+			}
 			selectedId_ = id;
 			return;
 		}
@@ -164,13 +175,21 @@ void TorrentListPresenter::selectVisibleId(const std::string &id, bool toggle, b
 	{
 		const auto found = std::find(selectedIds_.begin(), selectedIds_.end(), id);
 		if (found == selectedIds_.end())
+		{
 			selectedIds_.push_back(id);
+			selectedIdSet_.insert(id);
+		}
 		else
+		{
 			selectedIds_.erase(found);
+			selectedIdSet_.erase(id);
+		}
 	}
 	else
 	{
 		selectedIds_.assign(1, id);
+		selectedIdSet_.clear();
+		selectedIdSet_.insert(id);
 	}
 	selectedId_ = id;
 	choosePrimaryFromSelection(rows);
@@ -181,9 +200,14 @@ void TorrentListPresenter::selectAllVisible()
 {
 	const auto rows = buildRows();
 	selectedIds_.clear();
+	selectedIdSet_.clear();
 	selectedIds_.reserve(rows.size());
+	selectedIdSet_.reserve(rows.size());
 	for (const auto &row : rows)
+	{
 		selectedIds_.push_back(row.id);
+		selectedIdSet_.insert(row.id);
+	}
 	if (selectedIds_.empty())
 	{
 		selectedId_.clear();
@@ -198,6 +222,7 @@ void TorrentListPresenter::selectAllVisible()
 void TorrentListPresenter::clearSelection()
 {
 	selectedIds_.clear();
+	selectedIdSet_.clear();
 	selectedId_.clear();
 	selectionAnchorId_.clear();
 }
@@ -235,6 +260,8 @@ void TorrentListPresenter::ensurePresentationCurrent() const
 		if (id.empty())
 			continue;
 		next.hashesById.emplace(id, torrent.hash);
+		const auto rowIndex = next.allRows.size();
+		next.indexById.emplace(id, rowIndex);
 		if (!statusCache || statusCache->find(torrent.hash) == statusCache->end())
 		{
 			TorrentRowDto row;
@@ -412,18 +439,13 @@ std::optional<TorrentRowDto> TorrentListPresenter::findRowById(const std::string
 	if (id.empty())
 		return std::nullopt;
 
-	// Resolve selections against the unfiltered source of truth. The visible
-	// model can be filtered, reordered, or intentionally left untouched until
-	// its next status revision without making an existing torrent unavailable.
-	for (const auto &row : buildUnfilteredRows())
-	{
-		if (row.id == id)
-			return row;
-	}
+	ensurePresentationCurrent();
 
-	// Status refreshes are asynchronous. A live magnet may briefly be absent
-	// from the latest status snapshot, but it must remain selectable.
-	return std::nullopt;
+	const auto found = presentation_.indexById.find(id);
+	if (found == presentation_.indexById.end())
+		return std::nullopt;
+
+	return presentation_.allRows[found->second];
 }
 
 std::vector<CategoryDto> TorrentListPresenter::buildCategories()

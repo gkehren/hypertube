@@ -1,7 +1,8 @@
-#include "presentation/UiDtos.hpp"
+#include "presentation/TorrentListPresenter.hpp"
+#include "app/TorrentManager.hpp"
 
-#include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <iomanip>
 #include <iostream>
 #include <string>
@@ -11,24 +12,16 @@ namespace
 {
 using Clock = std::chrono::steady_clock;
 
-std::vector<Presentation::TorrentRowDto> makeRows(std::size_t count)
+void addTorrents(TorrentManager &manager, std::size_t start, std::size_t target)
 {
-	std::vector<Presentation::TorrentRowDto> rows;
-	rows.reserve(count);
-	for (std::size_t index = 0; index < count; ++index)
+	for (std::size_t index = start; index < target; ++index)
 	{
-		Presentation::TorrentRowDto row;
-		row.id = "v1:" + std::to_string(index);
-		row.name = "Synthetic torrent " + std::to_string(index);
-		row.stateLabel = index % 3 == 0 ? "Downloading" : "Seeding";
-		row.progress = static_cast<float>(index % 100) / 100.0f;
-		row.downloadRateBytes = static_cast<std::int64_t>(index * 17);
-		row.active = index % 4 != 0;
-		row.state = row.stateLabel == "Downloading" ? Presentation::TorrentUiState::Downloading
-			: Presentation::TorrentUiState::Seeding;
-		rows.push_back(std::move(row));
+		char hexBuf[41];
+		std::snprintf(hexBuf, sizeof(hexBuf), "%040zx", index + 1);
+		std::string magnet = std::string("magnet:?xt=urn:btih:") + hexBuf + "&dn=SyntheticTorrent" + std::to_string(index);
+		manager.addMagnetTorrent(magnet, "/tmp/downloads");
 	}
-	return rows;
+	manager.refreshStatusCache();
 }
 
 template <typename Function>
@@ -44,32 +37,49 @@ double measure(Function &&function, int iterations = 10)
 int main()
 {
 	std::cout << "rows,no_op_ms,status_revision_ms,filter_ms,sort_ms\n";
-	for (const std::size_t count : {100U, 1000U, 10000U})
+
+	TorrentManager manager;
+	std::size_t currentCount = 0;
+
+	for (const std::size_t targetCount : {100U, 1000U, 10000U})
 	{
-		auto rows = makeRows(count);
+		addTorrents(manager, currentCount, targetCount);
+		currentCount = targetCount;
+
+		Presentation::TorrentListPresenter presenter(manager);
+		// Warmup build
+		(void)presenter.buildRows();
+
 		volatile std::size_t observed = 0;
 		const double noOp = measure([&] {
+			const auto rows = presenter.buildRows();
 			observed += rows.size();
-		}, 100);
-		const double rebuild = measure([&] {
-			auto rebuilt = makeRows(count);
-			observed += rebuilt.size();
-		});
+		}, 50);
+
+		const int statusIterations = targetCount >= 10000U ? 2 : 10;
+		const double statusRebuild = measure([&] {
+			manager.refreshStatusCache();
+			const auto rows = presenter.buildRows();
+			observed += rows.size();
+		}, statusIterations);
+
+		int toggleFilter = 0;
 		const double filter = measure([&] {
-			auto filtered = rows;
-			filtered.erase(std::remove_if(filtered.begin(), filtered.end(), [](const auto &row) {
-				return row.stateLabel != "Downloading";
-			}), filtered.end());
-			observed += filtered.size();
-		});
+			toggleFilter = (toggleFilter + 1) % 2;
+			presenter.setTextFilter(toggleFilter ? "Torrent1" : "");
+			const auto rows = presenter.buildRows();
+			observed += rows.size();
+		}, 5);
+
+		int toggleSort = 0;
 		const double sort = measure([&] {
-			auto sorted = rows;
-			std::stable_sort(sorted.begin(), sorted.end(), [](const auto &left, const auto &right) {
-				return left.downloadRateBytes < right.downloadRateBytes;
-			});
-			observed += sorted.size();
-		});
-		std::cout << count << ',' << std::fixed << std::setprecision(3) << noOp << ',' << rebuild << ','
+			toggleSort = (toggleSort + 1) % 2;
+			presenter.setSort(toggleSort ? Presentation::TorrentSortField::Name : Presentation::TorrentSortField::Queue, true);
+			const auto rows = presenter.buildRows();
+			observed += rows.size();
+		}, 5);
+
+		std::cout << targetCount << ',' << std::fixed << std::setprecision(3) << noOp << ',' << statusRebuild << ','
 			<< filter << ',' << sort << '\n';
 	}
 	return 0;

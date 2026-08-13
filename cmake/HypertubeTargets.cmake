@@ -54,4 +54,5 @@ target_link_libraries(hypertube_app PUBLIC hypertube_torrent hypertube_search hy
 
 add_executable(torrent-presentation-benchmark EXCLUDE_FROM_ALL
     ${CMAKE_SOURCE_DIR}/tests/benchmark_torrent_presentation.cpp)
-target_include_directories(torrent-presentation-benchmark PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(torrent-presentation-benchmark PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/include/app)
+target_link_libraries(torrent-presentation-benchmark PRIVATE hypertube_presentation hypertube_torrent hypertube_app hypertube_utils)

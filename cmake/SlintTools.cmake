@@ -1,7 +1,5 @@
 # Preview compilation and optional Slint visual tooling.
 
-set(SLINT_STYLE "fluent-dark" CACHE STRING "Slint widget style used by the application and previews")
-
 set(HYPERTUBE_SLINT_PREVIEW_SOURCES
     ui/previews/torrent-table-preview.slint
     ui/previews/search-preview.slint
@@ -12,6 +10,7 @@ set(HYPERTUBE_SLINT_PREVIEW_SOURCES
     ui/previews/add-torrent-dialog-preview.slint
     ui/previews/remove-torrent-dialog-preview.slint
     ui/previews/app-shell-preview.slint
+    ui/previews/toast-preview.slint
 )
 set(HYPERTUBE_SLINT_PREVIEW_OUTPUTS)
 file(GLOB_RECURSE HYPERTUBE_SLINT_UI_DEPENDENCIES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/ui/*.slint)

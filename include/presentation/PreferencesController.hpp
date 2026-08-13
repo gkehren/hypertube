@@ -50,6 +50,7 @@ public:
 		std::optional<std::string> proxyPassword = std::nullopt);
 	std::optional<Result> pollConnectionTest();
 	Result waitForConnectionTest();
+	Result cancelConnectionTest();
 	// UI-only saves deliberately skip network validation and credential access.
 	// If a network transaction is already in flight, the newest UI snapshot is
 	// queued and committed immediately after it completes.

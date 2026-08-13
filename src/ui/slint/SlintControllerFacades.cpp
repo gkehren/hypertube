@@ -167,9 +167,13 @@ void TorrentUiController::executeSelected(UiTorrentCommand command)
 	}
 	const auto result = presenter_.executeCommand(ids, mapped);
 	viewDirty_ = true;
-	notify(result.success() ? Presentation::NotificationSeverity::Success : Presentation::NotificationSeverity::Warning,
-		result.success() ? "Bulk action completed" : "Bulk action partially completed",
-		batchResultMessage("Bulk action", result));
+	const auto severity = result.succeeded == 0 ? Presentation::NotificationSeverity::Error
+		: result.success() ? Presentation::NotificationSeverity::Success
+		: Presentation::NotificationSeverity::Warning;
+	const auto title = result.succeeded == 0 ? "Bulk action failed"
+		: result.success() ? "Bulk action completed"
+		: "Bulk action partially completed";
+	notify(severity, title, batchResultMessage("Bulk action", result));
 	refresh_();
 }
 
@@ -214,9 +218,13 @@ void TorrentUiController::confirmRemove(RemovalMode mode)
 			: mode == RemovalMode::DeleteDataAndSource ? TorrentRemovalMode::DeleteDataAndSourceTorrent
 			: TorrentRemovalMode::KeepAllFiles;
 		const auto result = presenter_.removeTorrents(pendingRemoveIds_, removalMode);
-		notify(result.success() ? Presentation::NotificationSeverity::Success : Presentation::NotificationSeverity::Warning,
-			result.success() ? "Torrents removed" : "Removal partially completed",
-			batchResultMessage("Bulk removal", result));
+		const auto severity = result.succeeded == 0 ? Presentation::NotificationSeverity::Error
+			: result.success() ? Presentation::NotificationSeverity::Success
+			: Presentation::NotificationSeverity::Warning;
+		const auto title = result.succeeded == 0 ? "Bulk removal failed"
+			: result.success() ? "Torrents removed"
+			: "Removal partially completed";
+		notify(severity, title, batchResultMessage("Bulk removal", result));
 		viewDirty_ = true;
 		pendingRemoveIds_.clear();
 		window_.set_bulk_remove_dialog_open(false);

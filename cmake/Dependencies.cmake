@@ -2,6 +2,20 @@
 
 include(FetchContent)
 
+if(APPLE)
+    list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew" "/usr/local")
+    include_directories(SYSTEM "/opt/homebrew/include" "/usr/local/include")
+    link_directories("/opt/homebrew/lib" "/usr/local/lib")
+endif()
+
+if(NOT DEFINED SLINT_STYLE OR SLINT_STYLE STREQUAL "")
+    set(
+        SLINT_STYLE "fluent-dark"
+        CACHE STRING
+        "Slint widget style used by the application and previews"
+    )
+endif()
+
 find_package(nlohmann_json CONFIG QUIET)
 if(NOT nlohmann_json_FOUND AND NOT TARGET nlohmann_json::nlohmann_json)
     FetchContent_Declare(
@@ -94,12 +108,6 @@ FetchContent_Declare(
     SOURCE_SUBDIR api/cpp
 )
 FetchContent_MakeAvailable(Slint)
-
-if(APPLE)
-    list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew" "/usr/local")
-    include_directories(SYSTEM "/opt/homebrew/include" "/usr/local/include")
-    link_directories("/opt/homebrew/lib" "/usr/local/lib")
-endif()
 
 add_library(hypertube_slint_platform INTERFACE)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")

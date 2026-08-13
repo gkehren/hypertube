@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace Presentation
@@ -83,6 +84,7 @@ private:
 		std::uint64_t collectionRevision = 0;
 		std::uint64_t statusRevision = 0;
 		std::vector<TorrentRowDto> allRows;
+		std::unordered_map<std::string, std::size_t> indexById;
 		std::unordered_map<std::string, lt::info_hash_t> hashesById;
 		std::array<int, 7> categoryCounts{};
 	};
@@ -95,6 +97,7 @@ private:
 	std::string selectedId_;
 	mutable std::unordered_map<std::string, lt::info_hash_t> hashesById_;
 	std::vector<std::string> selectedIds_;
+	std::unordered_set<std::string> selectedIdSet_;
 	std::string selectionAnchorId_;
 	mutable PresentationSnapshot presentation_;
 	mutable bool presentationValid_ = false;

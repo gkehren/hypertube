@@ -464,6 +464,8 @@ export component MainWindow inherits Window {
 					property <length> drag-start-height;
 					width: parent.width - 112px;
 					height: parent.height;
+					accessible-role: slider;
+					accessible-label: "Resize details panel";
 					pointer-event(event) => {
 						if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down)
 						{

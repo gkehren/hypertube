@@ -25,7 +25,12 @@ void NotificationQueue::activateNext(std::chrono::steady_clock::time_point now)
 	}
 	current_ = std::move(pending_.front());
 	pending_.pop_front();
-	deadline_ = now + std::max(std::chrono::milliseconds(1), current_->duration);
+	auto duration = std::max(std::chrono::milliseconds(1), current_->duration);
+	if (current_->severity == NotificationSeverity::Error)
+	{
+		duration = std::max(duration, std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::seconds(8)));
+	}
+	deadline_ = now + duration;
 }
 
 void NotificationQueue::enqueue(UiNotification notification)

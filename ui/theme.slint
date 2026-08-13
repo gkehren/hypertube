@@ -12,6 +12,8 @@ export global ThemeTokens {
 	in-out property <color> success: #7bd88f;
 	in-out property <color> warning: #f5c26b;
 	in-out property <color> error: #ff7b86;
+	in-out property <color> focus-border-color: #6ea8fe;
+	in-out property <length> focus-border-width: 2px;
 
 	public function apply-theme(theme: Theme, system-dark: bool) {
 		if (theme == Theme.light || (theme == Theme.system && !system-dark)) {
@@ -26,6 +28,7 @@ export global ThemeTokens {
 			success = #187a43;
 			warning = #8a5a00;
 			error = #b42318;
+			focus-border-color = #245fb5;
 		} else if (theme == Theme.high-contrast) {
 			background = #000000;
 			surface = #101010;
@@ -38,6 +41,7 @@ export global ThemeTokens {
 			success = #00ff66;
 			warning = #ffff00;
 			error = #ff5b5b;
+			focus-border-color = #00e5ff;
 		} else if (theme == Theme.ocean) {
 			background = #101c2c;
 			surface = #16283c;
@@ -50,6 +54,7 @@ export global ThemeTokens {
 			success = #75d6a0;
 			warning = #f2c572;
 			error = #ff8296;
+			focus-border-color = #72c7ff;
 		} else if (theme == Theme.nord) {
 			background = #2e3440;
 			surface = #3b4252;
@@ -62,6 +67,7 @@ export global ThemeTokens {
 			success = #a3be8c;
 			warning = #ebcb8b;
 			error = #bf616a;
+			focus-border-color = #88c0d0;
 		} else if (theme == Theme.dracula) {
 			background = #282a36;
 			surface = #44475a;
@@ -74,6 +80,7 @@ export global ThemeTokens {
 			success = #50fa7b;
 			warning = #ffb86c;
 			error = #ff5555;
+			focus-border-color = #bd93f9;
 		} else if (theme == Theme.cyberpunk) {
 			background = #100d1a;
 			surface = #211432;
@@ -86,6 +93,7 @@ export global ThemeTokens {
 			success = #65f5a4;
 			warning = #ffd166;
 			error = #ff5c8a;
+			focus-border-color = #ff4fd8;
 		} else {
 			background = #15181d;
 			surface = #1c2129;
@@ -98,6 +106,7 @@ export global ThemeTokens {
 			success = #7bd88f;
 			warning = #f5c26b;
 			error = #ff7b86;
+			focus-border-color = #6ea8fe;
 		}
 	}
 }

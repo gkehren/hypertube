@@ -433,7 +433,10 @@ Result SearchEngine::testTorznabConnection(const std::string &url, const std::st
 			curl_easy_setopt(curl, CURLOPT_PROXYPASSWORD, configuredProxyPassword.c_str());
 		}
 	}
+	const auto startTime = std::chrono::steady_clock::now();
 	result = curl_easy_perform(curl);
+	const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+		std::chrono::steady_clock::now() - startTime).count();
 	if (result == CURLE_OK)
 		curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
 	curl_easy_cleanup(curl);
@@ -449,7 +452,7 @@ Result SearchEngine::testTorznabConnection(const std::string &url, const std::st
 	if (responseCode < 200 || responseCode >= 400)
 		return Result::Failure("Connection test received HTTP " + std::to_string(responseCode),
 			ResultCode::Network, responseCode >= 500);
-	return Result::Success();
+	return Result::Success("Connection test succeeded (" + std::to_string(elapsedMs) + " ms)");
 }
 
 void SearchEngine::clearSearchCache()

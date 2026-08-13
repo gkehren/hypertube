@@ -183,13 +183,18 @@ Result PreferencesController::beginConnectionTest(const PreferencesSettings &set
 	if (!proxyValidation)
 		return proxyValidation;
 
-	const auto torznabLoad = credentialStore.load("torznab_api_key");
-	const auto proxyLoad = credentialStore.load("proxy_password");
-	const std::string apiKey = torznabApiKey.value_or(torznabLoad.hasSecret() ? torznabLoad.secret : "");
-	const std::string proxySecret = proxyPassword.value_or(proxyLoad.hasSecret() ? proxyLoad.secret : "");
 	SearchEngine *engine = &searchEngine;
+	const auto storeOps = credentialStore;
 	pendingConnectionTest_ = std::async(std::launch::async,
-		[engine, settings, proxyType, apiKey, proxySecret]() {
+		[engine, settings, proxyType, torznabApiKey, proxyPassword, storeOps]() -> Result {
+			const std::string apiKey = torznabApiKey.has_value() ? *torznabApiKey : ([&] {
+				const auto torznabLoad = storeOps.load("torznab_api_key");
+				return torznabLoad.hasSecret() ? torznabLoad.secret : std::string();
+			})();
+			const std::string proxySecret = proxyPassword.has_value() ? *proxyPassword : ([&] {
+				const auto proxyLoad = storeOps.load("proxy_password");
+				return proxyLoad.hasSecret() ? proxyLoad.secret : std::string();
+			})();
 			return engine->testTorznabConnection(settings.torznabUrl, apiKey, settings.proxyEnabled,
 				proxyType, settings.proxyHost, settings.proxyPort, settings.proxyUsername, proxySecret);
 		});
@@ -212,6 +217,14 @@ Result PreferencesController::waitForConnectionTest()
 	Result result = pendingConnectionTest_->get();
 	pendingConnectionTest_.reset();
 	return result;
+}
+
+Result PreferencesController::cancelConnectionTest()
+{
+	if (!pendingConnectionTest_)
+		return Result::Success();
+	pendingConnectionTest_.reset();
+	return Result::Success("Connection test cancelled");
 }
 
 Result PreferencesController::beginUiStateSave(const PreferencesSettings &settings)

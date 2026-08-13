@@ -46,6 +46,7 @@ export component TorrentTableRow inherits Rectangle {
 			TouchArea {
 				accessible-role: list-item;
 				accessible-label: root.torrent.name + ", " + root.torrent.state-label;
+				accessible-value: root.selected ? "selected" : "unselected";
 				pointer-event(event) => {
 					if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down)
 					{
@@ -76,6 +77,7 @@ export component TorrentTableRow inherits Rectangle {
 		TouchArea {
 			accessible-role: list-item;
 			accessible-label: root.torrent.name + ", " + root.torrent.state-label;
+			accessible-value: root.selected ? "selected" : "unselected";
 			width: parent.width - TorrentTableGeometry.actions-width;
 			height: parent.height;
 			pointer-event(event) => {
