@@ -129,6 +129,16 @@ TorrentEvent makeTorrentEvent(lt::alert *alert)
 		event.message = "DHT bootstrap complete";
 		event.severity = Utils::LogLevel::Info;
 	}
+	else if (auto *sessionError = lt::alert_cast<lt::session_error_alert>(alert))
+	{
+		event.category = "session";
+		event.severity = Utils::LogLevel::Error;
+		// Avoid session_error_alert::message(): some platform libtorrent
+		// packages format its internal buffer with an invalid read length.
+		event.message = sessionError->error
+		? "Session error: " + sessionError->error.message()
+		: "Session error";
+	}
 	else
 	{
 		event.category = "torrent";
