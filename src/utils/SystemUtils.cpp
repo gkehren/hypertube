@@ -150,7 +150,7 @@ namespace Utils {
                 return value == 0 ? SystemAppearance::Dark : SystemAppearance::Light;
 #elif defined(__APPLE__)
                 const auto *value = CFPreferencesCopyAppValue(CFSTR("AppleInterfaceStyle"),
-                    kCFPreferencesAnyApplication);
+                    kCFPreferencesCurrentApplication);
                 if (value == nullptr)
                     return SystemAppearance::Light;
                 SystemAppearance appearance = SystemAppearance::Unavailable;

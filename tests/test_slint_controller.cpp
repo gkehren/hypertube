@@ -1,7 +1,13 @@
 #include <gtest/gtest.h>
 
+#include "ConfigManager.hpp"
 #include "DetailsModelAdapter.hpp"
+#include "SearchEngine.hpp"
 #include "SlintRefreshCoordinators.hpp"
+#include "SlintControllerFacades.hpp"
+#include "TorrentManager.hpp"
+#include "presentation/PreferencesController.hpp"
+#include "presentation/UiStateController.hpp"
 #include "presentation/TorrentListPresenter.hpp"
 
 #include <chrono>
@@ -66,5 +72,36 @@ TEST(SlintControllerTest, RowCallbackSelectsTorrentAndPublishesDetails)
 
 	std::error_code error;
 	std::filesystem::remove_all(directory, error);
+}
+
+TEST(SlintControllerTest, ProxyTestSkipsTorznabValidation)
+{
+	TorrentManager torrentManager;
+	SearchEngine searchEngine;
+	ConfigManager configManager;
+	Presentation::PreferencesController preferences(torrentManager, searchEngine, configManager);
+	Presentation::UiStateController uiState(preferences, {});
+	auto window = MainWindow::create();
+	SlintUi::PreferencesUiController controller(preferences, uiState, *window, [] {
+		return Presentation::UiStateSnapshot();
+	});
+
+	window->set_preference_download_limit(slint::SharedString("0"));
+	window->set_preference_upload_limit(slint::SharedString("0"));
+	window->set_preference_torznab_enabled(true);
+	window->set_preference_torznab_url(slint::SharedString("not-a-url"));
+	window->set_preference_proxy_enabled(true);
+	window->set_preference_proxy_type(slint::SharedString("http"));
+	window->set_preference_proxy_host(slint::SharedString("127.0.0.1"));
+	window->set_preference_proxy_port(slint::SharedString("1"));
+
+	controller.testProxyConnection();
+
+	EXPECT_TRUE(window->get_preference_test_running());
+	const auto stateMessage = window->get_preferences_state_message();
+	EXPECT_EQ(std::string(stateMessage.begin(), stateMessage.end()), "Testing proxy connection...");
+
+	controller.cancelConnectionTest();
+	preferences.waitForConnectionTest();
 }
 } // namespace

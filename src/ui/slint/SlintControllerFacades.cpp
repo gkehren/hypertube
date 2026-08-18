@@ -577,7 +577,8 @@ void PreferencesUiController::setValidationError(const char *field, const std::s
 }
 
 bool PreferencesUiController::collectPreferences(PreferencesSettings &preferences,
-	std::optional<std::string> &torznabSecret, std::optional<std::string> &proxySecret)
+	std::optional<std::string> &torznabSecret, std::optional<std::string> &proxySecret,
+	PreferenceValidationScope scope)
 {
 	const auto stringProperty = [](const slint::SharedString &value)
 	{
@@ -618,7 +619,7 @@ bool PreferencesUiController::collectPreferences(PreferencesSettings &preference
 	preferences.proxyHost = stringProperty(window_.get_preference_proxy_host());
 	preferences.proxyUsername = stringProperty(window_.get_preference_proxy_username());
 
-	if (preferences.torznabEnabled)
+	if (scope == PreferenceValidationScope::All && preferences.torznabEnabled)
 	{
 		result = SearchEngine::validateTorznabConfig(preferences.torznabUrl);
 		if (!result)
@@ -713,7 +714,7 @@ void PreferencesUiController::testProxyConnection()
 	PreferencesSettings preferences;
 	std::optional<std::string> torznabValue;
 	std::optional<std::string> proxyValue;
-	if (!collectPreferences(preferences, torznabValue, proxyValue))
+	if (!collectPreferences(preferences, torznabValue, proxyValue, PreferenceValidationScope::ProxyOnly))
 		return;
 	const Result result = preferences_.beginProxyConnectionTest(preferences, proxyValue);
 	window_.set_preference_test_running(static_cast<bool>(result));

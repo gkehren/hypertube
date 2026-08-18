@@ -126,8 +126,14 @@ public:
 	void clearProxySecret();
 
 private:
+	enum class PreferenceValidationScope {
+		All,
+		ProxyOnly,
+	};
+
 	bool collectPreferences(PreferencesSettings &preferences,
-		std::optional<std::string> &torznabSecret, std::optional<std::string> &proxySecret);
+		std::optional<std::string> &torznabSecret, std::optional<std::string> &proxySecret,
+		PreferenceValidationScope scope = PreferenceValidationScope::All);
 	void clearValidationErrors();
 	void setValidationError(const char *field, const std::string &message);
 	Presentation::PreferencesController &preferences_;

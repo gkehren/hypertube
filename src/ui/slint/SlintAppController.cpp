@@ -205,8 +205,10 @@ void SlintAppController::start()
 	window->set_logs_state_message(slint::SharedString("Diagnostics are updated from the bounded log buffer."));
 	const auto currentPreferences = preferencesController.current();
 	selectedDetailsTab_ = std::clamp(currentPreferences.ui.selectedDetailsTab, 0, 4);
-	window->set_system_dark(Utils::SystemUtils::systemPrefersDarkTheme());
-	window->set_selected_theme(static_cast<Theme>(std::clamp(currentPreferences.theme, 0, 7)));
+	const auto selectedTheme = static_cast<Theme>(std::clamp(currentPreferences.theme, 0, 7));
+	window->set_selected_theme(selectedTheme);
+	if (selectedTheme == Theme::System)
+		window->set_system_dark(Utils::SystemUtils::systemPrefersDarkTheme());
 	window->set_preferences_state_message(slint::SharedString("Changes are saved transactionally."));
 	window->set_preference_download_limit(SlintUi::toSharedString(
 		Presentation::UiFormatters::formatSpeedLimit(currentPreferences.downloadSpeedLimit)));
@@ -294,8 +296,12 @@ void SlintAppController::refresh()
 {
 	preferencesUiController_->pollConnectionTest();
 	const auto now = std::chrono::steady_clock::now();
-	if (lastSystemAppearancePoll_.time_since_epoch().count() == 0
-		|| now - lastSystemAppearancePoll_ >= std::chrono::seconds(1))
+	if (window->get_selected_theme() != Theme::System)
+	{
+		lastSystemAppearancePoll_ = {};
+	}
+	else if (lastSystemAppearancePoll_.time_since_epoch().count() == 0
+		|| now - lastSystemAppearancePoll_ >= std::chrono::seconds(5))
 	{
 		lastSystemAppearancePoll_ = now;
 		const bool systemDark = Utils::SystemUtils::systemPrefersDarkTheme();
