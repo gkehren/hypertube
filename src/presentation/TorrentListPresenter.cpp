@@ -253,9 +253,9 @@ void TorrentListPresenter::ensurePresentationCurrent() const
 
 	for (const auto &torrent : torrents)
 	{
-		if (!torrent.handle.is_valid())
-			continue;
-
+		// TorrentManager snapshots contain the registered collection identity.
+		// The presenter must not query copied libtorrent handles while building
+		// UI rows; status availability is represented by statusCache instead.
 		const auto id = torrentId(torrent.hash);
 		if (id.empty())
 			continue;
