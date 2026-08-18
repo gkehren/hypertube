@@ -98,9 +98,12 @@ TorrentEvent makeTorrentEvent(lt::alert *alert)
 	else if (auto *added = lt::alert_cast<lt::add_torrent_alert>(alert))
 	{
 		event.category = "torrent";
-		event.message = added->error ? std::string("Failed to add torrent: ") + added->error.message() : std::string("Torrent added: ") + added->torrent_name();
+		event.message = added->error
+			? std::string("Failed to add torrent: ") + added->error.message()
+			: "Torrent added";
 		event.severity = added->error ? Utils::LogLevel::Error : Utils::LogLevel::Info;
-		event.hash = added->handle.info_hashes();
+		if (added->handle.is_valid())
+			event.hash = added->handle.info_hashes();
 	}
 	else if (auto *finished = lt::alert_cast<lt::torrent_finished_alert>(alert))
 	{
@@ -181,7 +184,7 @@ Result TorrentManager::addTorrent(const std::string &torrentPath, const std::str
 				++torrentCollectionRevision;
 		}
 
-		std::cout << "Added torrent from file: " << handle.status().name << std::endl;
+		std::cout << "Added torrent from file: " << torrentPath << std::endl;
 		Utils::Logger::info("torrent", "Added torrent from file: " + torrentPath);
 		markStatusCacheStale(cacheMutex, lastCacheRefresh);
 		return Result::Success();
@@ -208,7 +211,7 @@ Result TorrentManager::addMagnetTorrent(const std::string &magnetUri, const std:
 		lt::add_torrent_params params = lt::parse_magnet_uri(magnetUri);
 		if (!params.info_hashes.has_v1() && !params.info_hashes.has_v2())
 			return Result::Failure("Magnet URI does not contain a supported info hash", ResultCode::InvalidInput);
-		std::cout << "Adding magnet torrent: " << params.name << " (hash: " << params.info_hashes.v1 << ")" << std::endl;
+		std::cout << "Adding magnet torrent: " << params.name << " (hash: " << hashForLog(params.info_hashes) << ")" << std::endl;
 		params.save_path = resolvedSavePath;
 		params.flags |= lt::torrent_flags::duplicate_is_error;
 		if (params.info_hashes.has_v1() || params.info_hashes.has_v2())
@@ -228,7 +231,7 @@ Result TorrentManager::addMagnetTorrent(const std::string &magnetUri, const std:
 				++torrentCollectionRevision;
 		}
 
-		std::cout << "Added magnet torrent: " << handle.status().name << std::endl;
+		std::cout << "Added magnet torrent: " << hashForLog(hash) << std::endl;
 		Utils::Logger::info("torrent", "Added torrent from magnet URI");
 		markStatusCacheStale(cacheMutex, lastCacheRefresh);
 		return Result::Success();
