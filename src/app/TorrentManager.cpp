@@ -693,6 +693,10 @@ std::uint64_t TorrentManager::getStatusRevision() const
 
 void TorrentManager::refreshStatusCache()
 {
+	// Serialize status reads with add/remove/command operations. A copied
+	// torrent_handle can outlive its registry entry, but libtorrent must not be
+	// queried while the underlying torrent is being removed from the session.
+	std::lock_guard<std::mutex> operationLock(operationMutex);
 	auto newCache = std::make_shared<std::unordered_map<lt::info_hash_t, lt::torrent_status>>();
 	const auto torrentsSnapshot = getTorrentSnapshot();
 	bool complete = true;
