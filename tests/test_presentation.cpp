@@ -488,4 +488,26 @@ TEST(ThemeTokensTest, ContrastRatioRequirementsForSupportedThemes)
 		EXPECT_GE(ratio, pair.minRatio) << "Theme " << pair.name << " contrast ratio (" << ratio << ") below minimum " << pair.minRatio;
 	}
 }
+
+TEST(ThemeTokensTest, SelectionColorsRemainReadableAcrossSupportedThemes)
+{
+	struct SelectionPair {
+		const char *name;
+		std::uint32_t selection;
+		std::uint32_t foreground;
+	};
+	const SelectionPair selections[] = {
+		{ "dark", 0x293448, 0xf5f7fa },
+		{ "light", 0xcfe0f7, 0x18202a },
+		{ "high-contrast", 0x004d40, 0xffffff },
+		{ "ocean", 0x244967, 0xe6f4ff },
+		{ "nord", 0x4c566a, 0xeceff4 },
+		{ "dracula", 0x535d8a, 0xf8f8f2 },
+		{ "cyberpunk", 0x482b72, 0xf5f0ff }
+	};
+
+	for (const auto &pair : selections)
+		EXPECT_GE(contrastRatio(pair.selection, pair.foreground), 4.5)
+			<< "Theme " << pair.name << " selection contrast is too low";
+}
 } // namespace

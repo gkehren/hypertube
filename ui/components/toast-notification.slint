@@ -18,6 +18,7 @@ export component ToastNotification inherits Rectangle {
 		: root.severity == "success" ? ThemeTokens.success : ThemeTokens.accent;
 	accessible-role: text;
 	accessible-label: root.title + ": " + root.message;
+	accessible-live-region: polite;
 
 	VerticalBox {
 		padding: 12px;

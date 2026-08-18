@@ -1,7 +1,9 @@
+import { ThemeTokens } from "theme.slint";
+
 export component SplitPane inherits Rectangle {
 	in property <int> sidebar-width: 240;
 	in property <int> bottom-panel-height: 300;
 	in property <bool> sidebar-collapsed: false;
 
-	background: #15181d;
+	background: ThemeTokens.background;
 }

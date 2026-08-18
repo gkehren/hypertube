@@ -10,6 +10,13 @@
 #include <filesystem>
 #include <map>
 #include <thread>
+#ifndef _WIN32
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <atomic>
+#endif
 
 namespace
 {
@@ -44,6 +51,75 @@ Presentation::PreferencesController::CredentialStoreOps fakeStore(std::map<std::
 				: Utils::CredentialStore::CredentialLoadResult{Utils::CredentialStore::CredentialStatus::Stored, found->second};
 		}};
 }
+
+#ifndef _WIN32
+class SlowHttpServer
+{
+public:
+	SlowHttpServer()
+	{
+		listenFd_ = socket(AF_INET, SOCK_STREAM, 0);
+		if (listenFd_ < 0)
+		{
+			return;
+		}
+		int reuse = 1;
+		setsockopt(listenFd_, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+		sockaddr_in address{};
+		address.sin_family = AF_INET;
+		address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		address.sin_port = htons(0);
+		if (bind(listenFd_, reinterpret_cast<const sockaddr *>(&address), sizeof(address)) != 0
+			|| listen(listenFd_, 1) != 0)
+		{
+			close(listenFd_);
+			listenFd_ = -1;
+			return;
+		}
+		socklen_t length = sizeof(address);
+		if (getsockname(listenFd_, reinterpret_cast<sockaddr *>(&address), &length) != 0)
+		{
+			close(listenFd_);
+			listenFd_ = -1;
+			return;
+		}
+		url_ = "http://127.0.0.1:" + std::to_string(ntohs(address.sin_port)) + "/api";
+		worker_ = std::thread([this] {
+			const int client = accept(listenFd_, nullptr, nullptr);
+			clientFd_.store(client);
+			while (!stopping_.load())
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+			if (client >= 0)
+				close(client);
+		});
+	}
+
+	~SlowHttpServer()
+	{
+		stopping_ = true;
+		if (listenFd_ >= 0)
+		{
+			shutdown(listenFd_, SHUT_RDWR);
+			close(listenFd_);
+		}
+		const int client = clientFd_.load();
+		if (client >= 0)
+			shutdown(client, SHUT_RDWR);
+		if (worker_.joinable())
+			worker_.join();
+	}
+
+	bool valid() const { return listenFd_ >= 0; }
+	const std::string &url() const { return url_; }
+
+private:
+	int listenFd_ = -1;
+	std::atomic<int> clientFd_{-1};
+	std::atomic<bool> stopping_{false};
+	std::thread worker_;
+	std::string url_;
+};
+#endif
 
 TEST(PreferencesControllerTest, RestoresProxySecretAfterEraseAndFailedSave)
 {
@@ -109,6 +185,77 @@ TEST(PreferencesControllerTest, ConnectionTestRejectsInvalidCandidateWithoutSavi
 	EXPECT_FALSE(controller.isConnectionTestRunning());
 	EXPECT_EQ(configManager.getPreferencesSettings().torznabEnabled, before.torznabEnabled);
 	EXPECT_EQ(configManager.getPreferencesSettings().torznabUrl, before.torznabUrl);
+}
+
+TEST(PreferencesControllerTest, ConnectionCancellationIsBoundedAndCanBeFollowedByANewTest)
+{
+#ifdef _WIN32
+	GTEST_SKIP() << "The local slow HTTP fixture is implemented for POSIX test hosts";
+#else
+	SlowHttpServer server;
+	if (!server.valid())
+		GTEST_SKIP() << "Local socket creation is unavailable in this environment";
+	std::map<std::string, std::string> secrets{{"torznab_api_key", "stored-key"}};
+	TorrentManager torrentManager;
+	SearchEngine searchEngine;
+	ConfigManager configManager;
+	PreferencesSettings candidate = configManager.getPreferencesSettings();
+	candidate.torznabEnabled = true;
+	candidate.torznabUrl = server.url();
+	Presentation::PreferencesController controller(torrentManager, searchEngine, configManager,
+		{}, fakeStore(secrets), (std::filesystem::temp_directory_path() / "hypertube-cancel-test.json").string());
+
+	ASSERT_TRUE(controller.beginConnectionTest(candidate));
+	std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	const auto cancelStart = std::chrono::steady_clock::now();
+	const Result cancellation = controller.cancelConnectionTest();
+	const auto cancelElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+		std::chrono::steady_clock::now() - cancelStart);
+	EXPECT_TRUE(cancellation);
+	EXPECT_LT(cancelElapsed.count(), 250);
+
+	std::optional<Result> completed;
+	const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+	while (!completed && std::chrono::steady_clock::now() < deadline)
+	{
+		completed = controller.pollConnectionTest();
+		if (!completed)
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+	ASSERT_TRUE(completed.has_value());
+	EXPECT_EQ(completed->code, ResultCode::Cancelled);
+	EXPECT_EQ(secrets.at("torznab_api_key"), "stored-key");
+
+	PreferencesSettings second = candidate;
+	second.torznabUrl = "http://127.0.0.1:1/api";
+	ASSERT_TRUE(controller.beginConnectionTest(second));
+	const Result secondResult = controller.waitForConnectionTest();
+	EXPECT_NE(secondResult.code, ResultCode::Busy);
+#endif
+}
+
+TEST(PreferencesControllerTest, ProxyTestDoesNotRequireTorznabToBeEnabled)
+{
+	TempDirectory temp;
+	std::map<std::string, std::string> secrets{{"proxy_password", "stored-proxy-password"}};
+	TorrentManager torrentManager;
+	SearchEngine searchEngine;
+	ConfigManager configManager;
+	PreferencesSettings candidate = configManager.getPreferencesSettings();
+	candidate.torznabEnabled = false;
+	candidate.proxyEnabled = true;
+	candidate.proxyType = "http";
+	candidate.proxyHost = "127.0.0.1";
+	candidate.proxyPort = 1;
+	Presentation::PreferencesController controller(torrentManager, searchEngine, configManager,
+		{}, fakeStore(secrets), (temp.path / "settings.json").string());
+
+	ASSERT_TRUE(controller.beginProxyConnectionTest(candidate));
+	const Result result = controller.waitForConnectionTest();
+	EXPECT_EQ(result.code, ResultCode::Network);
+	EXPECT_NE(result.message.find("Proxy connection"), std::string::npos);
+	EXPECT_EQ(secrets.at("proxy_password"), "stored-proxy-password");
+	EXPECT_FALSE(configManager.getPreferencesSettings().torznabEnabled);
 }
 
 TEST(PreferencesControllerTest, PreservesReplacesAndExplicitlyClearsSecrets)

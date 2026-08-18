@@ -51,8 +51,9 @@ Preferences can switch search to a local Jackett/Prowlarr Torznab endpoint or
 route search and BitTorrent traffic through an HTTP or SOCKS5 proxy. Secrets
 are stored in the operating-system credential store and are never displayed in
 plain text. Speed limits accept `B/s`, `KiB/s`, `MiB/s`, or `GiB/s`; use the
-Preferences **Test connection** action to check the Torznab endpoint and proxy
-before applying a configuration.
+Preferences **Test Torznab** and **Test proxy** actions to check each network
+path independently before applying a configuration. A test can be cancelled,
+and its success message includes the measured latency.
 
 ## Portable mode
 

@@ -136,8 +136,14 @@ void SlintAppController::bind()
 		preferencesUiController_->apply();
 		window->set_preferences_saving(preferencesController.isSaving());
 	});
-	window->on_test_preferences_connection([this] {
-		preferencesUiController_->testConnection();
+	window->on_test_torznab_connection([this] {
+		preferencesUiController_->testTorznabConnection();
+	});
+	window->on_test_proxy_connection([this] {
+		preferencesUiController_->testProxyConnection();
+	});
+	window->on_cancel_preferences_connection([this] {
+		preferencesUiController_->cancelConnectionTest();
 	});
 	window->on_resize_layout([this](int sidebarWidth, int bottomPanelHeight) {
 		preferencesUiController_->resizeLayout(sidebarWidth, bottomPanelHeight);
@@ -266,6 +272,7 @@ Result SlintAppController::stop()
 	started = false;
 
 	Result result = uiStateController.flush();
+	preferencesController.cancelConnectionTest();
 	const Result connectionTest = preferencesController.waitForConnectionTest();
 	if (!connectionTest)
 		Utils::Logger::info("search", "Preferences connection test finished during shutdown: " + connectionTest.message);
@@ -286,6 +293,15 @@ Result SlintAppController::stop()
 void SlintAppController::refresh()
 {
 	preferencesUiController_->pollConnectionTest();
+	const auto now = std::chrono::steady_clock::now();
+	if (lastSystemAppearancePoll_.time_since_epoch().count() == 0
+		|| now - lastSystemAppearancePoll_ >= std::chrono::seconds(1))
+	{
+		lastSystemAppearancePoll_ = now;
+		const bool systemDark = Utils::SystemUtils::systemPrefersDarkTheme();
+		if (window->get_system_dark() != systemDark)
+			window->set_system_dark(systemDark);
+	}
 	window->set_preferences_saving(preferencesController.isSaving());
 	const auto activeTab = window->get_active_tab();
 	searchRefreshCoordinator_->refreshIfNeeded(activeTab);

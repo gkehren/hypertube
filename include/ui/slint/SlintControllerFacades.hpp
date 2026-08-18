@@ -118,7 +118,9 @@ public:
 	void toggleSidebar();
 	void resizeLayout(int sidebarWidth, int bottomPanelHeight);
 	void apply();
-	void testConnection();
+	void testTorznabConnection();
+	void testProxyConnection();
+	void cancelConnectionTest();
 	void pollConnectionTest();
 	void clearTorznabSecret();
 	void clearProxySecret();

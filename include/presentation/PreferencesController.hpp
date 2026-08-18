@@ -5,11 +5,15 @@
 
 #include <functional>
 #include <future>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 
 class TorrentManager;
 class SearchEngine;
+struct ConnectionTestCancellation;
 
 #include "CredentialStore.hpp"
 
@@ -48,6 +52,8 @@ public:
 	Result beginConnectionTest(const PreferencesSettings &settings,
 		std::optional<std::string> torznabApiKey = std::nullopt,
 		std::optional<std::string> proxyPassword = std::nullopt);
+	Result beginProxyConnectionTest(const PreferencesSettings &settings,
+		std::optional<std::string> proxyPassword = std::nullopt);
 	std::optional<Result> pollConnectionTest();
 	Result waitForConnectionTest();
 	Result cancelConnectionTest();
@@ -67,7 +73,18 @@ private:
 	CredentialStoreOps credentialStore;
 	std::string settingsPath_;
 	std::optional<SaveHandle> pendingSave_;
-	std::optional<std::future<Result>> pendingConnectionTest_;
+	struct ConnectionTestState
+	{
+		mutable std::mutex mutex;
+		std::optional<Result> result;
+	};
+	struct ConnectionTestOperation
+	{
+		std::shared_ptr<ConnectionTestCancellation> cancellation;
+		std::shared_ptr<ConnectionTestState> state;
+		std::thread worker;
+	};
+	std::optional<ConnectionTestOperation> pendingConnectionTest_;
 	std::optional<std::shared_future<Result>> pendingCredentialRollback_;
 	SaveKind pendingSaveKind_ = SaveKind::None;
 	SaveKind lastCompletedSaveKind_ = SaveKind::None;
@@ -82,6 +99,14 @@ private:
 	bool proxyCredentialChanged_ = false;
 
 	Result finishSave(const Result &saveResult);
+	enum class ConnectionTestKind
+	{
+		Torznab,
+		Proxy
+	};
+	Result beginConnectionTest(ConnectionTestKind kind, const PreferencesSettings &settings,
+		std::optional<std::string> torznabApiKey, std::optional<std::string> proxyPassword);
+	std::optional<Result> takeConnectionTestResult(bool wait);
 	Result beginUiStateSaveNow(const PreferencesSettings &settings);
 	const std::string &settingsPath() const;
 	Result applyUiRuntime(const PreferencesSettings &settings);

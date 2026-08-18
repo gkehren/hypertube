@@ -86,6 +86,20 @@ torrent model, in addition to long, Unicode, loading, error, v2, and hybrid exam
 For deterministic system-theme smoke checks, set `HYPERTUBE_SYSTEM_THEME=dark`
 or `HYPERTUBE_SYSTEM_THEME=light` before launching the application.
 
+For the native System theme, perform one smoke check on each target desktop:
+
+| Platform | Expected check |
+| --- | --- |
+| Windows | Change Windows Personalization between light and dark, wait for the next refresh, and confirm the Hypertube System theme follows it. |
+| macOS | Change Appearance between Light and Dark in System Settings, wait for the next refresh, and confirm the System theme follows it. |
+| Linux GNOME/KDE | Change the desktop color scheme, wait for the next refresh, and confirm the System theme follows it; also verify the dark fallback when no desktop backend is available. |
+
+Run the Preferences smoke test on each platform with Torznab enabled and
+disabled: **Test Torznab** must use the current form without saving it, **Test
+proxy** must remain independently available when Torznab is disabled, and
+**Cancel test** must return a visible cancellation result. A successful network
+test should display its measured latency.
+
 ## Accessibility smoke matrix
 
 Run the following on each desktop target with the platform screen reader or
@@ -94,8 +108,9 @@ accessibility inspector enabled:
 | Surface | Expected behavior |
 | --- | --- |
 | Sidebar, categories, menu, and dialogs | Controls expose names and roles; Tab and Shift+Tab reach every action; Escape closes an open dialog. |
-| Torrent table and search results | Lists expose item counts and labels; Up/Down changes the primary torrent; Ctrl/Cmd-click toggles, Shift-click ranges, Ctrl/Cmd+A selects visible torrents, and Enter/Space activates the focused action. |
+| Torrent table and search results | Lists expose item counts and labels; Up/Down changes the primary torrent; Ctrl/Cmd-click toggles, Shift-click ranges, Ctrl/Cmd+A selects visible torrents, and Enter toggles the selected torrent between Pause and Resume. |
 | Details tabs and data lists | Tabs expose the selected tab and lists expose item labels; file, peer, and tracker actions remain keyboard reachable. |
+| Resize handles and notifications | Sidebar/details handles expose slider values and bounds; toast notifications are announced politely by screen readers. |
 | Toast overlay | Severity is conveyed by the accessible title/message and visible color; Dismiss and any action button are keyboard reachable. |
 
 The `slint-preview-check` target validates the semantic markup at build time;

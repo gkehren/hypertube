@@ -689,7 +689,7 @@ void PreferencesUiController::apply()
 	}
 }
 
-void PreferencesUiController::testConnection()
+void PreferencesUiController::testTorznabConnection()
 {
 	if (preferences_.isConnectionTestRunning())
 		return;
@@ -705,13 +705,35 @@ void PreferencesUiController::testConnection()
 		? "Testing Torznab connection..." : result.message));
 }
 
+void PreferencesUiController::testProxyConnection()
+{
+	if (preferences_.isConnectionTestRunning())
+		return;
+
+	PreferencesSettings preferences;
+	std::optional<std::string> torznabValue;
+	std::optional<std::string> proxyValue;
+	if (!collectPreferences(preferences, torznabValue, proxyValue))
+		return;
+	const Result result = preferences_.beginProxyConnectionTest(preferences, proxyValue);
+	window_.set_preference_test_running(static_cast<bool>(result));
+	window_.set_preferences_state_message(SlintUi::toSharedString(result
+		? "Testing proxy connection..." : result.message));
+}
+
+void PreferencesUiController::cancelConnectionTest()
+{
+	const Result result = preferences_.cancelConnectionTest();
+	if (result)
+		window_.set_preferences_state_message(SlintUi::toSharedString(result.message));
+}
+
 void PreferencesUiController::pollConnectionTest()
 {
 	if (const auto result = preferences_.pollConnectionTest())
 	{
 		window_.set_preference_test_running(false);
-		window_.set_preferences_state_message(SlintUi::toSharedString(result->success
-			? "Torznab connection succeeded" : result->message));
+		window_.set_preferences_state_message(SlintUi::toSharedString(result->message));
 	}
 }
 

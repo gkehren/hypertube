@@ -9,6 +9,8 @@ import { TorrentTableGeometry } from "torrent-table-geometry.slint";
 export component TorrentTable inherits Rectangle {
 	in property <[TorrentRow]> rows: [];
 	in property <string> selected-id;
+	in property <bool> selected-paused: false;
+	in property <int> focus-request: 0;
 	in property <string> empty-message: "No torrents yet";
 	in property <length> available-width: root.width;
 	callback select(string, bool, bool);
@@ -18,6 +20,7 @@ export component TorrentTable inherits Rectangle {
 	callback remove(string);
 	callback copy-magnet(string);
 	callback navigate(int);
+	public function focus-table() { focus-scope.focus(); }
 	private property <bool> compact: root.available-width < 1050px;
 	private property <bool> narrow: root.available-width < 720px;
 	private property <length> progress-width: root.narrow ? 130px : TorrentTableGeometry.progress-width;
@@ -25,6 +28,7 @@ export component TorrentTable inherits Rectangle {
 	background: ThemeTokens.background;
 	min-width: 0px;
 	preferred-width: 0px;
+	changed focus-request => { focus-scope.focus(); }
 	focus-scope := FocusScope {
 		KeyBinding {
 			keys: @keys(UpArrow);
@@ -40,7 +44,7 @@ export component TorrentTable inherits Rectangle {
 		}
 		key-pressed(event) => {
 			if (event.text == "\n" && root.selected-id != "") {
-				root.execute(root.selected-id, UiTorrentCommand.pause);
+				root.execute(root.selected-id, root.selected-paused ? UiTorrentCommand.resume : UiTorrentCommand.pause);
 				return accept;
 			}
 			return reject;

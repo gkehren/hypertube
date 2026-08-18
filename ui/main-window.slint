@@ -59,7 +59,9 @@ export component MainWindow inherits Window {
 	callback toggle-sidebar();
 	callback browse-preference-directory();
 	callback apply-preferences();
-	callback test-preferences-connection();
+	callback test-torznab-connection();
+	callback test-proxy-connection();
+	callback cancel-preferences-connection();
 	callback resize-layout(int, int);
 	callback navigate-torrent(int);
 	callback focus-search();
@@ -168,6 +170,7 @@ export component MainWindow inherits Window {
 	private property <length> maximum-sidebar-width: max(120px, content.width - 528px);
 	private property <length> main-content-width: max(0px, content.width - (root.sidebar-collapsed ? 56px : root.sidebar-width * 1px) - 8px);
 	private property <int> maximum-details-height: max(120, round((content.height - 294px) / 1px));
+	private property <int> table-focus-request: 0;
 	private property <bool> details-collapsed: false;
 
 	title: "Hypertube";
@@ -186,6 +189,15 @@ export component MainWindow inherits Window {
 	}
 	changed height => {
 		root.bottom-panel-height = clamp(root.bottom-panel-height, 120, root.maximum-details-height);
+	}
+	changed add-dialog-open => {
+		if (!root.add-dialog-open && root.active-tab == AppTab.torrents) { root.table-focus-request += 1; }
+	}
+	changed remove-dialog-open => {
+		if (!root.remove-dialog-open && root.active-tab == AppTab.torrents) { root.table-focus-request += 1; }
+	}
+	changed bulk-remove-dialog-open => {
+		if (!root.bulk-remove-dialog-open && root.active-tab == AppTab.torrents) { root.table-focus-request += 1; }
 	}
 
 	main-scope := FocusScope {
@@ -283,6 +295,10 @@ export component MainWindow inherits Window {
 								height: parent.height;
 								accessible-role: slider;
 								accessible-label: "Resize sidebar";
+								accessible-value: root.sidebar-width;
+								accessible-value-minimum: 120;
+								accessible-value-maximum: min(600, round(root.maximum-sidebar-width / 1px));
+								accessible-value-step: 1;
 				pointer-event(event) => {
 					if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down)
 					{
@@ -375,7 +391,9 @@ export component MainWindow inherits Window {
 			toggle-sidebar => { root.toggle-sidebar(); }
 			browse-download-directory => { root.browse-preference-directory(); }
 			apply-preferences => { root.apply-preferences(); }
-			test-connection => { root.test-preferences-connection(); }
+			test-torznab-connection => { root.test-torznab-connection(); }
+			test-proxy-connection => { root.test-proxy-connection(); }
+			cancel-connection-test => { root.cancel-preferences-connection(); }
 			clear-torznab-secret => { root.clear-torznab-secret(); }
 			clear-proxy-secret => { root.clear-proxy-secret(); }
 		}
@@ -439,13 +457,15 @@ export component MainWindow inherits Window {
 			TorrentTable {
 				min-height: 180px;
 				available-width: root.main-content-width - 40px;
-					rows: root.torrent-rows;
-					selected-id: root.selected-torrent-id;
-					empty-message: root.startup-state == "Ready" ? "No torrents yet" : root.startup-state;
-							select(id, toggle, range) => { root.select-torrent(id, toggle, range); }
-							select-all => { root.select-all-torrents(); }
-							navigate(direction) => { root.navigate-torrent(direction); }
-							sort(value) => { root.sort-torrents(value); }
+				rows: root.torrent-rows;
+				selected-id: root.selected-torrent-id;
+				selected-paused: root.selected-torrent-paused;
+				focus-request: root.table-focus-request;
+				empty-message: root.startup-state == "Ready" ? "No torrents yet" : root.startup-state;
+					select(id, toggle, range) => { root.select-torrent(id, toggle, range); }
+					select-all => { root.select-all-torrents(); }
+					navigate(direction) => { root.navigate-torrent(direction); }
+					sort(value) => { root.sort-torrents(value); }
 				execute(id, command) => { root.execute-torrent-command(id, command); }
 				remove(id) => { root.remove-torrent(id); }
 				copy-magnet(id) => { root.copy-magnet(id); }
@@ -466,6 +486,10 @@ export component MainWindow inherits Window {
 					height: parent.height;
 					accessible-role: slider;
 					accessible-label: "Resize details panel";
+					accessible-value: root.bottom-panel-height;
+					accessible-value-minimum: 120;
+					accessible-value-maximum: root.maximum-details-height;
+					accessible-value-step: 1;
 					pointer-event(event) => {
 						if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down)
 						{
@@ -518,7 +542,7 @@ export component MainWindow inherits Window {
 		if (root.add-dialog-open || root.remove-dialog-open || root.bulk-remove-dialog-open): Rectangle {
 			width: parent.width;
 			height: parent.height;
-			background: #00000088;
+			background: ThemeTokens.overlay;
 			TouchArea { width: parent.width; height: parent.height; }
 		}
 

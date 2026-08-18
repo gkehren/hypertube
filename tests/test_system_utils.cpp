@@ -57,6 +57,7 @@ TEST(CredentialStoreTest, AsyncRefreshHasAnExplicitShutdownPath)
 TEST(SystemThemeTest, ExplicitOverrideIsDeterministic)
 {
 	ScopedEnvironment theme("HYPERTUBE_SYSTEM_THEME", "light");
+	EXPECT_EQ(Utils::SystemUtils::systemAppearance(), Utils::SystemUtils::SystemAppearance::Light);
 	EXPECT_FALSE(Utils::SystemUtils::systemPrefersDarkTheme());
 
 #ifdef _WIN32
@@ -64,6 +65,7 @@ TEST(SystemThemeTest, ExplicitOverrideIsDeterministic)
 #else
 	setenv("HYPERTUBE_SYSTEM_THEME", "dark", 1);
 #endif
+	EXPECT_EQ(Utils::SystemUtils::systemAppearance(), Utils::SystemUtils::SystemAppearance::Dark);
 	EXPECT_TRUE(Utils::SystemUtils::systemPrefersDarkTheme());
 }
 

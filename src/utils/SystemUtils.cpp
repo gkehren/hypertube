@@ -11,11 +11,20 @@
 #include <utility>
 #include <initializer_list>
 #include <charconv>
+#include <optional>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <shellapi.h>
+#elif defined(__APPLE__)
+#include <CoreFoundation/CoreFoundation.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <spawn.h>
+#include <cerrno>
+#include <cstring>
+extern char **environ;
 #else
 #include <unistd.h>
 #include <sys/wait.h>
@@ -64,6 +73,122 @@ namespace Utils {
                     return false;
                 dark = index < 8;
                 return true;
+            }
+
+            SystemAppearance parseAppearanceText(const std::string &value) {
+                if (containsIgnoreCase(value, "dark") || containsIgnoreCase(value, "prefer-dark"))
+                    return SystemAppearance::Dark;
+                if (containsIgnoreCase(value, "light") || containsIgnoreCase(value, "prefer-light"))
+                    return SystemAppearance::Light;
+                return SystemAppearance::Unavailable;
+            }
+
+#ifndef _WIN32
+            std::optional<std::string> readProcessOutput(const char *program,
+                std::initializer_list<const char *> arguments) {
+                int pipes[2] = {-1, -1};
+                if (pipe(pipes) != 0)
+                    return std::nullopt;
+                std::vector<std::string> storage{program};
+                for (const auto *argument : arguments)
+                    storage.emplace_back(argument);
+                std::vector<char *> argv;
+                for (auto &argument : storage)
+                    argv.push_back(argument.data());
+                argv.push_back(nullptr);
+                posix_spawn_file_actions_t actions;
+                if (posix_spawn_file_actions_init(&actions) != 0) {
+                    close(pipes[0]);
+                    close(pipes[1]);
+                    return std::nullopt;
+                }
+                posix_spawn_file_actions_adddup2(&actions, pipes[1], STDOUT_FILENO);
+                posix_spawn_file_actions_addclose(&actions, pipes[0]);
+                posix_spawn_file_actions_addclose(&actions, pipes[1]);
+                pid_t pid = -1;
+                const int error = posix_spawnp(&pid, program, &actions, nullptr, argv.data(), environ);
+                posix_spawn_file_actions_destroy(&actions);
+                close(pipes[1]);
+                if (error != 0) {
+                    close(pipes[0]);
+                    return std::nullopt;
+                }
+                std::string output;
+                char buffer[512];
+                for (;;) {
+                    const ssize_t count = read(pipes[0], buffer, sizeof(buffer));
+                    if (count <= 0)
+                        break;
+                    output.append(buffer, static_cast<std::size_t>(count));
+                    if (output.size() > 8192) {
+                        output.resize(8192);
+                        break;
+                    }
+                }
+                close(pipes[0]);
+                int status = 0;
+                if (waitpid(pid, &status, 0) < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
+                    return std::nullopt;
+                return output;
+            }
+#endif
+
+            SystemAppearance nativeSystemAppearance() {
+#ifdef _WIN32
+                HKEY key = nullptr;
+                if (RegOpenKeyExA(HKEY_CURRENT_USER,
+                        "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                        0, KEY_READ, &key) != ERROR_SUCCESS)
+                    return SystemAppearance::Unavailable;
+                DWORD value = 1;
+                DWORD size = sizeof(value);
+                const LONG result = RegQueryValueExA(key, "AppsUseLightTheme", nullptr, nullptr,
+                    reinterpret_cast<LPBYTE>(&value), &size);
+                RegCloseKey(key);
+                if (result != ERROR_SUCCESS || size != sizeof(value))
+                    return SystemAppearance::Unavailable;
+                return value == 0 ? SystemAppearance::Dark : SystemAppearance::Light;
+#elif defined(__APPLE__)
+                const auto *value = CFPreferencesCopyAppValue(CFSTR("AppleInterfaceStyle"),
+                    kCFPreferencesAnyApplication);
+                if (value == nullptr)
+                    return SystemAppearance::Light;
+                SystemAppearance appearance = SystemAppearance::Unavailable;
+                if (CFGetTypeID(value) == CFStringGetTypeID()) {
+                    char buffer[64] = {};
+                    if (CFStringGetCString(static_cast<CFStringRef>(value), buffer, sizeof(buffer),
+                            kCFStringEncodingUTF8))
+                        appearance = parseAppearanceText(buffer);
+                }
+                CFRelease(value);
+                return appearance;
+#elif defined(__linux__)
+                if (const auto colorScheme = readProcessOutput("gsettings",
+                        {"get", "org.gnome.desktop.interface", "color-scheme"})) {
+                    const auto appearance = parseAppearanceText(*colorScheme);
+                    if (appearance != SystemAppearance::Unavailable)
+                        return appearance;
+                }
+                if (const auto gtkTheme = readProcessOutput("gsettings",
+                        {"get", "org.gnome.desktop.interface", "gtk-theme"})) {
+                    const auto appearance = parseAppearanceText(*gtkTheme);
+                    if (appearance != SystemAppearance::Unavailable)
+                        return appearance;
+                }
+                if (const auto kdeTheme = readProcessOutput("kreadconfig6",
+                        {"--group", "General", "--key", "ColorScheme"})) {
+                    const auto appearance = parseAppearanceText(*kdeTheme);
+                    if (appearance != SystemAppearance::Unavailable)
+                        return appearance;
+                }
+                if (const auto kdeTheme = readProcessOutput("kreadconfig5",
+                        {"--group", "General", "--key", "ColorScheme"})) {
+                    const auto appearance = parseAppearanceText(*kdeTheme);
+                    if (appearance != SystemAppearance::Unavailable)
+                        return appearance;
+                }
+#endif
+                return SystemAppearance::Unavailable;
             }
 
             Result validateOpenPath(OpenOperationKind kind, const std::string &path) {
@@ -347,30 +472,38 @@ namespace Utils {
 #endif
         }
 
-        bool systemPrefersDarkTheme() {
+        SystemAppearance systemAppearance() {
             if (const char *overrideTheme = std::getenv("HYPERTUBE_SYSTEM_THEME"); overrideTheme) {
                 const std::string value(overrideTheme);
                 if (equalsIgnoreCase(value, "light"))
-                    return false;
+                    return SystemAppearance::Light;
                 if (equalsIgnoreCase(value, "dark"))
-                    return true;
+                    return SystemAppearance::Dark;
             }
+
+            const auto native = nativeSystemAppearance();
+            if (native != SystemAppearance::Unavailable)
+                return native;
 
             if (const char *gtkTheme = std::getenv("GTK_THEME"); gtkTheme) {
                 const std::string value(gtkTheme);
                 if (containsIgnoreCase(value, "dark"))
-                    return true;
+                    return SystemAppearance::Dark;
                 if (containsIgnoreCase(value, "light"))
-                    return false;
+                    return SystemAppearance::Light;
             }
 
             if (const char *colorFgbg = std::getenv("COLORFGBG"); colorFgbg) {
                 bool dark = true;
                 if (parseColorFgbgBackground(colorFgbg, dark))
-                    return dark;
+                    return dark ? SystemAppearance::Dark : SystemAppearance::Light;
             }
 
-            return true;
+            return SystemAppearance::Unavailable;
+        }
+
+        bool systemPrefersDarkTheme() {
+            return systemAppearance() != SystemAppearance::Light;
         }
 
     }

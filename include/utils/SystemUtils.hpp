@@ -100,8 +100,12 @@ namespace Utils {
         // clipboard backend.
         Result copyToClipboard(const std::string &text);
 
-        // Returns the best available desktop color preference. Dark is the
-        // conservative fallback when no portable platform signal is present.
+        enum class SystemAppearance { Light, Dark, Unavailable };
+
+        // Returns the best available desktop color preference. The environment
+        // override is deterministic for tests and portable deployments; native
+        // platform settings are preferred before Linux desktop fallbacks.
+        SystemAppearance systemAppearance();
         bool systemPrefersDarkTheme();
     }
 }

@@ -74,6 +74,7 @@ private:
 	slint::Timer refreshTimer;
 	slint::Timer autosaveTimer;
 	bool started = false;
+	std::chrono::steady_clock::time_point lastSystemAppearancePoll_{};
 	bool searchFocusRequest_ = false;
 	bool torrentViewDirty_ = true;
 	std::vector<Presentation::TorrentRowDto> visibleTorrentRows_;

@@ -23,9 +23,9 @@ export component TorrentTableRow inherits Rectangle {
 	height: root.narrow ? 88px : 48px;
 	accessible-role: list-item;
 	accessible-label: root.torrent.name + ", " + root.torrent.state-label + ", " + root.torrent.progress-label;
-	background: root.selected || root.hovered ? ThemeTokens.surface-hover : ThemeTokens.surface;
+	background: root.selected ? ThemeTokens.selection : root.hovered ? ThemeTokens.surface-hover : ThemeTokens.surface;
 	border-width: root.primary ? 2px : 1px;
-	border-color: root.primary ? ThemeTokens.accent : root.selected ? ThemeTokens.muted-foreground : root.torrent.error ? ThemeTokens.error : ThemeTokens.border;
+	border-color: root.primary ? ThemeTokens.accent : root.selected ? ThemeTokens.selection : root.torrent.error ? ThemeTokens.error : ThemeTokens.border;
 
 	if (!root.narrow): HorizontalBox {
 		padding: 6px;
