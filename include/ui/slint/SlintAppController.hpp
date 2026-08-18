@@ -74,6 +74,7 @@ private:
 	slint::Timer refreshTimer;
 	slint::Timer autosaveTimer;
 	bool started = false;
+	std::chrono::steady_clock::time_point lastSystemAppearancePoll_{};
 	bool searchFocusRequest_ = false;
 	bool torrentViewDirty_ = true;
 	std::vector<Presentation::TorrentRowDto> visibleTorrentRows_;
@@ -81,5 +82,6 @@ private:
 	bool sortAscending_ = true;
 	int selectedDetailsTab_ = 0;
 	std::string pendingRemoveId_;
+	std::vector<std::string> pendingRemoveIds_;
 	std::shared_ptr<bool> isAlive_ = std::make_shared<bool>(true);
 };

@@ -7,6 +7,7 @@
 #include "TorrentManager.hpp"
 
 #include <chrono>
+#include <exception>
 
 namespace Presentation
 {
@@ -64,6 +65,8 @@ PreferencesController::PreferencesController(TorrentManager &torrentManager, Sea
 
 PreferencesController::~PreferencesController()
 {
+	cancelConnectionTest();
+	waitForConnectionTest();
 	while (isSaving())
 		waitForSave();
 }
@@ -164,6 +167,137 @@ Result PreferencesController::beginSave(const PreferencesSettings &settings,
 	});
 
 	return Result::Success();
+}
+
+Result PreferencesController::beginConnectionTest(const PreferencesSettings &settings,
+	std::optional<std::string> torznabApiKey, std::optional<std::string> proxyPassword)
+{
+	return beginConnectionTest(ConnectionTestKind::Torznab, settings, std::move(torznabApiKey),
+		std::move(proxyPassword));
+}
+
+Result PreferencesController::beginProxyConnectionTest(const PreferencesSettings &settings,
+	std::optional<std::string> proxyPassword)
+{
+	return beginConnectionTest(ConnectionTestKind::Proxy, settings, std::nullopt, std::move(proxyPassword));
+}
+
+Result PreferencesController::beginConnectionTest(ConnectionTestKind kind, const PreferencesSettings &settings,
+	std::optional<std::string> torznabApiKey, std::optional<std::string> proxyPassword)
+{
+	if (pendingConnectionTest_)
+	{
+		const auto completed = takeConnectionTestResult(false);
+		if (!completed)
+			return Result::Failure("A connection test is already running", ResultCode::Busy, true);
+	}
+
+	const std::string proxyType = settings.proxyType.empty() ? "socks5" : settings.proxyType;
+	if (kind == ConnectionTestKind::Torznab)
+	{
+		if (!settings.torznabEnabled)
+			return Result::Failure("Enable Torznab before testing the connection", ResultCode::InvalidInput);
+		const Result providerValidation = SearchEngine::validateTorznabConfig(settings.torznabUrl);
+		if (!providerValidation)
+			return providerValidation;
+		const Result proxyValidation = SearchEngine::validateProxyConfig(settings.proxyEnabled, proxyType,
+			settings.proxyHost, settings.proxyPort);
+		if (!proxyValidation)
+			return proxyValidation;
+	}
+	else
+	{
+		const Result proxyValidation = SearchEngine::validateProxyConfig(true, proxyType,
+			settings.proxyHost, settings.proxyPort);
+		if (!proxyValidation)
+			return proxyValidation;
+	}
+
+	const auto cancellation = std::make_shared<ConnectionTestCancellation>();
+	const auto state = std::make_shared<ConnectionTestState>();
+	SearchEngine *engine = &searchEngine;
+	const auto storeOps = credentialStore;
+	ConnectionTestOperation operation;
+	operation.cancellation = cancellation;
+	operation.state = state;
+	operation.worker = std::thread([engine, kind, settings, proxyType, torznabApiKey, proxyPassword,
+		storeOps, cancellation, state]() {
+		Result result = Result::Failure("Connection test did not complete", ResultCode::Internal);
+		try
+		{
+			const std::string apiKey = torznabApiKey.has_value() ? *torznabApiKey : ([&] {
+				const auto torznabLoad = storeOps.load("torznab_api_key");
+				return torznabLoad.hasSecret() ? torznabLoad.secret : std::string();
+			})();
+			const std::string proxySecret = proxyPassword.has_value() ? *proxyPassword : ([&] {
+				const auto proxyLoad = storeOps.load("proxy_password");
+				return proxyLoad.hasSecret() ? proxyLoad.secret : std::string();
+			})();
+			if (kind == ConnectionTestKind::Torznab)
+				result = engine->testTorznabConnection(settings.torznabUrl, apiKey, settings.proxyEnabled,
+					proxyType, settings.proxyHost, settings.proxyPort, settings.proxyUsername, proxySecret,
+					cancellation);
+			else
+				result = engine->testProxyConnection(proxyType, settings.proxyHost, settings.proxyPort,
+					settings.proxyUsername, proxySecret, cancellation);
+		}
+		catch (const std::exception &error)
+		{
+			result = Result::Failure("Connection test failed: " + std::string(error.what()), ResultCode::Internal);
+		}
+		catch (...)
+		{
+			result = Result::Failure("Connection test failed unexpectedly", ResultCode::Internal);
+		}
+		{
+			std::lock_guard<std::mutex> lock(state->mutex);
+			state->result = std::move(result);
+		}
+	});
+	pendingConnectionTest_.emplace(std::move(operation));
+	return Result::Success();
+}
+
+std::optional<Result> PreferencesController::takeConnectionTestResult(bool wait)
+{
+	if (!pendingConnectionTest_)
+		return std::nullopt;
+	if (!wait)
+	{
+		std::lock_guard<std::mutex> lock(pendingConnectionTest_->state->mutex);
+		if (!pendingConnectionTest_->state->result)
+			return std::nullopt;
+	}
+	if (pendingConnectionTest_->worker.joinable())
+		pendingConnectionTest_->worker.join();
+	Result result = Result::Failure("Connection test did not produce a result", ResultCode::Internal);
+	{
+		std::lock_guard<std::mutex> lock(pendingConnectionTest_->state->mutex);
+		result = pendingConnectionTest_->state->result.value_or(
+			Result::Failure("Connection test did not produce a result", ResultCode::Internal));
+	}
+	pendingConnectionTest_.reset();
+	return result;
+}
+
+std::optional<Result> PreferencesController::pollConnectionTest()
+{
+	return takeConnectionTestResult(false);
+}
+
+Result PreferencesController::waitForConnectionTest()
+{
+	if (!pendingConnectionTest_)
+		return Result::Success();
+	return takeConnectionTestResult(true).value_or(Result::Success());
+}
+
+Result PreferencesController::cancelConnectionTest()
+{
+	if (!pendingConnectionTest_)
+		return Result::Success();
+	pendingConnectionTest_->cancellation->requested.store(true);
+	return Result::Success("Connection test cancellation requested");
 }
 
 Result PreferencesController::beginUiStateSave(const PreferencesSettings &settings)

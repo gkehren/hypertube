@@ -1,0 +1,37 @@
+import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "../theme.slint";
+
+export component ToastNotification inherits Rectangle {
+	in property <string> title;
+	in property <string> message;
+	in property <string> severity: "info";
+	in property <string> action-label;
+	callback dismiss();
+	callback action();
+
+	width: 460px;
+	height: root.action-label == "" ? 92px : 128px;
+	background: ThemeTokens.surface;
+	border-width: 2px;
+	border-color: root.severity == "error" ? ThemeTokens.error
+		: root.severity == "warning" ? ThemeTokens.warning
+		: root.severity == "success" ? ThemeTokens.success : ThemeTokens.accent;
+	accessible-role: text;
+	accessible-label: root.title + ": " + root.message;
+	accessible-live-region: polite;
+
+	VerticalBox {
+		padding: 12px;
+		spacing: 6px;
+		HorizontalBox {
+			Text { text: root.title; color: ThemeTokens.foreground; font-size: 16px; font-weight: 600; horizontal-stretch: 1; }
+			Button { text: "Dismiss"; accessible-label: "Dismiss notification"; clicked => { root.dismiss(); } }
+		}
+		Text { text: root.message; color: ThemeTokens.muted-foreground; wrap: word-wrap; }
+		if (root.action-label != ""): Button {
+			text: root.action-label;
+			accessible-label: root.action-label;
+			clicked => { root.action(); }
+		}
+	}
+}

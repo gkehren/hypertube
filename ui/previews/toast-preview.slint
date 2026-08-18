@@ -1,0 +1,54 @@
+import { VerticalBox } from "std-widgets.slint";
+import { ThemeTokens } from "../theme.slint";
+import { ToastNotification } from "../components/toast-notification.slint";
+
+export component ToastPreview inherits Window {
+	title: "Hypertube Toast Notifications Preview";
+	preferred-width: 600px;
+	preferred-height: 800px;
+	background: ThemeTokens.background;
+
+	VerticalBox {
+		padding: 20px;
+		spacing: 16px;
+
+		Text { text: "Toast Notifications"; color: ThemeTokens.foreground; font-size: 20px; font-weight: 700; }
+
+		ToastNotification {
+			title: "Information";
+			message: "Search completed with 24 results.";
+			severity: "info";
+		}
+
+		ToastNotification {
+			title: "Success";
+			message: "Torrent download finished successfully.";
+			severity: "success";
+		}
+
+		ToastNotification {
+			title: "Warning";
+			message: "Disk space is running low on download drive.";
+			severity: "warning";
+		}
+
+		ToastNotification {
+			title: "Error";
+			message: "Connection failed to Torznab endpoint.";
+			severity: "error";
+		}
+
+		ToastNotification {
+			title: "Action Required";
+			message: "New version available for update.";
+			severity: "info";
+			action-label: "Update Now";
+		}
+
+		ToastNotification {
+			title: "Error Detail";
+			message: "An exceptionally long error message detailing a failure during multi-torrent removal with nested stack details that must wrap gracefully without overflowing the toast bounds.";
+			severity: "error";
+		}
+	}
+}

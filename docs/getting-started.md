@@ -34,7 +34,7 @@ ctest --test-dir build --output-on-failure
 1. Start Hypertube.
 2. Use the torrent file dialog to select a `.torrent` file, or use the magnet dialog to paste a magnet URI.
 3. Select the directory where data should be saved.
-4. Use the torrent table to pause, resume, inspect, filter, or remove torrents.
+4. Use the torrent table to pause, resume, inspect, filter, or remove torrents. Ctrl/Cmd-click toggles selection, Shift-click selects a visible range, and Ctrl/Cmd+A selects all visible torrents for bulk actions.
 5. Open the details view to inspect files, peers, trackers, speeds, and progress.
 
 Torrent state and bounded fast-resume data are persisted periodically and during
@@ -50,7 +50,10 @@ save-path flow before the torrent is added.
 Preferences can switch search to a local Jackett/Prowlarr Torznab endpoint or
 route search and BitTorrent traffic through an HTTP or SOCKS5 proxy. Secrets
 are stored in the operating-system credential store and are never displayed in
-plain text.
+plain text. Speed limits accept `B/s`, `KiB/s`, `MiB/s`, or `GiB/s`; use the
+Preferences **Test Torznab** and **Test proxy** actions to check each network
+path independently before applying a configuration. A test can be cancelled,
+and its success message includes the measured latency.
 
 ## Portable mode
 

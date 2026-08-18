@@ -278,18 +278,60 @@ NotificationController::NotificationController(Utils::SystemUtils::SystemOpener 
 {
 }
 
+void NotificationController::notify(Presentation::UiNotification notification)
+{
+	queue_.enqueue(std::move(notification));
+}
+
+void NotificationController::dismiss()
+{
+	queue_.dismiss();
+	window_.set_toast_visible(false);
+}
+
+void NotificationController::activateAction()
+{
+	// Actions are represented by stable IDs in the toolkit-neutral model. The
+	// first UI iteration has no action handlers yet, so activation dismisses the
+	// current notification and keeps the callback safe for future actions.
+	dismiss();
+}
+
 void NotificationController::drain()
 {
 	for (const auto &operation : opener_.drainResults())
 	{
-		message_ = operation.result ? (operation.kind == Utils::SystemUtils::OpenOperationKind::Explorer
+		Presentation::UiNotification notification;
+		notification.severity = operation.result ? Presentation::NotificationSeverity::Success
+			: Presentation::NotificationSeverity::Error;
+		notification.title = operation.result ? "Operation complete" : "Operation failed";
+		notification.message = operation.result ? (operation.kind == Utils::SystemUtils::OpenOperationKind::Explorer
 			? "Folder opened successfully" : "Preview opened successfully") : operation.result.message;
-		targetsDetails_ = !presenter_.selectedId().empty();
-		deadline_ = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+		notify(std::move(notification));
 	}
-	if (message_.empty()) return;
-	if (std::chrono::steady_clock::now() >= deadline_) { message_.clear(); return; }
-	if (targetsDetails_) window_.set_details_message(SlintUi::toSharedString(message_));
-	else window_.set_startup_state(SlintUi::toSharedString(message_));
+	queue_.tick();
+	if (const auto &notification = queue_.current())
+	{
+		const auto severity = [](Presentation::NotificationSeverity value)
+		{
+			switch (value)
+			{
+			case Presentation::NotificationSeverity::Success: return "success";
+			case Presentation::NotificationSeverity::Warning: return "warning";
+			case Presentation::NotificationSeverity::Error: return "error";
+			case Presentation::NotificationSeverity::Info: return "info";
+			}
+			return "info";
+		};
+		window_.set_toast_title(SlintUi::toSharedString(notification->title));
+		window_.set_toast_message(SlintUi::toSharedString(notification->message));
+		window_.set_toast_severity(slint::SharedString(severity(notification->severity)));
+		window_.set_toast_action_label(SlintUi::toSharedString(notification->actionLabel));
+		window_.set_toast_visible(true);
+	}
+	else
+	{
+		window_.set_toast_visible(false);
+	}
 }
 } // namespace SlintUi

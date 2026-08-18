@@ -110,9 +110,17 @@ The CMake project builds:
 - `hypertube_torrent`: libtorrent session and torrent operations;
 - `hypertube_search`: search provider and HTTP service;
 - `hypertube_presentation`: toolkit-neutral DTOs, presenters, and persistence controllers;
+- `hypertube_slint_models`: Slint model adapters for stable row and log updates;
+- `hypertube_slint_controller`: Slint-facing controllers, refresh coordination, and dialogs;
 - `hypertube`: the Slint application executable;
 - `unit_tests`, `config_tests`, `search_tests`, `torrent_tests`, `slint_model_tests`, and `slint_controller_tests`;
-- `slint-renderer-benchmark`: an opt-in redraw workload shared by the software and FemtoVG validation targets.
+- `slint-renderer-benchmark`: an opt-in redraw workload shared by the software and FemtoVG validation targets;
+- `torrent-presentation-benchmark`: an opt-in synthetic workload for cached torrent-row presentation.
+
+Transient user feedback uses `Presentation::UiNotification` and its bounded
+`NotificationQueue`. Slint projects the current notification into the shared
+toast overlay; contextual details and long-lived form state remain in their
+respective view models.
 
 New services should be isolated behind a small library when they need independent
 tests. UI code should depend on service interfaces and immutable snapshots, not

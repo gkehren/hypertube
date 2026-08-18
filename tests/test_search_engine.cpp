@@ -440,6 +440,31 @@ TEST_F(SearchEngineTest, ValidatesPreferencesWithoutMutatingRuntimeState) {
 	EXPECT_TRUE(SearchEngine::validateProxyConfig(false, "socks5", "", 1080).success);
 }
 
+TEST_F(SearchEngineTest, ValidatesConnectionTestInputsBeforeNetworkAccess) {
+	Result invalidUrl = engine.testTorznabConnection("localhost:9117/api", "", false, "socks5", "", 1080, "", "");
+	EXPECT_FALSE(invalidUrl);
+	EXPECT_EQ(invalidUrl.code, ResultCode::InvalidInput);
+
+	Result invalidProxy = engine.testTorznabConnection(
+		"https://localhost:9117/api", "", true, "http", "", 8080, "", "");
+	EXPECT_FALSE(invalidProxy);
+	EXPECT_EQ(invalidProxy.code, ResultCode::InvalidInput);
+}
+
+TEST_F(SearchEngineTest, ConnectionCancellationIsReportedBeforeStartingNetworkWork)
+{
+	const auto cancellation = std::make_shared<ConnectionTestCancellation>();
+	cancellation->requested = true;
+	const Result torznab = engine.testTorznabConnection(
+		"https://localhost:9117/api", "", false, "socks5", "", 1080, "", "", cancellation);
+	EXPECT_FALSE(torznab);
+	EXPECT_EQ(torznab.code, ResultCode::Cancelled);
+
+	const Result proxy = engine.testProxyConnection("http", "127.0.0.1", 8080, "", "", cancellation);
+	EXPECT_FALSE(proxy);
+	EXPECT_EQ(proxy.code, ResultCode::Cancelled);
+}
+
 TEST_F(SearchEngineTest, TorznabXmlParsesCdataAndCustomNamespaces) {
 	const std::string xml = R"(<?xml version="1.0" encoding="UTF-8"?>
 	<rss version="2.0" xmlns:t="http://torznab.com/schemas/2015/feed">

@@ -40,18 +40,10 @@ add_executable(torrent_tests
 
 add_executable(slint_model_tests
     test_slint_model_adapter.cpp
-    "${CMAKE_SOURCE_DIR}/src/ui/slint/SlintModelAdapter.cpp"
-    "${CMAKE_SOURCE_DIR}/src/ui/slint/SearchModelAdapter.cpp"
-    "${CMAKE_SOURCE_DIR}/src/ui/slint/DetailsModelAdapter.cpp"
 )
 
 add_executable(slint_controller_tests
 	test_slint_controller.cpp
-	"${CMAKE_SOURCE_DIR}/src/ui/slint/SlintRefreshCoordinators.cpp"
-	"${CMAKE_SOURCE_DIR}/src/ui/slint/SlintModelAdapter.cpp"
-	"${CMAKE_SOURCE_DIR}/src/ui/slint/SearchModelAdapter.cpp"
-	"${CMAKE_SOURCE_DIR}/src/ui/slint/DetailsModelAdapter.cpp"
-	"${CMAKE_SOURCE_DIR}/src/ui/slint/LogModelAdapter.cpp"
 )
 
 target_include_directories(slint_controller_tests PRIVATE
@@ -63,16 +55,8 @@ target_include_directories(slint_controller_tests PRIVATE
 
 target_link_libraries(slint_controller_tests PRIVATE
 	gtest_main
-	hypertube_presentation
-	hypertube_search
-	hypertube_torrent
-	hypertube_utils
-	Slint::Slint
-	hypertube_slint_platform
+	hypertube_slint_controller
 )
-
-add_dependencies(slint_controller_tests hypertube)
-slint_target_sources(slint_controller_tests "${CMAKE_SOURCE_DIR}/ui/main-window.slint")
 
 target_include_directories(slint_model_tests PRIVATE
     "${CMAKE_SOURCE_DIR}/include"
@@ -83,12 +67,8 @@ target_include_directories(slint_model_tests PRIVATE
 target_link_libraries(slint_model_tests
     PRIVATE
     gtest_main
-    hypertube_utils
-    Slint::Slint
-    hypertube_slint_platform
+    hypertube_slint_models
 )
-
-add_dependencies(slint_model_tests hypertube)
 
 target_include_directories(config_tests PRIVATE
     "${CMAKE_SOURCE_DIR}/include"

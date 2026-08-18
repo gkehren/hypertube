@@ -152,8 +152,8 @@ static size_t WriteCallback(void *contents, size_t size, size_t nmemb, std::stri
 	}
 }
 
-// Progress callback for cURL to support cancellation
-static int ProgressCallback(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
+// Progress callback for the search worker to support cancellation.
+static int SearchProgressCallback(void *clientp, curl_off_t, curl_off_t, curl_off_t, curl_off_t)
 {
 	SearchEngine *engine = static_cast<SearchEngine *>(clientp);
 	// Return non-zero to abort the transfer if cancellation was requested
@@ -162,6 +162,12 @@ static int ProgressCallback(void *clientp, curl_off_t dltotal, curl_off_t dlnow,
 		return 1; // Abort transfer
 	}
 	return 0; // Continue transfer
+}
+
+static int ConnectionProgressCallback(void *clientp, curl_off_t, curl_off_t, curl_off_t, curl_off_t)
+{
+	const auto *cancellation = static_cast<const ConnectionTestCancellation *>(clientp);
+	return cancellation && cancellation->requested.load() ? 1 : 0;
 }
 
 SearchEngine::SearchEngine()
@@ -378,6 +384,138 @@ Result SearchEngine::validateTorznabConfig(const std::string &url)
 	return Result::Success();
 }
 
+Result SearchEngine::testTorznabConnection(const std::string &url, const std::string &apiKey,
+	bool useProxy, const std::string &configuredProxyType, const std::string &configuredProxyHost,
+	int configuredProxyPort, const std::string &configuredProxyUsername,
+	const std::string &configuredProxyPassword,
+	const std::shared_ptr<ConnectionTestCancellation> &cancellation) const
+{
+	const Result providerValidation = validateTorznabConfig(url);
+	if (!providerValidation)
+		return providerValidation;
+	const Result proxyValidation = validateProxyConfig(useProxy, configuredProxyType, configuredProxyHost,
+		configuredProxyPort);
+	if (!proxyValidation)
+		return proxyValidation;
+
+	std::string endpoint = url;
+	while (!endpoint.empty() && endpoint.back() == '/')
+		endpoint.pop_back();
+	std::string requestUrl = endpoint + (endpoint.find('?') == std::string::npos ? "?" : "&") + "t=caps";
+	if (!apiKey.empty())
+		requestUrl += "&apikey=" + Utils::urlEncode(apiKey);
+	return performConnectionTest(requestUrl, useProxy, configuredProxyType, configuredProxyHost,
+		configuredProxyPort, configuredProxyUsername, configuredProxyPassword, cancellation, "Torznab");
+}
+
+Result SearchEngine::testProxyConnection(const std::string &configuredProxyType,
+	const std::string &configuredProxyHost, int configuredProxyPort,
+	const std::string &configuredProxyUsername, const std::string &configuredProxyPassword,
+	const std::shared_ptr<ConnectionTestCancellation> &cancellation, const std::string &probeUrl) const
+{
+	if (probeUrl.rfind("http://", 0) != 0 && probeUrl.rfind("https://", 0) != 0)
+		return Result::Failure("Proxy probe URL must use http:// or https://", ResultCode::InvalidInput);
+	const Result proxyValidation = validateProxyConfig(true, configuredProxyType, configuredProxyHost,
+		configuredProxyPort);
+	if (!proxyValidation)
+		return proxyValidation;
+	return performConnectionTest(probeUrl, true, configuredProxyType, configuredProxyHost,
+		configuredProxyPort, configuredProxyUsername, configuredProxyPassword, cancellation, "Proxy");
+}
+
+Result SearchEngine::performConnectionTest(const std::string &requestUrl, bool useProxy,
+	const std::string &configuredProxyType, const std::string &configuredProxyHost,
+	int configuredProxyPort, const std::string &configuredProxyUsername,
+	const std::string &configuredProxyPassword,
+	const std::shared_ptr<ConnectionTestCancellation> &cancellation,
+	const std::string &operation) const
+{
+	if (cancellation && cancellation->requested.load())
+		return Result::Failure(operation + " connection test cancelled", ResultCode::Cancelled);
+
+	int timeout = 30;
+	{
+		std::lock_guard<std::mutex> lock(settingsMutex);
+		timeout = timeoutSeconds;
+	}
+
+	CURL *curl = curl_easy_init();
+	if (!curl)
+		return Result::Failure("Failed to initialize cURL", ResultCode::Unavailable, true);
+	std::string response;
+	long responseCode = 0;
+	curl_easy_setopt(curl, CURLOPT_URL, requestUrl.c_str());
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT, static_cast<long>(timeout));
+	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, static_cast<long>(std::min(timeout, 10)));
+	curl_easy_setopt(curl, CURLOPT_USERAGENT, "Hypertube/1.0");
+	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+	curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "http,https");
+	curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
+	if (cancellation)
+	{
+		curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, ConnectionProgressCallback);
+		curl_easy_setopt(curl, CURLOPT_XFERINFODATA, cancellation.get());
+		curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+	}
+	if (useProxy)
+	{
+		curl_easy_setopt(curl, CURLOPT_PROXY, configuredProxyHost.c_str());
+		curl_easy_setopt(curl, CURLOPT_PROXYPORT, static_cast<long>(configuredProxyPort));
+		curl_easy_setopt(curl, CURLOPT_PROXYTYPE,
+			configuredProxyType == "http" ? CURLPROXY_HTTP : CURLPROXY_SOCKS5_HOSTNAME);
+		if (!configuredProxyUsername.empty())
+		{
+			curl_easy_setopt(curl, CURLOPT_PROXYUSERNAME, configuredProxyUsername.c_str());
+			curl_easy_setopt(curl, CURLOPT_PROXYPASSWORD, configuredProxyPassword.c_str());
+		}
+	}
+
+	const auto startTime = std::chrono::steady_clock::now();
+	const CURLcode result = curl_easy_perform(curl);
+	const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+		std::chrono::steady_clock::now() - startTime).count();
+	if (result == CURLE_OK)
+		curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
+	curl_easy_cleanup(curl);
+
+	if (cancellation && cancellation->requested.load())
+		return Result::Failure(operation + " connection test cancelled", ResultCode::Cancelled);
+	if (result != CURLE_OK)
+	{
+		if (result == CURLE_ABORTED_BY_CALLBACK)
+			return Result::Failure(operation + " connection test cancelled", ResultCode::Cancelled);
+		if (result == CURLE_OPERATION_TIMEDOUT)
+			return Result::Failure(operation + " connection timed out", ResultCode::Network, true);
+		if (result == CURLE_COULDNT_RESOLVE_HOST || result == CURLE_COULDNT_RESOLVE_PROXY)
+			return Result::Failure(useProxy ? "Proxy DNS lookup failed" : operation + " DNS lookup failed",
+				ResultCode::Network, true);
+		if (result == CURLE_PEER_FAILED_VERIFICATION || result == CURLE_SSL_CACERT
+			|| result == CURLE_SSL_CONNECT_ERROR)
+			return Result::Failure(operation + " TLS verification failed: "
+				+ std::string(curl_easy_strerror(result)), ResultCode::Network);
+		if (result == CURLE_LOGIN_DENIED)
+			return Result::Failure(operation + " authentication failed", ResultCode::Unauthorized);
+		return Result::Failure(operation + " connection failed: " + std::string(curl_easy_strerror(result)),
+			ResultCode::Network, true);
+	}
+	if (responseCode == 401 || responseCode == 403 || responseCode == 407)
+		return Result::Failure(operation + " authentication failed (HTTP " + std::to_string(responseCode) + ")",
+			ResultCode::Unauthorized);
+	if (responseCode == 429)
+		return Result::Failure(operation + " request was rate limited (HTTP 429)", ResultCode::RateLimited, true);
+	if (responseCode == 408 || responseCode == 504)
+		return Result::Failure(operation + " connection timed out (HTTP " + std::to_string(responseCode) + ")",
+			ResultCode::Network, true);
+	if (responseCode < 200 || responseCode >= 400)
+		return Result::Failure(operation + " request failed (HTTP " + std::to_string(responseCode) + ")",
+			ResultCode::Network, responseCode >= 500);
+	return Result::Success(operation + " connection succeeded (" + std::to_string(elapsedMs) + " ms)");
+}
+
 void SearchEngine::clearSearchCache()
 {
 	std::lock_guard<std::mutex> lock(cacheMutex);
@@ -522,7 +660,7 @@ Result SearchEngine::makeHttpRequest(const std::string &url, std::string &respon
 	}
 
 	// Enable progress callback for cancellation support
-	curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, ProgressCallback);
+	curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, SearchProgressCallback);
 	curl_easy_setopt(curl, CURLOPT_XFERINFODATA, this);
 	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
 

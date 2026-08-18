@@ -63,6 +63,21 @@ struct PersistenceSnapshotResult
 	std::string errorMessage;
 };
 
+struct TorrentOperationFailure
+{
+	lt::info_hash_t hash;
+	std::string message;
+};
+
+struct TorrentBatchResult
+{
+	std::size_t requested = 0;
+	std::size_t succeeded = 0;
+	std::vector<TorrentOperationFailure> failures;
+
+	bool success() const { return failures.empty(); }
+};
+
 enum class TorrentRemovalMode
 {
 	KeepAllFiles,
@@ -149,6 +164,8 @@ public:
 	void addTorrentsFromConfig(const std::vector<TorrentConfigData> &torrents);
 	Result removeTorrent(const lt::info_hash_t &hash, TorrentRemovalMode removeMode);
 	Result executeCommand(const lt::info_hash_t &hash, TorrentCommand command);
+	TorrentBatchResult removeTorrents(const std::vector<lt::info_hash_t> &hashes, TorrentRemovalMode removeMode);
+	TorrentBatchResult executeCommand(const std::vector<lt::info_hash_t> &hashes, TorrentCommand command);
 	std::vector<ManagedTorrent> getTorrentSnapshot() const;
 	std::uint64_t getTorrentCollectionRevision() const { return torrentCollectionRevision.load(); }
 	Result getPersistenceSnapshot(std::vector<ManagedTorrent> &snapshot, std::chrono::milliseconds timeout = std::chrono::seconds(5));

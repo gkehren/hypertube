@@ -50,21 +50,71 @@ scheduled cycle within the stability timeout. GPU presentation timing remains
 backend-owned and is not inferred from Slint's software-only snapshot API.
 The reports are measurements, not an automatic renderer-selection policy.
 
+## Torrent presentation benchmark
+
+The cached torrent presenter has a small opt-in workload for checking rebuild,
+filter, sort, and unchanged-revision paths:
+
+```sh
+cmake --build build --target torrent-presentation-benchmark
+./build/torrent-presentation-benchmark
+```
+
+It prints CSV measurements for 100, 1,000, and 10,000 synthetic rows. The
+numbers are machine- and build-dependent; on the reference Debug build, the
+10,000-row workload measured approximately 16 ms for a full rebuild, 8 ms for
+filtering, and 70 ms for sorting. Treat a sustained result above 50 ms for a
+rebuild, 25 ms for filtering, or 100 ms for sorting as a regression requiring
+investigation. The unchanged-revision path should remain below 1 ms.
+
 ## Visual snapshots
 
 The `slint-visual-snapshots-run` target renders the production shell with mock
 data for Torrents, Search, Favorites, Logs, Preferences, and both torrent
 dialogs. It writes inspectable BMP artifacts for six viewport sizes and all
-five runtime themes under `build/visual-artifacts`:
+eight runtime themes (`Dark`, `Ocean`, `Nord`, `Dracula`, `CyberPunk`, `System`,
+`Light`, and `High contrast`) under `build/visual-artifacts`:
 
 ```sh
 cmake --build build --target slint-visual-snapshots-run
 ```
 
-On headless Linux, run the target through `xvfb-run -a`. CI uploads the 390
+On headless Linux, run the target through `xvfb-run -a`. CI uploads the 624
 generated images as the `slint-visual-snapshots` artifact. The matrix includes
 empty Torrent, Search, Favorites, Logs, and Details models plus a 10,000-row
 torrent model, in addition to long, Unicode, loading, error, v2, and hybrid examples.
+For deterministic system-theme smoke checks, set `HYPERTUBE_SYSTEM_THEME=dark`
+or `HYPERTUBE_SYSTEM_THEME=light` before launching the application.
+
+For the native System theme, perform one smoke check on each target desktop:
+
+| Platform | Expected check |
+| --- | --- |
+| Windows | Change Windows Personalization between light and dark, wait for the next refresh, and confirm the Hypertube System theme follows it. |
+| macOS | Change Appearance between Light and Dark in System Settings, wait for the next refresh, and confirm the System theme follows it. |
+| Linux GNOME/KDE | Change the desktop color scheme, wait for the next refresh, and confirm the System theme follows it; also verify the dark fallback when no desktop backend is available. |
+
+Run the Preferences smoke test on each platform with Torznab enabled and
+disabled: **Test Torznab** must use the current form without saving it, **Test
+proxy** must remain independently available when Torznab is disabled, and
+**Cancel test** must return a visible cancellation result. A successful network
+test should display its measured latency.
+
+## Accessibility smoke matrix
+
+Run the following on each desktop target with the platform screen reader or
+accessibility inspector enabled:
+
+| Surface | Expected behavior |
+| --- | --- |
+| Sidebar, categories, menu, and dialogs | Controls expose names and roles; Tab and Shift+Tab reach every action; Escape closes an open dialog. |
+| Torrent table and search results | Lists expose item counts and labels; Up/Down changes the primary torrent; Ctrl/Cmd-click toggles, Shift-click ranges, Ctrl/Cmd+A selects visible torrents, and Enter toggles the selected torrent between Pause and Resume. |
+| Details tabs and data lists | Tabs expose the selected tab and lists expose item labels; file, peer, and tracker actions remain keyboard reachable. |
+| Resize handles and notifications | Sidebar/details handles expose slider values and bounds; toast notifications are announced politely by screen readers. |
+| Toast overlay | Severity is conveyed by the accessible title/message and visible color; Dismiss and any action button are keyboard reachable. |
+
+The `slint-preview-check` target validates the semantic markup at build time;
+screen-reader announcements and focus order remain target-desktop smoke tests.
 
 ## Test design rules
 
@@ -83,6 +133,10 @@ writes, concurrent updates, and orderly worker shutdown. Search tests cover
 provider errors, cancellation, pagination, URL encoding, proxy validation,
 fallback, and cache behavior. UI boundary tests cover snapshot consistency,
 callback lifetime, model revisions, and non-blocking refresh behavior.
+
+Presentation unit tests also cover notification deduplication, bounded
+queueing, expiry, and dismissal. Slint preview validation covers the toast
+overlay through the production shell preview.
 
 Native file and directory pickers are OS-boundary calls from the Slint callback
 path. Their availability and cancellation behavior must be smoke-tested on the

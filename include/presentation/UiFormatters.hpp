@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Result.hpp"
+
 #include <cstdint>
 #include <string>
 #include <chrono>
@@ -8,6 +10,8 @@ namespace Presentation::UiFormatters
 {
 std::string formatBytes(std::int64_t bytes, bool speed = false);
 std::string formatRate(std::int64_t bytesPerSecond);
+Result parseSpeedLimit(const std::string &value, int &bytesPerSecond);
+std::string formatSpeedLimit(std::int64_t bytesPerSecond);
 std::string formatProgress(float progress);
 std::string formatEta(std::int64_t seconds);
 std::string formatUnixDate(std::int64_t unixTime);

@@ -10,6 +10,7 @@
 #include "presentation/SearchPresenter.hpp"
 #include "presentation/TorrentDetailsPresenter.hpp"
 #include "presentation/TorrentListPresenter.hpp"
+#include "presentation/UiNotifications.hpp"
 #include "SystemUtils.hpp"
 
 #include <chrono>
@@ -101,14 +102,15 @@ class NotificationController
 public:
 	NotificationController(Utils::SystemUtils::SystemOpener &opener,
 		Presentation::TorrentListPresenter &presenter, MainWindow &window);
+	void notify(Presentation::UiNotification notification);
+	void dismiss();
+	void activateAction();
 	void drain();
 
 private:
 	Utils::SystemUtils::SystemOpener &opener_;
 	Presentation::TorrentListPresenter &presenter_;
 	MainWindow &window_;
-	std::chrono::steady_clock::time_point deadline_{};
-	std::string message_;
-	bool targetsDetails_ = false;
+	Presentation::NotificationQueue queue_;
 };
 } // namespace SlintUi

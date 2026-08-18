@@ -24,6 +24,11 @@ struct View
 	bool emptyFavorites = false;
 	bool emptyLogs = false;
 	bool emptyDetails = false;
+	bool toastVisible = false;
+	const char *toastTitle = "";
+	const char *toastMessage = "";
+	const char *toastSeverity = "info";
+	const char *toastActionLabel = "";
 };
 
 std::shared_ptr<slint::Model<TorrentRow>> makeLargeTorrentModel()
@@ -108,7 +113,8 @@ int main(int argc, char **argv)
 
 	const std::vector<std::pair<const char *, Theme>> themes {
 		{ "dark", Theme::Dark }, { "ocean", Theme::Ocean }, { "nord", Theme::Nord },
-		{ "dracula", Theme::Dracula }, { "cyberpunk", Theme::Cyberpunk }
+		{ "dracula", Theme::Dracula }, { "cyberpunk", Theme::Cyberpunk },
+		{ "system", Theme::System }, { "light", Theme::Light }, { "high-contrast", Theme::HighContrast }
 	};
 	const std::vector<std::pair<unsigned, unsigned>> sizes {
 		{ 800, 600 }, { 900, 700 }, { 1024, 768 }, { 1280, 760 }, { 1440, 900 }, { 1920, 1080 }
@@ -124,7 +130,12 @@ int main(int argc, char **argv)
 		{ .name = "search-empty", .tab = AppTab::Search, .emptySearch = true },
 		{ .name = "favorites-empty", .tab = AppTab::Favorites, .emptyFavorites = true },
 		{ .name = "logs-empty", .tab = AppTab::Logs, .emptyLogs = true },
-		{ .name = "details-empty", .tab = AppTab::Torrents, .emptyDetails = true }
+		{ .name = "details-empty", .tab = AppTab::Torrents, .emptyDetails = true },
+		{ .name = "toast-info", .tab = AppTab::Torrents, .toastVisible = true, .toastTitle = "Information", .toastMessage = "Torrent search complete", .toastSeverity = "info" },
+		{ .name = "toast-success", .tab = AppTab::Torrents, .toastVisible = true, .toastTitle = "Success", .toastMessage = "Torrent download finished", .toastSeverity = "success" },
+		{ .name = "toast-warning", .tab = AppTab::Torrents, .toastVisible = true, .toastTitle = "Warning", .toastMessage = "Disk space running low", .toastSeverity = "warning" },
+		{ .name = "toast-error", .tab = AppTab::Torrents, .toastVisible = true, .toastTitle = "Error", .toastMessage = "Connection failed to Torznab endpoint", .toastSeverity = "error" },
+		{ .name = "toast-action", .tab = AppTab::Torrents, .toastVisible = true, .toastTitle = "Action Required", .toastMessage = "Update available", .toastSeverity = "info", .toastActionLabel = "Update" }
 	};
 	const auto largeTorrentModel = makeLargeTorrentModel();
 
@@ -150,6 +161,11 @@ int main(int argc, char **argv)
 				window->set_snapshot_empty_favorites(view.emptyFavorites);
 				window->set_snapshot_empty_logs(view.emptyLogs);
 				window->set_snapshot_empty_details(view.emptyDetails);
+				window->set_snapshot_toast_visible(view.toastVisible);
+				window->set_snapshot_toast_title(slint::SharedString(view.toastTitle));
+				window->set_snapshot_toast_message(slint::SharedString(view.toastMessage));
+				window->set_snapshot_toast_severity(slint::SharedString(view.toastSeverity));
+				window->set_snapshot_toast_action_label(slint::SharedString(view.toastActionLabel));
 				window->set_snapshot_width(static_cast<float>(width));
 				window->set_snapshot_height(static_cast<float>(height));
 				if (view.largeTorrentModel)

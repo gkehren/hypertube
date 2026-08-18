@@ -10,19 +10,22 @@ import { TorrentTableGeometry } from "torrent-table-geometry.slint";
 export component TorrentTableRow inherits Rectangle {
 	in property <TorrentRow> torrent;
 	in property <bool> selected: false;
+	in property <bool> primary: false;
 	in property <bool> compact: false;
 	in property <bool> narrow: false;
 	in property <length> progress-width;
 	in property <length> status-width;
 	private property <bool> hovered: false;
-	callback select(string);
+	callback select(string, bool, bool);
 	callback execute(string, UiTorrentCommand);
 	callback remove(string);
 	callback copy-magnet(string);
 	height: root.narrow ? 88px : 48px;
-	background: root.selected || root.hovered ? ThemeTokens.surface-hover : ThemeTokens.surface;
-	border-width: root.selected ? 2px : 1px;
-	border-color: root.selected ? ThemeTokens.accent : root.torrent.error ? ThemeTokens.error : ThemeTokens.border;
+	accessible-role: list-item;
+	accessible-label: root.torrent.name + ", " + root.torrent.state-label + ", " + root.torrent.progress-label;
+	background: root.selected ? ThemeTokens.selection : root.hovered ? ThemeTokens.surface-hover : ThemeTokens.surface;
+	border-width: root.primary ? 2px : 1px;
+	border-color: root.primary ? ThemeTokens.accent : root.selected ? ThemeTokens.selection : root.torrent.error ? ThemeTokens.error : ThemeTokens.border;
 
 	if (!root.narrow): HorizontalBox {
 		padding: 6px;
@@ -41,7 +44,15 @@ export component TorrentTableRow inherits Rectangle {
 				if (!root.compact): Text { text: root.torrent.eta-label; color: ThemeTokens.muted-foreground; width: TorrentTableGeometry.eta-width; wrap: no-wrap; overflow: elide; }
 			}
 			TouchArea {
-				clicked => { root.select(root.torrent.id); }
+				accessible-role: list-item;
+				accessible-label: root.torrent.name + ", " + root.torrent.state-label;
+				accessible-value: root.selected ? "selected" : "unselected";
+				pointer-event(event) => {
+					if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down)
+					{
+						root.select(root.torrent.id, event.modifiers.control || event.modifiers.meta, event.modifiers.shift);
+					}
+				}
 				changed has-hover => { root.hovered = self.has-hover; }
 			}
 		}
@@ -64,9 +75,17 @@ export component TorrentTableRow inherits Rectangle {
 			}
 		}
 		TouchArea {
+			accessible-role: list-item;
+			accessible-label: root.torrent.name + ", " + root.torrent.state-label;
+			accessible-value: root.selected ? "selected" : "unselected";
 			width: parent.width - TorrentTableGeometry.actions-width;
 			height: parent.height;
-			clicked => { root.select(root.torrent.id); }
+			pointer-event(event) => {
+				if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down)
+				{
+					root.select(root.torrent.id, event.modifiers.control || event.modifiers.meta, event.modifiers.shift);
+				}
+			}
 			changed has-hover => { root.hovered = self.has-hover; }
 		}
 	}

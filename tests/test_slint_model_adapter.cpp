@@ -7,6 +7,7 @@
 #include "SearchModelAdapter.hpp"
 #include "SlintModelAdapter.hpp"
 #include "DetailsModelAdapter.hpp"
+#include "LogModelAdapter.hpp"
 #include "utils/TorrentIdentity.hpp"
 
 namespace
@@ -192,5 +193,32 @@ TEST(SlintModelAdapterTest, KeepsDetailsModelIdentityWhenRowsAreUnchanged)
 	adapter.updateFiles(rows);
 	ASSERT_TRUE(model->row_data(0).has_value());
 	EXPECT_EQ(model->row_data(0)->priority, 7);
+}
+
+TEST(SlintModelAdapterTest, LogModelAdapterIncrementalUpdates)
+{
+	LogModelAdapter adapter;
+	std::vector<Presentation::LogRowDto> logs{
+		{"12:00:00", "INFO", "app", "Started application", 1},
+		{"12:00:01", "WARN", "torrent", "Low peer count", 2}
+	};
+
+	adapter.update(logs);
+	ASSERT_EQ(adapter.size(), 2U);
+	ASSERT_EQ(adapter.model()->row_count(), 2U);
+
+	// Identical update must leave model untouched
+	adapter.update(logs);
+	EXPECT_EQ(adapter.size(), 2U);
+	EXPECT_EQ(adapter.model()->row_count(), 2U);
+
+	// Incremental append must push new entry without clearing
+	logs.push_back({"12:00:02", "ERROR", "search", "Search failed", 3});
+	adapter.update(logs);
+	EXPECT_EQ(adapter.size(), 3U);
+	EXPECT_EQ(adapter.model()->row_count(), 3U);
+	auto third = adapter.model()->row_data(2);
+	ASSERT_TRUE(third.has_value());
+	EXPECT_EQ(stringValue(third->message), "Search failed");
 }
 } // namespace

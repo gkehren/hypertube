@@ -32,6 +32,7 @@ public:
 		: success(success), message(message), code(code), retryable(retryable) {}
 
 	static Result Success() { return Result(true); }
+	static Result Success(const std::string &message) { return Result(true, message); }
 	static Result Failure(const std::string &message, ResultCode code = ResultCode::Internal, bool retryable = false)
 	{
 		return Result(false, message, code, retryable);

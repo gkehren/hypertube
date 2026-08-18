@@ -28,6 +28,21 @@ std::string hashForLog(const lt::info_hash_t &hash)
 	return id.empty() ? "unknown" : id;
 }
 
+std::optional<lt::info_hash_t> hashFromAlertHandle(const lt::torrent_handle &handle)
+{
+	if (!handle.is_valid())
+		return std::nullopt;
+
+	try
+	{
+		return handle.info_hashes();
+	}
+	catch (const std::exception &)
+	{
+		return std::nullopt;
+	}
+}
+
 Result validateAddPaths(std::string &savePath, const std::string *torrentPath = nullptr)
 {
 	std::error_code error;
@@ -66,28 +81,28 @@ TorrentEvent makeTorrentEvent(lt::alert *alert)
 		event.category = "tracker";
 		event.message = std::string("Tracker error for '") + trackerError->torrent_name() + "': " + trackerError->error_message();
 		event.severity = Utils::LogLevel::Error;
-		event.hash = trackerError->handle.info_hashes();
+		event.hash = hashFromAlertHandle(trackerError->handle);
 	}
 	else if (auto *trackerWarning = lt::alert_cast<lt::tracker_warning_alert>(alert))
 	{
 		event.category = "tracker";
 		event.message = std::string("Tracker warning for '") + trackerWarning->torrent_name() + "': " + trackerWarning->warning_message();
 		event.severity = Utils::LogLevel::Warning;
-		event.hash = trackerWarning->handle.info_hashes();
+		event.hash = hashFromAlertHandle(trackerWarning->handle);
 	}
 	else if (auto *fileError = lt::alert_cast<lt::file_error_alert>(alert))
 	{
 		event.category = "storage";
 		event.message = std::string("File error for '") + fileError->torrent_name() + "': " + fileError->error.message();
 		event.severity = Utils::LogLevel::Error;
-		event.hash = fileError->handle.info_hashes();
+		event.hash = hashFromAlertHandle(fileError->handle);
 	}
 	else if (auto *movedFailed = lt::alert_cast<lt::storage_moved_failed_alert>(alert))
 	{
 		event.category = "storage";
 		event.message = std::string("Storage move failed for '") + movedFailed->torrent_name() + "': " + movedFailed->error.message();
 		event.severity = Utils::LogLevel::Error;
-		event.hash = movedFailed->handle.info_hashes();
+		event.hash = hashFromAlertHandle(movedFailed->handle);
 	}
 	else if (lt::alert_cast<lt::session_stats_alert>(alert))
 	{
@@ -98,30 +113,32 @@ TorrentEvent makeTorrentEvent(lt::alert *alert)
 	else if (auto *added = lt::alert_cast<lt::add_torrent_alert>(alert))
 	{
 		event.category = "torrent";
-		event.message = added->error ? std::string("Failed to add torrent: ") + added->error.message() : std::string("Torrent added: ") + added->torrent_name();
+		event.message = added->error
+			? std::string("Failed to add torrent: ") + added->error.message()
+			: "Torrent added";
 		event.severity = added->error ? Utils::LogLevel::Error : Utils::LogLevel::Info;
-		event.hash = added->handle.info_hashes();
+		event.hash = hashFromAlertHandle(added->handle);
 	}
 	else if (auto *finished = lt::alert_cast<lt::torrent_finished_alert>(alert))
 	{
 		event.category = "torrent";
 		event.message = std::string("Torrent finished: ") + finished->torrent_name();
 		event.severity = Utils::LogLevel::Info;
-		event.hash = finished->handle.info_hashes();
+		event.hash = hashFromAlertHandle(finished->handle);
 	}
 	else if (auto *metadata = lt::alert_cast<lt::metadata_received_alert>(alert))
 	{
 		event.category = "torrent";
 		event.message = std::string("Metadata received for: ") + metadata->torrent_name();
 		event.severity = Utils::LogLevel::Info;
-		event.hash = metadata->handle.info_hashes();
+		event.hash = hashFromAlertHandle(metadata->handle);
 	}
 	else if (auto *peerError = lt::alert_cast<lt::peer_error_alert>(alert))
 	{
 		event.category = "peer";
 		event.message = std::string("Peer error for '") + peerError->torrent_name() + "': " + peerError->error.message();
 		event.severity = Utils::LogLevel::Warning;
-		event.hash = peerError->handle.info_hashes();
+		event.hash = hashFromAlertHandle(peerError->handle);
 	}
 	else if (lt::alert_cast<lt::dht_bootstrap_alert>(alert))
 	{
@@ -129,10 +146,22 @@ TorrentEvent makeTorrentEvent(lt::alert *alert)
 		event.message = "DHT bootstrap complete";
 		event.severity = Utils::LogLevel::Info;
 	}
+	else if (auto *sessionError = lt::alert_cast<lt::session_error_alert>(alert))
+	{
+		event.category = "session";
+		event.severity = Utils::LogLevel::Error;
+		// Avoid session_error_alert::message(): some platform libtorrent
+		// packages format its internal buffer with an invalid read length.
+		event.message = sessionError->error
+		? "Session error: " + sessionError->error.message()
+		: "Session error";
+	}
 	else
 	{
 		event.category = "torrent";
-		event.message = alert->message();
+		// Avoid the generic formatter. Some platform libtorrent packages have
+		// reported invalid reads from message(); what() is a static type name.
+		event.message = std::string("libtorrent alert: ") + alert->what();
 		event.severity = Utils::LogLevel::Debug;
 	}
 	return event;
@@ -171,7 +200,7 @@ Result TorrentManager::addTorrent(const std::string &torrentPath, const std::str
 				++torrentCollectionRevision;
 		}
 
-		std::cout << "Added torrent from file: " << handle.status().name << std::endl;
+		std::cout << "Added torrent from file: " << torrentPath << std::endl;
 		Utils::Logger::info("torrent", "Added torrent from file: " + torrentPath);
 		markStatusCacheStale(cacheMutex, lastCacheRefresh);
 		return Result::Success();
@@ -198,7 +227,7 @@ Result TorrentManager::addMagnetTorrent(const std::string &magnetUri, const std:
 		lt::add_torrent_params params = lt::parse_magnet_uri(magnetUri);
 		if (!params.info_hashes.has_v1() && !params.info_hashes.has_v2())
 			return Result::Failure("Magnet URI does not contain a supported info hash", ResultCode::InvalidInput);
-		std::cout << "Adding magnet torrent: " << params.name << " (hash: " << params.info_hashes.v1 << ")" << std::endl;
+		std::cout << "Adding magnet torrent: " << params.name << " (hash: " << hashForLog(params.info_hashes) << ")" << std::endl;
 		params.save_path = resolvedSavePath;
 		params.flags |= lt::torrent_flags::duplicate_is_error;
 		if (params.info_hashes.has_v1() || params.info_hashes.has_v2())
@@ -218,7 +247,7 @@ Result TorrentManager::addMagnetTorrent(const std::string &magnetUri, const std:
 				++torrentCollectionRevision;
 		}
 
-		std::cout << "Added magnet torrent: " << handle.status().name << std::endl;
+		std::cout << "Added magnet torrent: " << hashForLog(hash) << std::endl;
 		Utils::Logger::info("torrent", "Added torrent from magnet URI");
 		markStatusCacheStale(cacheMutex, lastCacheRefresh);
 		return Result::Success();
@@ -392,6 +421,38 @@ Result TorrentManager::executeCommand(const lt::info_hash_t &hash, TorrentComman
 	}
 }
 
+TorrentBatchResult TorrentManager::removeTorrents(const std::vector<lt::info_hash_t> &hashes, TorrentRemovalMode removeMode)
+{
+	TorrentBatchResult result;
+	result.requested = hashes.size();
+	result.failures.reserve(hashes.size());
+	for (const auto &hash : hashes)
+	{
+		const Result operation = removeTorrent(hash, removeMode);
+		if (operation)
+			++result.succeeded;
+		else
+			result.failures.push_back({hash, operation.message});
+	}
+	return result;
+}
+
+TorrentBatchResult TorrentManager::executeCommand(const std::vector<lt::info_hash_t> &hashes, TorrentCommand command)
+{
+	TorrentBatchResult result;
+	result.requested = hashes.size();
+	result.failures.reserve(hashes.size());
+	for (const auto &hash : hashes)
+	{
+		const Result operation = executeCommand(hash, command);
+		if (operation)
+			++result.succeeded;
+		else
+			result.failures.push_back({hash, operation.message});
+	}
+	return result;
+}
+
 std::vector<ManagedTorrent> TorrentManager::getTorrentSnapshot() const
 {
 	std::vector<ManagedTorrent> snapshot;
@@ -553,23 +614,26 @@ void TorrentManager::alertWorkerLoop()
 
 			if (auto *saved = lt::alert_cast<lt::save_resume_data_alert>(alert))
 			{
-				const lt::info_hash_t hash = saved->handle.info_hashes();
-				resumeDataStore_[hash] = lt::write_resume_data_buf(saved->params);
-				pendingResumeHashes_.erase(hash);
-				alertCv_.notify_all();
+				if (const auto hash = hashFromAlertHandle(saved->handle))
+				{
+					resumeDataStore_[*hash] = lt::write_resume_data_buf(saved->params);
+					pendingResumeHashes_.erase(*hash);
+					alertCv_.notify_all();
+				}
 			}
 			else if (auto *failed = lt::alert_cast<lt::save_resume_data_failed_alert>(alert))
 			{
-				const lt::info_hash_t hash = failed->handle.info_hashes();
-				pendingResumeHashes_.erase(hash);
-				alertCv_.notify_all();
+				if (const auto hash = hashFromAlertHandle(failed->handle))
+				{
+					pendingResumeHashes_.erase(*hash);
+					alertCv_.notify_all();
+				}
 				Utils::Logger::warning("torrent", "Unable to save fast-resume data: " + failed->error.message());
 			}
 
 			if (auto *metadata = lt::alert_cast<lt::metadata_received_alert>(alert))
 			{
-				const auto hash = metadata->handle.info_hashes();
-				if (metadata->handle.is_valid())
+				if (const auto hash = hashFromAlertHandle(metadata->handle))
 				{
 					try
 					{
@@ -577,7 +641,7 @@ void TorrentManager::alertWorkerLoop()
 						if (tf && !tf->name().empty())
 						{
 							std::lock_guard<std::mutex> stateLock(stateMutex);
-							torrentDisplayNames[hash] = tf->name();
+							torrentDisplayNames[*hash] = tf->name();
 						}
 					}
 					catch (const std::exception &) {}
@@ -651,25 +715,35 @@ std::uint64_t TorrentManager::getStatusRevision() const
 
 void TorrentManager::refreshStatusCache()
 {
+	// Serialize the session snapshot with add/remove/command operations. Query
+	// the session once instead of synchronously asking every copied
+	// torrent_handle for its status. The latter can race libtorrent's internal
+	// handle teardown on some platform builds, even when the registry itself is
+	// protected.
+	std::lock_guard<std::mutex> operationLock(operationMutex);
 	auto newCache = std::make_shared<std::unordered_map<lt::info_hash_t, lt::torrent_status>>();
 	const auto torrentsSnapshot = getTorrentSnapshot();
+	std::unordered_set<lt::info_hash_t> managedHashes;
+	managedHashes.reserve(torrentsSnapshot.size());
+	for (const auto &torrent : torrentsSnapshot)
+		managedHashes.insert(torrent.hash);
+
 	bool complete = true;
 
-	// Refresh all torrent statuses
-	for (const auto &torrent : torrentsSnapshot)
+	try
 	{
-		if (torrent.handle.is_valid())
+		const auto statuses = session.get_torrent_status([&managedHashes](const lt::torrent_status &status)
 		{
-			try
-			{
-				(*newCache)[torrent.hash] = torrent.handle.status();
-			}
-			catch (const std::exception &e)
-			{
-				complete = false;
-				Utils::Logger::warning("torrent", "Status refresh skipped a torrent: " + std::string(e.what()));
-			}
-		}
+			return managedHashes.contains(status.info_hashes);
+		}, lt::torrent_handle::status_flags_t::all());
+		for (const auto &status : statuses)
+			(*newCache)[status.info_hashes] = status;
+		complete = newCache->size() == managedHashes.size();
+	}
+	catch (const std::exception &e)
+	{
+		complete = false;
+		Utils::Logger::warning("torrent", "Status refresh failed: " + std::string(e.what()));
 	}
 
 	{

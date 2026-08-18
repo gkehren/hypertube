@@ -99,5 +99,13 @@ namespace Utils {
         // native Win32 clipboard, pbcopy, or the first available Linux
         // clipboard backend.
         Result copyToClipboard(const std::string &text);
+
+        enum class SystemAppearance { Light, Dark, Unavailable };
+
+        // Returns the best available desktop color preference. The environment
+        // override is deterministic for tests and portable deployments; native
+        // platform settings are preferred before Linux desktop fallbacks.
+        SystemAppearance systemAppearance();
+        bool systemPrefersDarkTheme();
     }
 }

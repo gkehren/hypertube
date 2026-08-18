@@ -66,6 +66,14 @@ struct CompletedSearch
 	SearchResponse response;
 };
 
+// A connection test has a lifetime independent from the search worker. The
+// owner requests cancellation through this small shared state and the cURL
+// progress callback observes it without taking a service lock.
+struct ConnectionTestCancellation
+{
+	std::atomic<bool> requested{false};
+};
+
 class SearchEngine
 {
 public:
@@ -83,6 +91,14 @@ public:
 	std::vector<std::string> getSearchProviders() const;
 	Result configureTorznabProvider(const std::string &url, const std::string &apiKey = "");
 	static Result validateTorznabConfig(const std::string &url);
+	Result testTorznabConnection(const std::string &url, const std::string &apiKey,
+		bool proxyEnabled, const std::string &proxyType, const std::string &proxyHost,
+		int proxyPort, const std::string &proxyUsername, const std::string &proxyPassword,
+		const std::shared_ptr<ConnectionTestCancellation> &cancellation = {}) const;
+	Result testProxyConnection(const std::string &proxyType, const std::string &proxyHost,
+		int proxyPort, const std::string &proxyUsername, const std::string &proxyPassword,
+		const std::shared_ptr<ConnectionTestCancellation> &cancellation = {},
+		const std::string &probeUrl = "https://example.com/") const;
 	void clearSearchCache();
 
 	// Async searches publish owned completions for the UI thread to consume.
@@ -176,6 +192,12 @@ private:
 	Result parseSearchResponse(const std::string &response, SearchResponse &searchResponse);
 	Result parseTorznabResponse(const std::string &response, SearchResponse &searchResponse);
 	Result performSearch(const SearchQuery &query, SearchResponse &response);
+	Result performConnectionTest(const std::string &requestUrl, bool useProxy,
+		const std::string &configuredProxyType, const std::string &configuredProxyHost,
+		int configuredProxyPort, const std::string &configuredProxyUsername,
+		const std::string &configuredProxyPassword,
+		const std::shared_ptr<ConnectionTestCancellation> &cancellation,
+		const std::string &operation) const;
 	bool tryStartSearch();
 	void finishSearch();
 	void workerLoop();

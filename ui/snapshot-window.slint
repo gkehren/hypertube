@@ -17,6 +17,11 @@ export component SnapshotWindow inherits MainWindow {
 	in-out property <bool> snapshot-empty-favorites: false;
 	in-out property <bool> snapshot-empty-logs: false;
 	in-out property <bool> snapshot-empty-details: false;
+	in-out property <bool> snapshot-toast-visible: false;
+	in-out property <string> snapshot-toast-title: "";
+	in-out property <string> snapshot-toast-message: "";
+	in-out property <string> snapshot-toast-severity: "info";
+	in-out property <string> snapshot-toast-action-label: "";
 	in-out property <[TorrentRow]> snapshot-torrent-rows: [
 		{ id: "v1:0000000000000000000000000000000000000001", name: "Ubuntu 24.04 LTS — a long production torrent row used for visual validation", state-label: "Downloading", progress-label: "47.5%", progress: 0.475, size-label: "4.7 GiB", download-rate-label: "8.2 MiB/s", upload-rate-label: "512 KiB/s", peers-label: "34", seeds-label: "120", eta-label: "14m", paused: false, error: false, active: true },
 		{ id: "v1:0000000000000000000000000000000000000002", name: "Unicode пример français 🚀 with a pathologically long title that must be elided", state-label: "Paused", progress-label: "82.0%", progress: 0.82, size-label: "9.8 GiB", download-rate-label: "0 B/s", upload-rate-label: "0 B/s", peers-label: "0", seeds-label: "42", eta-label: "—", paused: true, error: false, active: false },
@@ -59,5 +64,10 @@ export component SnapshotWindow inherits MainWindow {
 		preference-torznab-secret-stored: true;
 		preference-proxy-secret-stored: true;
 		add-save-path: "~/Downloads";
+		toast-visible: root.snapshot-toast-visible;
+		toast-title: root.snapshot-toast-title;
+		toast-message: root.snapshot-toast-message;
+		toast-severity: root.snapshot-toast-severity;
+		toast-action-label: root.snapshot-toast-action-label;
 	remove-dialog-name: "Unicode пример torrent with a long visible name";
 }

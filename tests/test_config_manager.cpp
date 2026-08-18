@@ -85,6 +85,30 @@ TEST_F(ConfigManagerTest, SaveAndLoadConfig)
 	EXPECT_TRUE(manager2.getEnableNATPMP());
 }
 
+TEST_F(ConfigManagerTest, PersistsExtendedThemeRangeAndLegacyNames)
+{
+	const std::string configPath = (testDir / "themes.json").string();
+	ConfigManager manager;
+	manager.setTheme(7);
+	manager.save(configPath);
+	manager.waitForAsyncOperations();
+
+	ConfigManager restored;
+	ASSERT_TRUE(restored.load(configPath));
+	EXPECT_EQ(restored.getTheme(), 7);
+	EXPECT_EQ(restored.getPreferencesSettings().theme, 7);
+
+	restored.setTheme(999);
+	EXPECT_EQ(restored.getTheme(), 7);
+	{
+		std::ofstream file(configPath);
+		file << R"({"version":2,"theme":"high-contrast","settings":{}})";
+	}
+	ConfigManager legacy;
+	ASSERT_TRUE(legacy.load(configPath));
+	EXPECT_EQ(legacy.getTheme(), 7);
+}
+
 TEST_F(ConfigManagerTest, PersistsUiLayoutAndMigratesMissingDefaults)
 {
 	const std::string configPath = (testDir / "ui-layout.json").string();
@@ -596,4 +620,27 @@ TEST_F(ConfigManagerTest, DurableWriteFileBackupRecoveryOnTargetCorruption)
 	std::vector<TorrentConfigData> loaded;
 	ASSERT_TRUE(manager.loadTorrents(target.string(), loaded));
 	EXPECT_EQ(loaded.size(), 0u);
+}
+
+TEST_F(ConfigManagerTest, CleansOrphanedTempFilesOnLoad)
+{
+	const auto target = testDir / "orphaned.json";
+	const auto orphanedTmp1 = testDir / "orphaned.json.tmp";
+	const auto orphanedTmp2 = testDir / "orphaned.json.tmp.12345";
+
+	{
+		std::ofstream(target) << R"({"version": 2})";
+		std::ofstream(orphanedTmp1) << "partial data 1";
+		std::ofstream(orphanedTmp2) << "partial data 2";
+	}
+
+	ASSERT_TRUE(fs::exists(orphanedTmp1));
+	ASSERT_TRUE(fs::exists(orphanedTmp2));
+
+	ConfigManager manager;
+	ASSERT_TRUE(manager.load(target.string(), true));
+
+	EXPECT_FALSE(fs::exists(orphanedTmp1));
+	EXPECT_FALSE(fs::exists(orphanedTmp2));
+	EXPECT_TRUE(fs::exists(target));
 }

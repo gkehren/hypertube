@@ -23,6 +23,7 @@ TorrentRow SlintModelAdapter::toSlintRow(const Presentation::TorrentRowDto &row)
 	result.seeds_label = SlintUi::toSharedString(row.seedsLabel);
 	result.eta_label = SlintUi::toSharedString(row.etaLabel);
 	result.paused = row.paused;
+	result.selected = row.selected;
 	result.error = row.error;
 	result.active = row.active;
 	return result;
@@ -35,7 +36,8 @@ bool SlintModelAdapter::equal(const TorrentRow &left, const TorrentRow &right)
 		&& left.size_label == right.size_label && left.download_rate_label == right.download_rate_label
 		&& left.upload_rate_label == right.upload_rate_label && left.peers_label == right.peers_label
 		&& left.seeds_label == right.seeds_label && left.eta_label == right.eta_label
-		&& left.paused == right.paused && left.error == right.error && left.active == right.active;
+		&& left.paused == right.paused && left.selected == right.selected
+		&& left.error == right.error && left.active == right.active;
 }
 
 void SlintModelAdapter::update(const std::vector<Presentation::TorrentRowDto> &rows)

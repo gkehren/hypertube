@@ -6,6 +6,10 @@
 #include "CredentialStore.hpp"
 #include "Logger.hpp"
 #include "SlintString.hpp"
+#include "SystemUtils.hpp"
+#include "presentation/UiFormatters.hpp"
+
+#include <utility>
 
 Presentation::UiStateSnapshot SlintAppController::uiStateFrom(const PreferencesSettings &preferences)
 {
@@ -17,7 +21,7 @@ SlintAppController::SlintAppController(App &app, slint::ComponentHandle<MainWind
 	detailsPresenter(app.torrentManager(), app.systemOpener()), searchPresenter(app.searchEngine()),
 	logsPresenter(app.torrentManager()),
 	preferencesController(app.torrentManager(), app.searchEngine(), app.settingsConfigManager(),
-		[this](int theme) { this->window->set_selected_theme(static_cast<Theme>(std::clamp(theme, 0, 4))); }),
+		[this](int theme) { this->window->set_selected_theme(static_cast<Theme>(std::clamp(theme, 0, 7))); }),
 		uiStateController(preferencesController, uiStateFrom(preferencesController.current()),
 		[this](const Presentation::UiStateSnapshot &state) { applyUiState(state); },
 		[this](const Result &result) {
@@ -27,9 +31,10 @@ SlintAppController::SlintAppController(App &app, slint::ComponentHandle<MainWind
 	categoryModel_(std::make_shared<slint::VectorModel<CategoryRow>>()),
 	recentSearchModel_(std::make_shared<slint::VectorModel<slint::SharedString>>())
 {
+	notificationController_ = std::make_unique<SlintUi::NotificationController>(app.systemOpener(), torrentPresenter, *window);
 	torrentUiController_ = std::make_unique<SlintUi::TorrentUiController>(torrentPresenter, *window, detailsPresenter,
 		[this] { refresh(); }, [this] { if (detailsRefreshCoordinator_) detailsRefreshCoordinator_->reset(); }, sortField_, sortAscending_, torrentViewDirty_,
-		pendingRemoveId_);
+		pendingRemoveId_, pendingRemoveIds_, [this](Presentation::UiNotification notification) { notificationController_->notify(std::move(notification)); });
 	searchUiController_ = std::make_unique<SlintUi::SearchUiController>(searchPresenter, *window,
 		[this] { if (searchRefreshCoordinator_) searchRefreshCoordinator_->forceRefresh(); });
 	detailsUiController_ = std::make_unique<SlintUi::DetailsUiController>(detailsPresenter, *window,
@@ -38,14 +43,16 @@ SlintAppController::SlintAppController(App &app, slint::ComponentHandle<MainWind
 			auto state = currentUiState();
 			state.layout.selectedDetailsTab = tab;
 			uiStateController.request(state);
-		});
+		}, [this](Presentation::UiNotification notification) { notificationController_->notify(std::move(notification)); });
 	preferencesUiController_ = std::make_unique<SlintUi::PreferencesUiController>(preferencesController,
 		uiStateController, *window, [this] { return currentUiState(); });
 	dialogCoordinator_ = std::make_unique<SlintUi::DialogCoordinator>(app, addController, preferencesController,
-		searchPresenter, *dialogService, *window, [this] { refresh(); });
+		searchPresenter, *dialogService, *window, [this] { refresh(); },
+		[this](Presentation::UiNotification notification) { notificationController_->notify(std::move(notification)); });
 	appShellController_ = std::make_unique<SlintUi::AppShellController>(logsPresenter, logModelAdapter, *window,
 		uiStateController, [this] { return currentUiState(); }, torrentViewDirty_,
-		[this] { if (detailsRefreshCoordinator_) detailsRefreshCoordinator_->reset(); }, [this] { refresh(); }, searchFocusRequest_);
+		[this] { if (detailsRefreshCoordinator_) detailsRefreshCoordinator_->reset(); }, [this] { refresh(); }, searchFocusRequest_,
+		[this](Presentation::UiNotification notification) { notificationController_->notify(std::move(notification)); });
 	torrentRefreshCoordinator_ = std::make_unique<SlintUi::TorrentRefreshCoordinator>(app.torrentManager(),
 		torrentPresenter, modelAdapter, categoryModel_, *window, torrentViewDirty_, visibleTorrentRows_);
 	searchRefreshCoordinator_ = std::make_unique<SlintUi::SearchRefreshCoordinator>(searchPresenter,
@@ -53,7 +60,6 @@ SlintAppController::SlintAppController(App &app, slint::ComponentHandle<MainWind
 	logRefreshCoordinator_ = std::make_unique<SlintUi::LogRefreshCoordinator>(logsPresenter, logModelAdapter, *window);
 	detailsRefreshCoordinator_ = std::make_unique<SlintUi::DetailsRefreshCoordinator>(torrentPresenter,
 		detailsPresenter, detailsModelAdapter, *window, selectedDetailsTab_, visibleTorrentRows_);
-	notificationController_ = std::make_unique<SlintUi::NotificationController>(app.systemOpener(), torrentPresenter, *window);
 }
 
 SlintAppController::~SlintAppController()
@@ -72,15 +78,18 @@ void SlintAppController::bind()
 		return slint::CloseRequestResponse::HideWindow;
 	});
 	window->on_refresh_torrents([this] { refresh(); });
-	window->on_select_torrent([this](const slint::SharedString &id) {
-		torrentUiController_->select(std::string(id.begin(), id.end()));
+	window->on_select_torrent([this](const slint::SharedString &id, bool toggle, bool range) {
+		torrentUiController_->select(std::string(id.begin(), id.end()), toggle, range);
 	});
+	window->on_select_all_torrents([this] { torrentUiController_->selectAll(); });
 	window->on_execute_torrent_command([this](const slint::SharedString &id, UiTorrentCommand command) {
 		torrentUiController_->executeCommand(std::string(id.begin(), id.end()), command);
 	});
+	window->on_execute_selected_torrents([this](UiTorrentCommand command) { torrentUiController_->executeSelected(command); });
 	window->on_remove_torrent([this](const slint::SharedString &id) {
 		torrentUiController_->remove(std::string(id.begin(), id.end()));
 	});
+	window->on_remove_selected_torrents([this] { torrentUiController_->removeSelected(); });
 	window->on_confirm_remove([this](RemovalMode mode) { torrentUiController_->confirmRemove(mode); });
 	window->on_cancel_remove([this] { torrentUiController_->cancelRemove(); });
 	window->on_torrents_tab([this] { appShellController_->setActiveTab(AppTab::Torrents); });
@@ -127,6 +136,15 @@ void SlintAppController::bind()
 		preferencesUiController_->apply();
 		window->set_preferences_saving(preferencesController.isSaving());
 	});
+	window->on_test_torznab_connection([this] {
+		preferencesUiController_->testTorznabConnection();
+	});
+	window->on_test_proxy_connection([this] {
+		preferencesUiController_->testProxyConnection();
+	});
+	window->on_cancel_preferences_connection([this] {
+		preferencesUiController_->cancelConnectionTest();
+	});
 	window->on_resize_layout([this](int sidebarWidth, int bottomPanelHeight) {
 		preferencesUiController_->resizeLayout(sidebarWidth, bottomPanelHeight);
 	});
@@ -157,6 +175,8 @@ void SlintAppController::bind()
 		dialogCoordinator_->cancelAdd();
 		torrentUiController_->cancelRemove();
 	});
+	window->on_dismiss_toast([this] { notificationController_->dismiss(); });
+	window->on_toast_action([this] { notificationController_->activateAction(); });
 }
 
 void SlintAppController::start()
@@ -185,10 +205,15 @@ void SlintAppController::start()
 	window->set_logs_state_message(slint::SharedString("Diagnostics are updated from the bounded log buffer."));
 	const auto currentPreferences = preferencesController.current();
 	selectedDetailsTab_ = std::clamp(currentPreferences.ui.selectedDetailsTab, 0, 4);
-	window->set_selected_theme(static_cast<Theme>(std::clamp(currentPreferences.theme, 0, 4)));
+	const auto selectedTheme = static_cast<Theme>(std::clamp(currentPreferences.theme, 0, 7));
+	window->set_selected_theme(selectedTheme);
+	if (selectedTheme == Theme::System)
+		window->set_system_dark(Utils::SystemUtils::systemPrefersDarkTheme());
 	window->set_preferences_state_message(slint::SharedString("Changes are saved transactionally."));
-	window->set_preference_download_limit(SlintUi::toSharedString(std::to_string(currentPreferences.downloadSpeedLimit)));
-	window->set_preference_upload_limit(SlintUi::toSharedString(std::to_string(currentPreferences.uploadSpeedLimit)));
+	window->set_preference_download_limit(SlintUi::toSharedString(
+		Presentation::UiFormatters::formatSpeedLimit(currentPreferences.downloadSpeedLimit)));
+	window->set_preference_upload_limit(SlintUi::toSharedString(
+		Presentation::UiFormatters::formatSpeedLimit(currentPreferences.uploadSpeedLimit)));
 	window->set_preference_download_path(SlintUi::toSharedString(currentPreferences.downloadPath));
 	window->set_preference_enable_dht(currentPreferences.enableDht);
 	window->set_preference_enable_upnp(currentPreferences.enableUpnp);
@@ -206,9 +231,19 @@ void SlintAppController::start()
 	window->set_preference_proxy_secret(slint::SharedString());
 	window->set_preference_clear_torznab_secret(false);
 	window->set_preference_clear_proxy_secret(false);
+	window->set_preference_test_running(false);
+	window->set_preference_download_error(slint::SharedString());
+	window->set_preference_upload_error(slint::SharedString());
+	window->set_preference_torznab_url_error(slint::SharedString());
+	window->set_preference_proxy_type_error(slint::SharedString());
+	window->set_preference_proxy_host_error(slint::SharedString());
+	window->set_preference_proxy_port_error(slint::SharedString());
 	window->set_selected_details_tab(static_cast<DetailsTab>(selectedDetailsTab_));
 	window->set_add_dialog_open(false);
 	window->set_remove_dialog_open(false);
+	window->set_bulk_remove_dialog_open(false);
+	window->set_bulk_remove_count(0);
+	window->set_selected_torrent_count(0);
 	window->set_search_query(slint::SharedString());
 	started = true;
 	std::weak_ptr<bool> weakAlive = isAlive_;
@@ -239,6 +274,10 @@ Result SlintAppController::stop()
 	started = false;
 
 	Result result = uiStateController.flush();
+	preferencesController.cancelConnectionTest();
+	const Result connectionTest = preferencesController.waitForConnectionTest();
+	if (!connectionTest)
+		Utils::Logger::info("search", "Preferences connection test finished during shutdown: " + connectionTest.message);
 	const Result preferences = preferencesController.waitForSave();
 	if (!preferences)
 		result = preferences;
@@ -255,6 +294,20 @@ Result SlintAppController::stop()
 
 void SlintAppController::refresh()
 {
+	preferencesUiController_->pollConnectionTest();
+	const auto now = std::chrono::steady_clock::now();
+	if (window->get_selected_theme() != Theme::System)
+	{
+		lastSystemAppearancePoll_ = {};
+	}
+	else if (lastSystemAppearancePoll_.time_since_epoch().count() == 0
+		|| now - lastSystemAppearancePoll_ >= std::chrono::seconds(5))
+	{
+		lastSystemAppearancePoll_ = now;
+		const bool systemDark = Utils::SystemUtils::systemPrefersDarkTheme();
+		if (window->get_system_dark() != systemDark)
+			window->set_system_dark(systemDark);
+	}
 	window->set_preferences_saving(preferencesController.isSaving());
 	const auto activeTab = window->get_active_tab();
 	searchRefreshCoordinator_->refreshIfNeeded(activeTab);
@@ -287,6 +340,7 @@ void SlintAppController::refresh()
 	window->set_preferences_saving(preferencesController.isSaving());
 	logRefreshCoordinator_->refresh(activeTab);
 	torrentRefreshCoordinator_->refresh(activeTab);
+	window->set_selected_torrent_count(static_cast<int>(torrentPresenter.selectedCount()));
 	detailsRefreshCoordinator_->refresh(activeTab);
 }
 void SlintAppController::refreshCredentialIndicators()
@@ -328,7 +382,7 @@ Presentation::UiStateSnapshot SlintAppController::currentUiState() const
 
 void SlintAppController::applyUiState(const Presentation::UiStateSnapshot &state)
 {
-	window->set_selected_theme(static_cast<Theme>(std::clamp(state.theme, 0, 4)));
+	window->set_selected_theme(static_cast<Theme>(std::clamp(state.theme, 0, 7)));
 	window->set_sidebar_width(state.layout.sidebarWidth);
 	window->set_bottom_panel_height(state.layout.bottomPanelHeight);
 	window->set_sidebar_collapsed(state.layout.sidebarCollapsed);

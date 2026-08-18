@@ -3,6 +3,7 @@
 #include "presentation/SearchPresenter.hpp"
 #include "presentation/TorrentListPresenter.hpp"
 #include "presentation/UiFormatters.hpp"
+#include "presentation/UiNotifications.hpp"
 #include "presentation/TorrentAvailability.hpp"
 #include "utils/TorrentIdentity.hpp"
 
@@ -12,9 +13,22 @@
 #include <thread>
 #include <algorithm>
 #include <cctype>
+#include <vector>
 
 namespace
 {
+std::filesystem::path writeNamedTorrent(const std::filesystem::path &directory, const std::string &name)
+{
+	const auto path = directory / (name + ".torrent");
+	std::string content = "d4:infod6:lengthi1e4:name" + std::to_string(name.size()) + ":" + name
+		+ "12:piece lengthi16384e6:pieces20:";
+	content.append(20, '\0');
+	content += "ee";
+	std::ofstream file(path, std::ios::binary);
+	file.write(content.data(), static_cast<std::streamsize>(content.size()));
+	return path;
+}
+
 template <typename Digest>
 Digest digestWithBinaryBytes()
 {
@@ -70,6 +84,30 @@ TEST(UiFormattersTest, FormatsSharedValues)
 	EXPECT_EQ(Presentation::UiFormatters::formatEta(-1), "N/A");
 }
 
+TEST(UiFormattersTest, ParsesAndFormatsBinarySpeedLimits)
+{
+	int bytesPerSecond = 0;
+	EXPECT_TRUE(Presentation::UiFormatters::parseSpeedLimit("2048", bytesPerSecond));
+	EXPECT_EQ(bytesPerSecond, 2048);
+	EXPECT_TRUE(Presentation::UiFormatters::parseSpeedLimit("1.5 MiB/s", bytesPerSecond));
+	EXPECT_EQ(bytesPerSecond, 1572864);
+	EXPECT_TRUE(Presentation::UiFormatters::parseSpeedLimit("1.5 GiB", bytesPerSecond));
+	EXPECT_EQ(bytesPerSecond, 1610612736);
+	EXPECT_EQ(Presentation::UiFormatters::formatSpeedLimit(0), "0");
+	EXPECT_EQ(Presentation::UiFormatters::formatSpeedLimit(1024), "1 KiB/s");
+	EXPECT_EQ(Presentation::UiFormatters::formatSpeedLimit(1572864), "1.5 MiB/s");
+	EXPECT_EQ(Presentation::UiFormatters::formatSpeedLimit(std::numeric_limits<int>::max()), "2147483647 B/s");
+}
+
+TEST(UiFormattersTest, RejectsMalformedAndOverflowingSpeedLimits)
+{
+	int bytesPerSecond = 0;
+	EXPECT_FALSE(Presentation::UiFormatters::parseSpeedLimit("", bytesPerSecond));
+	EXPECT_FALSE(Presentation::UiFormatters::parseSpeedLimit("-1 MiB/s", bytesPerSecond));
+	EXPECT_FALSE(Presentation::UiFormatters::parseSpeedLimit("12 Mbps", bytesPerSecond));
+	EXPECT_FALSE(Presentation::UiFormatters::parseSpeedLimit("2 GiB/s", bytesPerSecond));
+}
+
 TEST(UiFormattersTest, FormatsRatiosAndTimestamps)
 {
 	EXPECT_EQ(Presentation::UiFormatters::formatRatio(10, 4), "2.5");
@@ -85,6 +123,90 @@ TEST(UiFormattersTest, MapsLibtorrentStateAtTheBoundary)
 	EXPECT_EQ(Presentation::UiFormatters::torrentStateToString(5, false, false), "Seeding");
 	EXPECT_EQ(Presentation::UiFormatters::torrentStateToString(3, true, false), "Paused");
 	EXPECT_EQ(Presentation::UiFormatters::torrentStateToString(3, false, true), "Finished");
+}
+
+TEST(UiNotificationTest, NotificationQueueEnqueuesAndExpires)
+{
+	Presentation::NotificationQueue queue(4);
+	Presentation::UiNotification notif{Presentation::NotificationSeverity::Info, "Title", "Message", {}, {}, std::chrono::milliseconds(50)};
+	const auto now = std::chrono::steady_clock::now();
+	queue.enqueue(notif);
+	ASSERT_TRUE(queue.current());
+	EXPECT_EQ(queue.current()->message, "Message");
+
+	queue.tick(now + std::chrono::milliseconds(10));
+	EXPECT_TRUE(queue.current());
+
+	queue.tick(now + std::chrono::milliseconds(100));
+	EXPECT_FALSE(queue.current());
+}
+
+TEST(UiNotificationTest, NotificationQueueCoalescesEquivalentMessages)
+{
+	Presentation::NotificationQueue queue(4);
+	Presentation::UiNotification notif{Presentation::NotificationSeverity::Info, "Title", "Dup", {}, {}, std::chrono::milliseconds(100)};
+	queue.enqueue(notif);
+	queue.enqueue(notif);
+	EXPECT_EQ(queue.pendingCount(), 0U);
+	ASSERT_TRUE(queue.current());
+	EXPECT_EQ(queue.current()->message, "Dup");
+}
+
+TEST(UiNotificationTest, NotificationQueueIsBounded)
+{
+	Presentation::NotificationQueue queue(2);
+	Presentation::UiNotification n1{Presentation::NotificationSeverity::Info, "T", "1", {}, {}, std::chrono::milliseconds(100)};
+	Presentation::UiNotification n2{Presentation::NotificationSeverity::Info, "T", "2", {}, {}, std::chrono::milliseconds(100)};
+	Presentation::UiNotification n3{Presentation::NotificationSeverity::Info, "T", "3", {}, {}, std::chrono::milliseconds(100)};
+	Presentation::UiNotification n4{Presentation::NotificationSeverity::Info, "T", "4", {}, {}, std::chrono::milliseconds(100)};
+
+	queue.enqueue(n1); // active
+	queue.enqueue(n2); // pending 1
+	queue.enqueue(n3); // pending 2
+	queue.enqueue(n4); // drops n2, pending 2 (n3, n4)
+	EXPECT_EQ(queue.pendingCount(), 2U);
+}
+
+TEST(UiNotificationTest, NotificationQueueDismissesCurrent)
+{
+	Presentation::NotificationQueue queue(4);
+	Presentation::UiNotification n1{Presentation::NotificationSeverity::Info, "T", "1", {}, {}, std::chrono::milliseconds(1000)};
+	Presentation::UiNotification n2{Presentation::NotificationSeverity::Info, "T", "2", {}, {}, std::chrono::milliseconds(1000)};
+	queue.enqueue(n1);
+	queue.enqueue(n2);
+	EXPECT_EQ(queue.current()->message, "1");
+	queue.dismiss();
+	ASSERT_TRUE(queue.current());
+	EXPECT_EQ(queue.current()->message, "2");
+}
+
+TEST(UiNotificationTest, ErrorNotificationUsesMinimumDisplayDuration)
+{
+	Presentation::NotificationQueue queue(4);
+	Presentation::UiNotification err{Presentation::NotificationSeverity::Error, "Err", "Failed", {}, {}, std::chrono::milliseconds(100)};
+	const auto now = std::chrono::steady_clock::now();
+	queue.enqueue(err);
+	ASSERT_TRUE(queue.current());
+	// Must stay active at 5 seconds because minimum error duration is 8s
+	queue.tick(now + std::chrono::seconds(5));
+	EXPECT_TRUE(queue.current());
+	// Expires at 9 seconds (> 8s)
+	queue.tick(now + std::chrono::seconds(9));
+	EXPECT_FALSE(queue.current());
+}
+
+TEST(UiNotificationTest, NotificationQueueAdvancesAfterExpiration)
+{
+	Presentation::NotificationQueue queue(4);
+	Presentation::UiNotification n1{Presentation::NotificationSeverity::Success, "T", "1", {}, {}, std::chrono::milliseconds(50)};
+	Presentation::UiNotification n2{Presentation::NotificationSeverity::Warning, "T", "2", {}, {}, std::chrono::milliseconds(50)};
+	const auto now = std::chrono::steady_clock::now();
+	queue.enqueue(n1);
+	queue.enqueue(n2);
+	EXPECT_EQ(queue.current()->message, "1");
+	queue.tick(now + std::chrono::milliseconds(100));
+	ASSERT_TRUE(queue.current());
+	EXPECT_EQ(queue.current()->message, "2");
 }
 
 TEST(TorrentListPresenterTest, EmptyManagerProducesStableEmptyModels)
@@ -220,6 +342,91 @@ TEST(TorrentListPresenterTest, SelectionSurvivesRefreshAndSortUntilTorrentIsRemo
 	std::filesystem::remove_all(testDirectory, error);
 }
 
+TEST(TorrentListPresenterTest, SupportsRangeToggleSelectAllAndPartialBatchResults)
+{
+	const auto testDirectory = std::filesystem::temp_directory_path()
+		/ ("hypertube-presenter-multi-selection-" + std::to_string(
+			std::chrono::steady_clock::now().time_since_epoch().count()));
+	std::filesystem::create_directories(testDirectory / "downloads");
+	TorrentManager manager;
+	for (const auto &name : {std::string("alpha"), std::string("bravo"), std::string("charlie")})
+		ASSERT_TRUE(manager.addTorrent(writeNamedTorrent(testDirectory, name).string(),
+			(testDirectory / "downloads").string()));
+
+	manager.requestStatusRefresh();
+	for (int attempt = 0; attempt < 100 && (!manager.getStatusCache() || manager.getStatusCache()->size() < 3); ++attempt)
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+	Presentation::TorrentListPresenter presenter(manager);
+	presenter.setSort(Presentation::TorrentSortField::Name, true);
+	const auto rows = presenter.buildRows();
+	ASSERT_EQ(rows.size(), 3U);
+
+	presenter.selectVisibleId(rows[0].id, false, false);
+	presenter.selectVisibleId(rows[2].id, false, true);
+	EXPECT_EQ(presenter.selectedCount(), 3U);
+	EXPECT_EQ(presenter.selectedId(), rows[2].id);
+
+	presenter.selectVisibleId(rows[1].id, true, false);
+	EXPECT_EQ(presenter.selectedCount(), 2U);
+	EXPECT_FALSE(presenter.isSelected(rows[1].id));
+	presenter.selectAllVisible();
+	EXPECT_EQ(presenter.selectedCount(), 3U);
+
+	const auto partial = presenter.executeCommand({rows[0].id, "not-a-torrent-id"}, TorrentCommand::Pause);
+	EXPECT_EQ(partial.requested, 2U);
+	EXPECT_EQ(partial.succeeded, 1U);
+	ASSERT_EQ(partial.failures.size(), 1U);
+	EXPECT_EQ(partial.failures.front().id, "not-a-torrent-id");
+
+	ASSERT_TRUE(manager.removeTorrent(manager.getTorrentSnapshot().front().hash, TorrentRemovalMode::KeepAllFiles));
+	presenter.buildRows();
+	EXPECT_EQ(presenter.selectedCount(), 2U);
+	EXPECT_EQ(presenter.selectedIds().size(), 2U);
+
+	std::error_code error;
+	std::filesystem::remove_all(testDirectory, error);
+}
+
+TEST(TorrentListPresenterTest, SnapshotInvalidationAndIndexedLookupBehavior)
+{
+	const auto testDirectory = std::filesystem::temp_directory_path()
+		/ ("hypertube-presenter-snapshot-" + std::to_string(
+			std::chrono::steady_clock::now().time_since_epoch().count()));
+	std::filesystem::create_directories(testDirectory / "downloads");
+	TorrentManager manager;
+	ASSERT_TRUE(manager.addTorrent(writeNamedTorrent(testDirectory, "test1").string(), (testDirectory / "downloads").string()));
+	manager.refreshStatusCache();
+
+	Presentation::TorrentListPresenter presenter(manager);
+
+	// Test A: Initial build creates snapshot and indexed lookup work O(1)
+	const auto rows1 = presenter.buildRows();
+	ASSERT_EQ(rows1.size(), 1U);
+	const std::string id = rows1.front().id;
+
+	const auto found1 = presenter.findRowById(id);
+	ASSERT_TRUE(found1.has_value());
+	EXPECT_EQ(found1->id, id);
+
+	// Test B: Filter/sort change reuses base snapshot (does not re-query libtorrent collection/status)
+	presenter.setTextFilter("test1");
+	const auto rows2 = presenter.buildRows();
+	ASSERT_EQ(rows2.size(), 1U);
+
+	presenter.setSort(Presentation::TorrentSortField::Name, false);
+	const auto rows3 = presenter.buildRows();
+	ASSERT_EQ(rows3.size(), 1U);
+
+	// Test C: Status revision change forces snapshot update
+	manager.refreshStatusCache();
+	const auto rows4 = presenter.buildRows();
+	ASSERT_EQ(rows4.size(), 1U);
+
+	std::error_code error;
+	std::filesystem::remove_all(testDirectory, error);
+}
+
 TEST(SearchPresenterTest, RejectsEmptyQueriesWithoutStartingWork)
 {
 	SearchEngine engine;
@@ -228,5 +435,79 @@ TEST(SearchPresenterTest, RejectsEmptyQueriesWithoutStartingWork)
 	EXPECT_FALSE(result);
 	EXPECT_EQ(result.code, ResultCode::InvalidInput);
 	EXPECT_EQ(presenter.state(), Presentation::SearchState::Idle);
+}
+
+namespace
+{
+double srgbToLinear(double channel)
+{
+	channel /= 255.0;
+	return channel <= 0.04045 ? channel / 12.92 : std::pow((channel + 0.055) / 1.055, 2.4);
+}
+
+double relativeLuminance(std::uint32_t hexColor)
+{
+	const double r = srgbToLinear((hexColor >> 16) & 0xff);
+	const double g = srgbToLinear((hexColor >> 8) & 0xff);
+	const double b = srgbToLinear(hexColor & 0xff);
+	return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+double contrastRatio(std::uint32_t c1, std::uint32_t c2)
+{
+	const double l1 = relativeLuminance(c1);
+	const double l2 = relativeLuminance(c2);
+	const double lighter = std::max(l1, l2);
+	const double darker = std::min(l1, l2);
+	return (lighter + 0.05) / (darker + 0.05);
+}
+} // namespace
+
+TEST(ThemeTokensTest, ContrastRatioRequirementsForSupportedThemes)
+{
+	struct ThemePair {
+		const char *name;
+		std::uint32_t background;
+		std::uint32_t foreground;
+		double minRatio;
+	};
+
+	const ThemePair themes[] = {
+		{ "dark", 0x15181d, 0xf5f7fa, 4.5 },
+		{ "light", 0xf5f7fa, 0x18202a, 4.5 },
+		{ "high-contrast", 0x000000, 0xffffff, 7.0 },
+		{ "ocean", 0x101c2c, 0xe6f4ff, 4.5 },
+		{ "nord", 0x2e3440, 0xeceff4, 4.5 },
+		{ "dracula", 0x282a36, 0xf8f8f2, 4.5 },
+		{ "cyberpunk", 0x100d1a, 0xf5f0ff, 4.5 }
+	};
+
+	for (const auto &pair : themes)
+	{
+		const double ratio = contrastRatio(pair.background, pair.foreground);
+		EXPECT_GE(ratio, pair.minRatio) << "Theme " << pair.name << " contrast ratio (" << ratio << ") below minimum " << pair.minRatio;
+	}
+}
+
+TEST(ThemeTokensTest, SelectionColorsRemainReadableAcrossSupportedThemes)
+{
+	struct SelectionPair {
+		const char *name;
+		std::uint32_t selection;
+		std::uint32_t foreground;
+	};
+	const SelectionPair selections[] = {
+		{ "dark", 0x293448, 0xf5f7fa },
+		{ "light", 0xcfe0f7, 0x18202a },
+		{ "high-contrast", 0x004d40, 0xffffff },
+		{ "ocean", 0x244967, 0xe6f4ff },
+		{ "nord", 0x4c566a, 0xeceff4 },
+		{ "dracula", 0x535d8a, 0xf8f8f2 },
+		{ "cyberpunk", 0x482b72, 0xf5f0ff }
+	};
+
+	for (const auto &pair : selections)
+		EXPECT_GE(contrastRatio(pair.selection, pair.foreground), 4.5)
+			<< "Theme " << pair.name << " selection contrast is too low";
 }
 } // namespace

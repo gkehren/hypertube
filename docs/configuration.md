@@ -77,6 +77,21 @@ The current settings schema is version 2. Version 1 files are migrated by adding
 
 Torznab API keys and proxy passwords are not stored in this file. Preferences writes them to Windows Credential Manager, macOS Keychain, or Linux Secret Service. Linux needs the `secret-tool` command and an unlocked keyring. `HYPERTUBE_TORZNAB_API_KEY` remains a startup-only fallback when no stored Torznab key exists.
 
+The Preferences view accepts speed limits as raw `B/s` values or binary units
+(`KiB/s`, `MiB/s`, and `GiB/s`); `0` means unlimited. Torznab and proxy fields
+are validated before saving. **Test Torznab** requests the capabilities endpoint
+and **Test proxy** performs an independent HTTPS probe through the configured
+proxy. Both operations use the current form values and stored secrets without
+committing them, report the measured latency on success, and can be cancelled.
+The proxy test remains available when Torznab is disabled.
+
+The **System** theme follows the native appearance backend and updates while
+Hypertube is running. For deterministic smoke tests or support diagnostics,
+`HYPERTUBE_SYSTEM_THEME=light` or `HYPERTUBE_SYSTEM_THEME=dark` overrides the
+detected appearance. Native detection uses Windows Personalization, macOS
+`AppleInterfaceStyle`, and GNOME/KDE desktop settings on Linux; an unavailable
+backend falls back to the dark theme.
+
 Older unversioned configurations are treated as version 0 and migrated to the current structure. Missing defaults are filled by `ConfigManager`; invalid values do not replace a valid backup candidate with defaults without first attempting recovery.
 
 ## `torrents.json`

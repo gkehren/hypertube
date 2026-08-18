@@ -11,12 +11,62 @@
 
 namespace {
 
+class ScopedEnvironment
+{
+public:
+	ScopedEnvironment(const char *name, const char *value)
+		: name_(name)
+	{
+		const char *previous = std::getenv(name);
+		hadPrevious_ = previous != nullptr;
+		if (hadPrevious_)
+			previous_ = previous;
+#ifdef _WIN32
+		_putenv_s(name_.c_str(), value);
+#else
+		setenv(name_.c_str(), value, 1);
+#endif
+	}
+
+	~ScopedEnvironment()
+	{
+#ifdef _WIN32
+		_putenv_s(name_.c_str(), hadPrevious_ ? previous_.c_str() : "");
+#else
+		if (hadPrevious_)
+			setenv(name_.c_str(), previous_.c_str(), 1);
+		else
+			unsetenv(name_.c_str());
+#endif
+	}
+
+private:
+	std::string name_;
+	std::string previous_;
+	bool hadPrevious_ = false;
+};
+
 TEST(CredentialStoreTest, AsyncRefreshHasAnExplicitShutdownPath)
 {
 	Utils::CredentialStore::asyncRefreshStatus({});
 	Utils::CredentialStore::asyncRefreshStatus({});
 	Utils::CredentialStore::shutdown();
 	SUCCEED();
+}
+
+TEST(SystemThemeTest, ExplicitOverrideIsDeterministic)
+{
+	ScopedEnvironment theme("HYPERTUBE_SYSTEM_THEME", "light");
+	EXPECT_EQ(Utils::SystemUtils::systemAppearance(), Utils::SystemUtils::SystemAppearance::Light);
+	EXPECT_FALSE(Utils::SystemUtils::systemPrefersDarkTheme());
+
+#ifdef _WIN32
+	_putenv_s("HYPERTUBE_SYSTEM_THEME", "dark");
+#else
+	setenv("HYPERTUBE_SYSTEM_THEME", "dark", 1);
+#endif
+	EXPECT_EQ(Utils::SystemUtils::systemAppearance(), Utils::SystemUtils::SystemAppearance::Dark);
+	EXPECT_TRUE(Utils::SystemUtils::systemPrefersDarkTheme());
 }
 
 std::filesystem::path configuredHome()
@@ -403,6 +453,14 @@ TEST(FileUtilsTest, DurableWriteFileRelativePathSucceeds)
 
 	std::error_code ec;
 	std::filesystem::remove_all(tempDir, ec);
+}
+
+TEST(AppPathsTest, ExecutablePathResolutionDynamicBuffer)
+{
+	Utils::AppPaths::resetPortableCache();
+	const auto exeDir = Utils::AppPaths::executableDirectory();
+	EXPECT_FALSE(exeDir.empty());
+	EXPECT_TRUE(std::filesystem::exists(exeDir));
 }
 
 } // namespace

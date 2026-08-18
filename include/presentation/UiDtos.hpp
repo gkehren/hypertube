@@ -36,6 +36,7 @@ struct TorrentRowDto
 	int peers = 0;
 	int seeds = 0;
 	bool paused = false;
+	bool selected = false;
 	bool active = false;
 	bool error = false;
 	bool finished = false;
